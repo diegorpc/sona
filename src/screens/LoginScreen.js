@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -20,6 +19,7 @@ import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import { theme } from '../theme/theme';
+import { styles } from '../styles/LoginScreen.styles';
 
 export default function LoginScreen({ navigation }) {
   const [serverUrl, setServerUrl] = useState('');
@@ -154,58 +154,3 @@ export default function LoginScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    maxWidth: 400,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-    color: theme.colors.primary,
-  },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: 32,
-    color: theme.colors.onSurface,
-    opacity: 0.7,
-  },
-  card: {
-    elevation: 4,
-    backgroundColor: theme.colors.surface,
-  },
-  input: {
-    marginBottom: 16,
-  },
-  loginButton: {
-    marginTop: 8,
-    paddingVertical: 8,
-  },
-  helpSection: {
-    marginTop: 24,
-    padding: 16,
-  },
-  helpText: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: theme.colors.onSurface,
-    opacity: 0.6,
-    lineHeight: 18,
-  },
-});

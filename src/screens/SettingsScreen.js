@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  StyleSheet,
   ScrollView,
   Alert,
 } from 'react-native';
@@ -21,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import { theme } from '../theme/theme';
+import { styles } from '../styles/SettingsScreen.styles';
 
 export default function SettingsScreen({ navigation }) {
   const [serverInfo, setServerInfo] = useState(null);
@@ -325,30 +325,3 @@ export default function SettingsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  card: {
-    margin: 16,
-    marginBottom: 8,
-    backgroundColor: theme.colors.surface,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.onSurface,
-    marginBottom: 8,
-  },
-  button: {
-    marginTop: 16,
-  },
-  logoutButton: {
-    margin: 16,
-    marginTop: 8,
-  },
-  dialogInput: {
-    marginBottom: 16,
-  },
-});
