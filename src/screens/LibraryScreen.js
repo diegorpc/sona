@@ -34,6 +34,7 @@ const CHIP_FADE_OUT_DURATION = 200;
 const CHIP_FADE_IN_DURATION = 240;
 const CHIP_REORDER_DURATION = 620;
 const CHIP_SECTION_DEFAULT_HEIGHT = 36;
+const LIST_ITEM_HEIGHT = 72;
 
 const buildChipOrder = (selectedKey) => {
   const selected = CHIP_DEFINITIONS.find(chip => chip.key === selectedKey);
@@ -75,7 +76,6 @@ export default function LibraryScreen({ navigation }) {
   const previousActiveChipRef = useRef('liked');
   const chipLayoutsRef = useRef({});
   const pendingChipAnimation = useRef(null);
-  const pendingListFadePromise = useRef(null);
   const searchReveal = useRef(new Animated.Value(0)).current;
   const searchInputRef = useRef(null);
   const chipSectionProgress = useRef(new Animated.Value(1)).current;
@@ -139,7 +139,6 @@ export default function LibraryScreen({ navigation }) {
       })
     );
 
-    // Use parallel animations for immediate color feedback
     Animated.parallel(animations).start();
 
     previousActiveChipRef.current = activeChip;
@@ -175,7 +174,6 @@ export default function LibraryScreen({ navigation }) {
         const cachedPlaylistCollages = CacheService.get('playlistCollages');
 
         if (cachedArtists && cachedAlbums && cachedLikedSongs && cachedPlaylists) {
-          console.log('Loading from cache...');
           setArtists(cachedArtists);
           setAlbums(cachedAlbums);
           setLikedSongs(cachedLikedSongs);
@@ -192,8 +190,6 @@ export default function LibraryScreen({ navigation }) {
         }
       }
 
-      console.log('Loading from API...');
-      
       // Load artists
       let allArtists = CacheService.get('artists');
       if (!allArtists || forceRefresh) {
@@ -249,14 +245,11 @@ export default function LibraryScreen({ navigation }) {
       CacheService.set('artists', allArtists);
       setArtists(allArtists);
 
-      // Load albums from artists (optimized - load fewer initially)
+      // Load albums from artists
       let allAlbums = CacheService.get('albums');
       if (!allAlbums || forceRefresh) {
         allAlbums = [];
-        // Load albums from first 10 artists initially for faster loading
         const artistsToLoad = allArtists.slice(0, 10);
-        console.log(`Loading albums from ${artistsToLoad.length} artists...`);
-        
         for (const artist of artistsToLoad) {
           try {
             const artistData = await SubsonicAPI.getArtist(artist.id);
@@ -264,7 +257,7 @@ export default function LibraryScreen({ navigation }) {
               allAlbums.push(...artistData.album);
             }
           } catch (error) {
-            console.warn(`Error loading albums for artist ${artist.name}:`, error);
+            console.error(`Error loading albums for artist ${artist.name}:`, error);
           }
         }
         CacheService.set('albums', allAlbums);
@@ -284,7 +277,7 @@ export default function LibraryScreen({ navigation }) {
           likedSongsData = starredData && starredData.song ? starredData.song : [];
           CacheService.set('likedSongs', likedSongsData);
         } catch (error) {
-          console.warn('Error loading liked songs:', error);
+          console.error('Error loading liked songs:', error);
           likedSongsData = [];
         }
       }
@@ -298,7 +291,7 @@ export default function LibraryScreen({ navigation }) {
           playlistsData = playlistsResponse && playlistsResponse.playlist ? playlistsResponse.playlist : [];
           CacheService.set('playlists', playlistsData);
         } catch (error) {
-          console.warn('Error loading playlists:', error);
+          console.error('Error loading playlists:', error);
           playlistsData = [];
         }
       }
@@ -319,9 +312,7 @@ export default function LibraryScreen({ navigation }) {
       setIsLoading(false);
       hasLoadedInitialData.current = true;
       
-      // Only auto-animate if requested (for initial load and refresh)
       if (shouldAnimate) {
-        // Wait a frame to ensure all data is processed before animating
         await new Promise(resolve => requestAnimationFrame(resolve));
         await animateListOpacityTo(1, 220);
       }
@@ -330,7 +321,6 @@ export default function LibraryScreen({ navigation }) {
 
   const loadMoreAlbumsAsync = useCallback(async (additionalArtists, currentAlbums) => {
     try {
-      console.log(`Loading albums from ${additionalArtists.length} additional artists in background...`);
       const newAlbums = [...currentAlbums];
       
       for (const artist of additionalArtists) {
@@ -340,14 +330,13 @@ export default function LibraryScreen({ navigation }) {
             newAlbums.push(...artistData.album);
           }
         } catch (error) {
-          console.warn(`Error loading albums for artist ${artist.name}:`, error);
+          console.error(`Error loading albums for artist ${artist.name}:`, error);
         }
       }
       
       // Update cache and state with additional albums
       CacheService.set('albums', newAlbums);
       setAlbums(newAlbums);
-      console.log(`Finished loading additional albums. Total: ${newAlbums.length}`);
     } catch (error) {
       console.error('Error in loadMoreAlbumsAsync:', error);
     }
@@ -366,9 +355,6 @@ export default function LibraryScreen({ navigation }) {
         return;
       }
       
-      console.log(`Loading ${playlistsNeedingCollages.length} playlist collages asynchronously...`);
-      
-      // Load collages one by one to avoid overwhelming the API
       for (const playlist of playlistsNeedingCollages) {
         try {
           const collageData = await SubsonicAPI.generatePlaylistCollage(playlist.id, 50);
@@ -379,11 +365,9 @@ export default function LibraryScreen({ navigation }) {
             CacheService.set('playlistCollages', updatedCollages);
           }
         } catch (error) {
-          console.warn(`Error generating collage for playlist ${playlist.name}:`, error);
+          console.error(`Error generating collage for playlist ${playlist.name}:`, error);
         }
       }
-      
-      console.log('Finished loading playlist collages');
     } catch (error) {
       console.error('Error in loadPlaylistCollagesAsync:', error);
     }
@@ -396,7 +380,7 @@ export default function LibraryScreen({ navigation }) {
       if (isConfigured) {
         loadLibraryData(false);
       } else {
-        console.warn('SubsonicAPI not configured. Redirecting to login...');
+        console.error('SubsonicAPI not configured. Redirecting to login...');
         // Handle case where API is not configured
       }
     };
@@ -440,7 +424,7 @@ export default function LibraryScreen({ navigation }) {
     [chipAnimations]
   );
 
-  // Full dataset for search (includes all items) - optimized with early returns
+  // full query for search
   const fullFilteredData = useMemo(() => {
     const dataByView = {
       artists,
@@ -454,9 +438,7 @@ export default function LibraryScreen({ navigation }) {
       return [];
     }
 
-    // Fast path for non-filtered data
     if (!searchQuery) {
-      // Simple deduplication without creating intermediate objects
       const seenKeys = new Set();
       return baseData.filter(item => {
         if (!item) return false;
@@ -502,19 +484,15 @@ export default function LibraryScreen({ navigation }) {
   // Paginated data for display (when not searching)
   const paginatedData = useMemo(() => {
     if (searchQuery) {
-      // When searching, show all results
       return fullFilteredData;
     }
     
-    // When not searching, show paginated results
     const endIndex = (currentPage + 1) * ITEMS_PER_PAGE;
     return fullFilteredData.slice(0, endIndex);
   }, [fullFilteredData, currentPage, searchQuery, ITEMS_PER_PAGE]);
 
   // Update displayed data when paginated data changes
   useEffect(() => {
-    // Only update displayed data if we're not in the middle of a transition
-    // or if we have actual data to show
     if (!isAnimatingList.current || paginatedData.length > 0) {
       setDisplayedData(paginatedData);
     }
@@ -596,7 +574,6 @@ export default function LibraryScreen({ navigation }) {
       
     } catch (error) {
       console.error('Error in view mode transition:', error);
-      // Ensure we fade back in even if there's an error
       setViewMode(mode);
       await animateListOpacityTo(1, 400);
     } finally {
@@ -713,7 +690,6 @@ export default function LibraryScreen({ navigation }) {
         break;
       case 'playlists':
         // TODO: Navigate to playlist screen when implemented
-        console.log('Playlist pressed:', item.name);
         break;
       default:
         break;
@@ -722,7 +698,6 @@ export default function LibraryScreen({ navigation }) {
 
   const handleMenuPress = useCallback((item) => {
     // TODO: Implement menu functionality
-    console.log('Menu pressed for:', item.title || item.name);
   }, []);
 
   const formatDuration = (seconds) => {
@@ -735,27 +710,6 @@ export default function LibraryScreen({ navigation }) {
       return `${hours}h ${minutes}m`;
     }
     return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-  };
-
-  const getItemDuration = (item) => {
-    switch (viewMode) {
-      case 'liked':
-        return item.duration ? formatDuration(item.duration) : '';
-      case 'albums':
-        return item.duration ? formatDuration(item.duration) : '';
-      case 'playlists':
-        return item.duration ? formatDuration(item.duration) : '';
-      default:
-        return '';
-    }
-  };
-
-  const shouldShowMenu = () => {
-    return viewMode === 'liked' || viewMode === 'playlists';
-  };
-
-  const shouldShowDuration = () => {
-    return viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
   };
 
   // Optimized list item component with custom comparison function
@@ -807,17 +761,9 @@ export default function LibraryScreen({ navigation }) {
           if (collageData) {
             if (typeof collageData === 'string') {
               result = collageData;
-              console.log('🎨 Playlist single cover URL:', result);
             } else if (collageData.type === 'collage') {
               result = collageData;
-              console.log('🎨 Playlist collage data:', {
-                type: collageData.type,
-                albumCount: collageData.albumCount,
-                coverArtUrls: collageData.coverArtUrls
-              });
             }
-          } else {
-            console.log('❌ No collage data for playlist:', item.name, '| ID:', item.id);
           }
           break;
         default:
@@ -831,14 +777,7 @@ export default function LibraryScreen({ navigation }) {
     const duration = useMemo(() => {
       if (!item.duration) return '';
       
-      const seconds = item.duration;
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      
-      if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-      }
-      return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+      return formatDuration(item.duration);
     }, [item.duration]);
 
     const showDuration = viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
@@ -861,13 +800,6 @@ export default function LibraryScreen({ navigation }) {
             source={imageUrl ? { uri: imageUrl } : require('../../assets/default-album.png')}
             style={styles.itemImage}
             defaultSource={require('../../assets/default-album.png')}
-            onError={(error) => {
-              console.log('❌ Image load error for URL:', imageUrl);
-              console.log('❌ Error details:', error.nativeEvent.error);
-            }}
-            onLoad={() => {
-              console.log('✅ Image loaded successfully:', imageUrl);
-            }}
           />
         );
       }
@@ -955,8 +887,8 @@ export default function LibraryScreen({ navigation }) {
 
   // Performance optimization: getItemLayout for FlatList
   const getItemLayout = useCallback((data, index) => ({
-    length: 72, // minHeight from styles
-    offset: 72 * index,
+    length: LIST_ITEM_HEIGHT,
+    offset: LIST_ITEM_HEIGHT * index,
     index,
   }), []);
 
