@@ -107,7 +107,7 @@ export default function ArtistScreen({ route, navigation }) {
             </Text>
           </View>
           <IconButton
-            icon="PlayArrow"
+            icon="play-arrow"
             size={24}
             onPress={() => handleAlbumPress(item)}
             iconColor={theme.colors.primary}
@@ -173,7 +173,7 @@ export default function ArtistScreen({ route, navigation }) {
       {artistData.album && artistData.album.length > 0 && (
         <FAB
           style={styles.fab}
-          icon="PlayArrow"
+          icon="play-arrow"
           onPress={playAllSongs}
           label="Play All"
         />

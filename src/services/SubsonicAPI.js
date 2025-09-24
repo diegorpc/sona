@@ -103,6 +103,29 @@ class SubsonicAPI {
     return response.artist;
   }
 
+  // Get artist image URL
+  async getArtistImage(artistId) {
+    const response = await this.request('getArtistInfo', { id: artistId });
+    const artistInfo = response?.artistInfo;
+
+    if (!artistInfo) {
+      return null;
+    }
+
+    const imageKeys = ['largeImageUrl', 'mediumImageUrl', 'smallImageUrl'];
+    for (const key of imageKeys) {
+      const value = artistInfo[key];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+
+    return null;
+  }
+
   // Get album info and tracks
   async getAlbum(albumId) {
     const response = await this.request('getAlbum', { id: albumId });
@@ -204,6 +227,65 @@ class SubsonicAPI {
   async getStarred() {
     const response = await this.request('getStarred');
     return response.starred;
+  }
+
+  // Generate playlist collage image from first 4 distinct albums
+  async generatePlaylistCollage(playlistId, size = 50) {
+    try {
+      // Get playlist details with songs
+      const playlist = await this.getPlaylist(playlistId);
+      if (!playlist || !playlist.entry || playlist.entry.length === 0) {
+        return null;
+      }
+
+      // Extract unique album cover art IDs from songs
+      const albumCoverArtIds = [];
+      const seenCoverArtIds = new Set();
+      const seenAlbumIds = new Set(); // Also track by album ID to avoid duplicates
+      
+      for (const song of playlist.entry) {
+        // Check both coverArt ID and albumId to ensure true uniqueness
+        const coverArtId = song.coverArt;
+        const albumId = song.albumId;
+        
+        if (coverArtId && 
+            !seenCoverArtIds.has(coverArtId) && 
+            (!albumId || !seenAlbumIds.has(albumId))) {
+          seenCoverArtIds.add(coverArtId);
+          if (albumId) seenAlbumIds.add(albumId);
+          albumCoverArtIds.push(coverArtId);
+          
+          // Stop at 4 unique albums for collage
+          if (albumCoverArtIds.length >= 4) {
+            break;
+          }
+        }
+      }
+
+      // If no cover art found, return null
+      if (albumCoverArtIds.length === 0) {
+        return null;
+      }
+
+      // If only one album, return that album's cover art
+      if (albumCoverArtIds.length === 1) {
+        return this.getCoverArtUrl(albumCoverArtIds[0], size);
+      }
+
+      // For 2-4 albums, create a collage data structure
+      // Return an object that can be used to create a collage
+      const collageData = {
+        type: 'collage',
+        albumCount: albumCoverArtIds.length,
+        coverArtUrls: albumCoverArtIds.map(id => this.getCoverArtUrl(id, size)),
+        size: size
+      };
+
+      return collageData;
+    } catch (error) {
+      console.error('Error generating playlist collage:', error);
+      return null;
+    }
   }
 
   // Logout and clear stored configuration

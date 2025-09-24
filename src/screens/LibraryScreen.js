@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import {
   View,
   FlatList,
@@ -9,25 +9,31 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { Text, ActivityIndicator, Searchbar, Card } from 'react-native-paper';
+import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
+import PlaylistCollage from '../components/PlaylistCollage';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/LibraryScreen.styles';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedText = Animated.createAnimatedComponent(Text);
+const AnimatedHeader = Animated.createAnimatedComponent(View);
 const CHIP_DEFINITIONS = [
-  { key: 'artists', label: 'Artists' },
-  { key: 'albums', label: 'Albums' },
   { key: 'liked', label: 'Liked Songs' },
   { key: 'playlists', label: 'Playlists' },
+  { key: 'albums', label: 'Albums' },
+  { key: 'artists', label: 'Artists' },
 ];
 
-const CHIP_ANIMATION_DURATION = 600;
+
+const CHIP_FADE_OUT_DURATION = 200;
+const CHIP_FADE_IN_DURATION = 240;
+const CHIP_REORDER_DURATION = 620;
+const CHIP_SECTION_DEFAULT_HEIGHT = 36;
 
 const buildChipOrder = (selectedKey) => {
   const selected = CHIP_DEFINITIONS.find(chip => chip.key === selectedKey);
@@ -40,27 +46,40 @@ const buildChipOrder = (selectedKey) => {
 export default function LibraryScreen({ navigation }) {
   const [artists, setArtists] = useState([]);
   const [albums, setAlbums] = useState([]);
-  const [songs, setSongs] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
   const [playlists, setPlaylists] = useState([]);
+  const [playlistCollages, setPlaylistCollages] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState('liked'); // 'artists', 'albums', 'liked', 'playlists'
+  const [viewMode, setViewMode] = useState('liked'); // 'liked', 'playlists', 'albums', 'artists'
   const [selectedChip, setSelectedChip] = useState('liked');
   const [chipDisplayOrder, setChipDisplayOrder] = useState(() => buildChipOrder('liked'));
   const [activeChip, setActiveChip] = useState('liked');
   const [isSearchActive, setIsSearchActive] = useState(false);
-
+  const [headerContentWidth, setHeaderContentWidth] = useState(0);
+  
+  // Pagination state
+  const [displayedData, setDisplayedData] = useState([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreData, setHasMoreData] = useState(true);
+  const [currentPage, setCurrentPage] = useState(0);
+  const ITEMS_PER_PAGE = 50;
+  
   const chipScrollRef = useRef(null);
   const listOpacity = useRef(new Animated.Value(1)).current;
   const isAnimatingList = useRef(false);
   const hasLoadedInitialData = useRef(false);
   const chipAnimations = useRef({}).current;
   const chipHighlightAnimations = useRef({}).current;
+  const previousActiveChipRef = useRef('liked');
   const chipLayoutsRef = useRef({});
   const pendingChipAnimation = useRef(null);
-  const chipAnimationTimeout = useRef(null);
+  const pendingListFadePromise = useRef(null);
+  const searchReveal = useRef(new Animated.Value(0)).current;
+  const searchInputRef = useRef(null);
+  const chipSectionProgress = useRef(new Animated.Value(1)).current;
+  const [chipSectionHeight, setChipSectionHeight] = useState(CHIP_SECTION_DEFAULT_HEIGHT);
 
   useEffect(() => {
     chipDisplayOrder.forEach(({ key }) => {
@@ -74,33 +93,61 @@ export default function LibraryScreen({ navigation }) {
   }, [chipDisplayOrder, chipAnimations, chipHighlightAnimations, activeChip]);
 
   useEffect(() => {
-    const highlightKeys = Object.keys(chipHighlightAnimations);
-    if (highlightKeys.length === 0) {
+    const previousActiveChip = previousActiveChipRef.current;
+    const currentAnimation = chipHighlightAnimations[activeChip];
+
+    if (!currentAnimation) {
+      previousActiveChipRef.current = activeChip;
       return;
     }
 
-    const highlightAnimations = highlightKeys.map(key =>
-      Animated.timing(chipHighlightAnimations[key], {
-        toValue: key === activeChip ? 1 : 0,
-        duration: 160,
-        easing: Easing.out(Easing.quad),
+    if (!previousActiveChip || previousActiveChip === activeChip) {
+      currentAnimation.stopAnimation();
+      currentAnimation.setValue(1);
+      previousActiveChipRef.current = activeChip;
+      return;
+    }
+
+    const prevAnimation = chipHighlightAnimations[previousActiveChip];
+
+    // Stop any ongoing animations to prevent conflicts
+    currentAnimation.stopAnimation();
+    if (prevAnimation) {
+      prevAnimation.stopAnimation();
+    }
+
+    // Run color animations in parallel for immediate feedback
+    const animations = [];
+
+    if (prevAnimation) {
+      animations.push(
+        Animated.timing(prevAnimation, {
+          toValue: 0,
+          duration: CHIP_FADE_OUT_DURATION,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: false,
+        })
+      );
+    }
+
+    animations.push(
+      Animated.timing(currentAnimation, {
+        toValue: 1,
+        duration: CHIP_FADE_IN_DURATION,
+        easing: Easing.in(Easing.cubic),
         useNativeDriver: false,
       })
     );
 
-    Animated.parallel(highlightAnimations).start();
+    // Use parallel animations for immediate color feedback
+    Animated.parallel(animations).start();
+
+    previousActiveChipRef.current = activeChip;
   }, [activeChip, chipHighlightAnimations]);
 
-  useEffect(() => {
-    return () => {
-      if (chipAnimationTimeout.current) {
-        clearTimeout(chipAnimationTimeout.current);
-      }
-    };
-  }, []);
 
   const animateListOpacityTo = useCallback(
-    (toValue, duration = 140) =>
+    (toValue, duration = 300) =>
       new Promise(resolve => {
         Animated.timing(listOpacity, {
           toValue,
@@ -123,23 +170,23 @@ export default function LibraryScreen({ navigation }) {
       if (!forceRefresh) {
         const cachedArtists = CacheService.get('artists');
         const cachedAlbums = CacheService.get('albums');
-        const cachedSongs = CacheService.get('songs');
         const cachedLikedSongs = CacheService.get('likedSongs');
         const cachedPlaylists = CacheService.get('playlists');
+        const cachedPlaylistCollages = CacheService.get('playlistCollages');
 
-        if (cachedArtists && cachedAlbums && cachedSongs && cachedLikedSongs && cachedPlaylists) {
+        if (cachedArtists && cachedAlbums && cachedLikedSongs && cachedPlaylists) {
           console.log('Loading from cache...');
           setArtists(cachedArtists);
           setAlbums(cachedAlbums);
-          setSongs(cachedSongs);
           setLikedSongs(cachedLikedSongs);
           setPlaylists(cachedPlaylists);
+          setPlaylistCollages(cachedPlaylistCollages || {});
           
           setIsLoading(false);
           hasLoadedInitialData.current = true;
           
           if (shouldAnimate) {
-            await animateListOpacityTo(1, 180);
+            await animateListOpacityTo(1, 220);
           }
           return;
         }
@@ -159,15 +206,58 @@ export default function LibraryScreen({ navigation }) {
             }
           });
         }
-        CacheService.set('artists', allArtists);
       }
+
+      const cachedArtistImages = CacheService.get('artistImages') || {};
+      const updatedArtistImages = { ...cachedArtistImages };
+      const shouldUseCachedImages = !forceRefresh;
+
+      const enrichedArtists = await Promise.all(
+        (allArtists || []).map(async artist => {
+          if (!artist || !artist.id) {
+            return artist;
+          }
+
+          const cachedImage = shouldUseCachedImages ? cachedArtistImages[artist.id] : undefined;
+          if (cachedImage !== undefined) {
+            return { ...artist, artistImageUrl: cachedImage };
+          }
+
+          if (shouldUseCachedImages && typeof artist.artistImageUrl === 'string') {
+            updatedArtistImages[artist.id] = artist.artistImageUrl;
+            return artist;
+          }
+
+          try {
+            const imageUrl = await SubsonicAPI.getCoverArtUrl(artist.id);
+            if (typeof imageUrl === 'string' && imageUrl.trim()) {
+              const trimmed = imageUrl.trim();
+              updatedArtistImages[artist.id] = trimmed;
+              return { ...artist, artistImageUrl: trimmed };
+            }
+          } catch (error) {
+            console.warn(`Error loading image for artist ${artist.name}:`, error);
+          }
+
+          updatedArtistImages[artist.id] = null;
+          return { ...artist, artistImageUrl: null };
+        })
+      );
+
+      CacheService.set('artistImages', updatedArtistImages);
+      allArtists = enrichedArtists;
+      CacheService.set('artists', allArtists);
       setArtists(allArtists);
 
-      // Load albums from all artists
+      // Load albums from artists (optimized - load fewer initially)
       let allAlbums = CacheService.get('albums');
       if (!allAlbums || forceRefresh) {
         allAlbums = [];
-        for (const artist of allArtists.slice(0, 20)) { // Limit for performance
+        // Load albums from first 10 artists initially for faster loading
+        const artistsToLoad = allArtists.slice(0, 10);
+        console.log(`Loading albums from ${artistsToLoad.length} artists...`);
+        
+        for (const artist of artistsToLoad) {
           try {
             const artistData = await SubsonicAPI.getArtist(artist.id);
             if (artistData && artistData.album) {
@@ -178,6 +268,11 @@ export default function LibraryScreen({ navigation }) {
           }
         }
         CacheService.set('albums', allAlbums);
+        
+        // Load more albums in the background
+        if (allArtists.length > 10) {
+          loadMoreAlbumsAsync(allArtists.slice(10, 30), allAlbums);
+        }
       }
       setAlbums(allAlbums);
 
@@ -209,6 +304,15 @@ export default function LibraryScreen({ navigation }) {
       }
       setPlaylists(playlistsData);
 
+      // Load cached playlist collages immediately (non-blocking)
+      let cachedCollages = CacheService.get('playlistCollages') || {};
+      setPlaylistCollages(cachedCollages);
+      
+      // Asynchronously load missing collages in the background
+      if (playlistsData.length > 0) {
+        loadPlaylistCollagesAsync(playlistsData, cachedCollages, forceRefresh);
+      }
+
     } catch (error) {
       console.error('Error loading library:', error);
     } finally {
@@ -217,16 +321,89 @@ export default function LibraryScreen({ navigation }) {
       
       // Only auto-animate if requested (for initial load and refresh)
       if (shouldAnimate) {
-        await animateListOpacityTo(1, 180);
+        // Wait a frame to ensure all data is processed before animating
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await animateListOpacityTo(1, 220);
       }
     }
   }, [animateListOpacityTo]);
 
+  const loadMoreAlbumsAsync = useCallback(async (additionalArtists, currentAlbums) => {
+    try {
+      console.log(`Loading albums from ${additionalArtists.length} additional artists in background...`);
+      const newAlbums = [...currentAlbums];
+      
+      for (const artist of additionalArtists) {
+        try {
+          const artistData = await SubsonicAPI.getArtist(artist.id);
+          if (artistData && artistData.album) {
+            newAlbums.push(...artistData.album);
+          }
+        } catch (error) {
+          console.warn(`Error loading albums for artist ${artist.name}:`, error);
+        }
+      }
+      
+      // Update cache and state with additional albums
+      CacheService.set('albums', newAlbums);
+      setAlbums(newAlbums);
+      console.log(`Finished loading additional albums. Total: ${newAlbums.length}`);
+    } catch (error) {
+      console.error('Error in loadMoreAlbumsAsync:', error);
+    }
+  }, []);
+
+  const loadPlaylistCollagesAsync = useCallback(async (playlistsData, cachedCollages, forceRefresh = false) => {
+    try {
+      const updatedCollages = { ...cachedCollages };
+      
+      // Find playlists that need collages
+      const playlistsNeedingCollages = playlistsData.filter(playlist => 
+        playlist.id && (!cachedCollages[playlist.id] || forceRefresh)
+      );
+      
+      if (playlistsNeedingCollages.length === 0) {
+        return;
+      }
+      
+      console.log(`Loading ${playlistsNeedingCollages.length} playlist collages asynchronously...`);
+      
+      // Load collages one by one to avoid overwhelming the API
+      for (const playlist of playlistsNeedingCollages) {
+        try {
+          const collageData = await SubsonicAPI.generatePlaylistCollage(playlist.id, 50);
+          if (collageData) {
+            updatedCollages[playlist.id] = collageData;
+            // Update state and cache incrementally as each collage loads
+            setPlaylistCollages(prev => ({ ...prev, [playlist.id]: collageData }));
+            CacheService.set('playlistCollages', updatedCollages);
+          }
+        } catch (error) {
+          console.warn(`Error generating collage for playlist ${playlist.name}:`, error);
+        }
+      }
+      
+      console.log('Finished loading playlist collages');
+    } catch (error) {
+      console.error('Error in loadPlaylistCollagesAsync:', error);
+    }
+  }, []);
+
   useEffect(() => {
-    loadLibraryData(false);
+    const initializeAndLoad = async () => {
+      // Ensure SubsonicAPI is initialized before loading data
+      const isConfigured = await SubsonicAPI.loadConfiguration();
+      if (isConfigured) {
+        loadLibraryData(false);
+      } else {
+        console.warn('SubsonicAPI not configured. Redirecting to login...');
+        // Handle case where API is not configured
+      }
+    };
+    
+    initializeAndLoad();
   }, [loadLibraryData]);
 
-  const chipOrder = chipDisplayOrder;
 
   const handleChipLayout = useCallback(
     (key) => (event) => {
@@ -246,7 +423,7 @@ export default function LibraryScreen({ navigation }) {
           chipAnimations[key].setValue(delta);
           Animated.timing(chipAnimations[key], {
             toValue: 0,
-            duration: CHIP_ANIMATION_DURATION,
+            duration: CHIP_REORDER_DURATION,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }).start();
@@ -263,7 +440,8 @@ export default function LibraryScreen({ navigation }) {
     [chipAnimations]
   );
 
-  const filteredData = useMemo(() => {
+  // Full dataset for search (includes all items) - optimized with early returns
+  const fullFilteredData = useMemo(() => {
     const dataByView = {
       artists,
       albums,
@@ -271,75 +449,160 @@ export default function LibraryScreen({ navigation }) {
       playlists,
     };
 
+    const baseData = dataByView[viewMode] || [];
+    if (baseData.length === 0) {
+      return [];
+    }
+
+    // Fast path for non-filtered data
+    if (!searchQuery) {
+      // Simple deduplication without creating intermediate objects
+      const seenKeys = new Set();
+      return baseData.filter(item => {
+        if (!item) return false;
+        const key = item.id ?? item.name ?? item.title;
+        if (!key || seenKeys.has(key)) {
+          return false;
+        }
+        seenKeys.add(key);
+        return true;
+      });
+    }
+
+    // Search path - combine deduplication and filtering in single pass
     const searchFieldByView = {
       artists: 'name',
       albums: 'name',
       liked: 'title',
       playlists: 'name',
     };
-
-    const baseData = (dataByView[viewMode] || []).filter(Boolean);
-
+    
+    const searchField = searchFieldByView[viewMode] || 'name';
+    const normalizedQuery = searchQuery.toLowerCase();
     const seenKeys = new Set();
-    const deduplicated = baseData.filter(item => {
-      const key = item?.id ?? item?.name ?? item?.title;
-      if (!key) {
-        return true;
-      }
-      if (seenKeys.has(key)) {
+    
+    return baseData.filter(item => {
+      if (!item) return false;
+      
+      const key = item.id ?? item.name ?? item.title;
+      if (!key || seenKeys.has(key)) {
         return false;
       }
+      
+      const value = item[searchField];
+      if (!value || !value.toLowerCase().includes(normalizedQuery)) {
+        return false;
+      }
+      
       seenKeys.add(key);
       return true;
     });
-
-    const searchField = searchFieldByView[viewMode] || 'name';
-    if (!searchQuery) {
-      return deduplicated;
-    }
-
-    const normalizedQuery = searchQuery.toLowerCase();
-    return deduplicated.filter(item => {
-      const value = item?.[searchField];
-      return value ? value.toLowerCase().includes(normalizedQuery) : false;
-    });
   }, [albums, artists, viewMode, likedSongs, playlists, searchQuery]);
+
+  // Paginated data for display (when not searching)
+  const paginatedData = useMemo(() => {
+    if (searchQuery) {
+      // When searching, show all results
+      return fullFilteredData;
+    }
+    
+    // When not searching, show paginated results
+    const endIndex = (currentPage + 1) * ITEMS_PER_PAGE;
+    return fullFilteredData.slice(0, endIndex);
+  }, [fullFilteredData, currentPage, searchQuery, ITEMS_PER_PAGE]);
+
+  // Update displayed data when paginated data changes
+  useEffect(() => {
+    // Only update displayed data if we're not in the middle of a transition
+    // or if we have actual data to show
+    if (!isAnimatingList.current || paginatedData.length > 0) {
+      setDisplayedData(paginatedData);
+    }
+    setHasMoreData(paginatedData.length < fullFilteredData.length);
+  }, [paginatedData, fullFilteredData]);
+
+  // Reset pagination when view mode or search changes
+  useEffect(() => {
+    setCurrentPage(0);
+    // Don't clear displayedData immediately during view mode transitions
+    // Let the fade animation handle the visual transition
+    if (!isAnimatingList.current) {
+      setDisplayedData([]);
+    }
+  }, [viewMode, searchQuery]);
 
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    setCurrentPage(0); // Reset pagination on refresh
     await loadLibraryData(true, true); // Force refresh to bypass cache
     setIsRefreshing(false);
   };
 
+  const handleLoadMore = useCallback(() => {
+    if (isLoadingMore || !hasMoreData || searchQuery) {
+      return;
+    }
+    
+    setIsLoadingMore(true);
+    setTimeout(() => {
+      setCurrentPage(prev => prev + 1);
+      setIsLoadingMore(false);
+    }, 100); // Small delay to prevent rapid firing
+  }, [isLoadingMore, hasMoreData, searchQuery]);
+
   const runViewModeTransition = useCallback(async (mode) => {
     try {
-      // Fade out the library content 
-      await animateListOpacityTo(0, 700);
+      // Fade out the library content FIRST
+      await animateListOpacityTo(0, 300);
       
-      // Do the query (load data)
-      await loadLibraryData(false); // Don't animate here, we'll do it manually
-
+      // THEN set view mode while content is hidden to prevent flash
       setViewMode(mode);
-
-      // Wait for next render frame before re-highlighting and fading in
+      
+      // Check if we need to load data
+      const dataByView = {
+        artists,
+        albums,
+        liked: likedSongs,
+        playlists,
+      };
+      
+      const hasDataForMode = (dataByView[mode] || []).length > 0;
+      
+      if (!hasDataForMode) {
+        // Only reload data if we don't have it cached
+        await loadLibraryData(false);
+      }
+      
+      // Reset pagination and clear old data now that we're hidden
+      setCurrentPage(0);
+      
+      // Wait for next render frame to ensure view mode and data are processed
       await new Promise(resolve => requestAnimationFrame(resolve));
-      setActiveChip(mode);
-      await new Promise(resolve => requestAnimationFrame(resolve));
-
-      // Fade in the library once data is ready
-      await animateListOpacityTo(1, 700);
+      
+      // Force update displayed data after transition
+      const dataByViewAfter = {
+        artists,
+        albums,
+        liked: likedSongs,
+        playlists,
+      };
+      const newData = dataByViewAfter[mode] || [];
+      const endIndex = ITEMS_PER_PAGE;
+      setDisplayedData(newData.slice(0, endIndex));
+      
+      // Fade in the library once everything is ready
+      await animateListOpacityTo(1, 400);
       
     } catch (error) {
       console.error('Error in view mode transition:', error);
       // Ensure we fade back in even if there's an error
-      await animateListOpacityTo(1, 700);
       setViewMode(mode);
-      setActiveChip(mode);
+      await animateListOpacityTo(1, 400);
     } finally {
       isAnimatingList.current = false;
     }
-  }, [animateListOpacityTo, loadLibraryData]);
+  }, [animateListOpacityTo, loadLibraryData, artists, albums, likedSongs, playlists]);
 
   const handleViewModePress = useCallback((mode) => {
     if (mode === selectedChip || isAnimatingList.current) {
@@ -348,13 +611,11 @@ export default function LibraryScreen({ navigation }) {
     
     isAnimatingList.current = true;
     
-    if (chipAnimationTimeout.current) {
-      clearTimeout(chipAnimationTimeout.current);
-    }
-
-    // Keep active highlighting while loading new content
+    // Start chip color changes IMMEDIATELY for instant visual feedback
     setActiveChip(mode);
+    setSelectedChip(mode);
 
+    // Capture current layouts for animation
     const previousLayouts = Object.keys(chipLayoutsRef.current).reduce((acc, key) => {
       acc[key] = { ...chipLayoutsRef.current[key] };
       return acc;
@@ -363,30 +624,82 @@ export default function LibraryScreen({ navigation }) {
 
     const nextOrder = buildChipOrder(mode);
 
-    // 1. Execute chip reordering animation immediately
+    // Start chip reordering animation immediately
     setChipDisplayOrder(nextOrder);
-    setSelectedChip(mode);
     
-    // 2. Scroll chips to start position
+    // Scroll chips to start position immediately
     chipScrollRef.current?.scrollTo({ x: 0, animated: true });
-    
-    // 3. Begin the view mode transition sequence after chip animation completes
-    chipAnimationTimeout.current = setTimeout(() => {
-      runViewModeTransition(mode);
-    }, CHIP_ANIMATION_DURATION);
-    
+
+    // Start the data transition immediately in parallel with chip animations
+    runViewModeTransition(mode);
+
   }, [selectedChip, runViewModeTransition]);
 
-  const openSearch = useCallback(() => {
-    setIsSearchActive(true);
+  const handleHeaderLayout = useCallback(({ nativeEvent }) => {
+    const width = nativeEvent?.layout?.width ?? 0;
+    setHeaderContentWidth(prev => (Math.abs(prev - width) < 0.5 ? prev : width));
   }, []);
+
+  const handleChipSectionLayout = useCallback(({ nativeEvent }) => {
+    const height = nativeEvent?.layout?.height ?? 0;
+    if (height <= 0) {
+      return;
+    }
+
+    setChipSectionHeight(prev => {
+      if (!prev || height > prev * 0.98) {
+        return height;
+      }
+      return prev;
+    });
+  }, []);
+
+  const openSearch = useCallback(() => {
+    if (isSearchActive) {
+      searchInputRef.current?.focus();
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(searchReveal, {
+        toValue: 1,
+        duration: 300,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(chipSectionProgress, {
+        toValue: 0,
+        duration: 300,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      setIsSearchActive(true);
+      searchInputRef.current?.focus();
+    });
+  }, [chipSectionProgress, isSearchActive, searchReveal]);
 
   const closeSearch = useCallback(() => {
-    setIsSearchActive(false);
-    setSearchQuery('');
-  }, []);
+    Animated.parallel([
+      Animated.timing(searchReveal, {
+        toValue: 0,
+        duration: 300,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(chipSectionProgress, {
+        toValue: 1,
+        duration: 250,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      searchInputRef.current?.blur?.();
+      setIsSearchActive(false);
+      setSearchQuery('');
+    });
+  }, [chipSectionProgress, searchReveal]);
 
-  const handleItemPress = (item, index) => {
+  const handleItemPress = useCallback((item, index) => {
     switch (viewMode) {
       case 'artists':
         navigation.navigate('Artist', { artist: item });
@@ -395,82 +708,257 @@ export default function LibraryScreen({ navigation }) {
         navigation.navigate('Album', { album: item });
         break;
       case 'liked':
-        AudioPlayer.playTrack(item, filteredData, index);
+        AudioPlayer.playTrack(item, displayedData, index);
         navigation.navigate('Player');
         break;
       case 'playlists':
+        // TODO: Navigate to playlist screen when implemented
         console.log('Playlist pressed:', item.name);
         break;
       default:
         break;
     }
+  }, [viewMode, navigation, displayedData]);
+
+  const handleMenuPress = useCallback((item) => {
+    // TODO: Implement menu functionality
+    console.log('Menu pressed for:', item.title || item.name);
+  }, []);
+
+  const formatDuration = (seconds) => {
+    if (!seconds) return '';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
   };
 
-  const getImageUrl = (item) => {
+  const getItemDuration = (item) => {
     switch (viewMode) {
-      case 'artists':
-        return item.artistImageUrl || (item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 100) : null);
-      case 'albums':
       case 'liked':
-        return item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 100) : null;
+        return item.duration ? formatDuration(item.duration) : '';
+      case 'albums':
+        return item.duration ? formatDuration(item.duration) : '';
       case 'playlists':
-        return null; // TODO
+        return item.duration ? formatDuration(item.duration) : '';
       default:
-        return null;
+        return '';
     }
   };
 
-  const renderItem = ({ item, index }) => {
-    let title, subtitle, iconName;
+  const shouldShowMenu = () => {
+    return viewMode === 'liked' || viewMode === 'playlists';
+  };
+
+  const shouldShowDuration = () => {
+    return viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
+  };
+
+  // Optimized list item component with custom comparison function
+  const ListItem = memo(({ item, index, viewMode, playlistCollages }) => {
+    const handlePress = useCallback(() => {
+      handleItemPress(item, index);
+    }, [item, index]);
+
+    const handleMenuPressCallback = useCallback(() => {
+      handleMenuPress(item);
+    }, [item]);
+
+    let title, subtitle;
     
     switch (viewMode) {
       case 'artists':
         title = item.name;
         subtitle = `${item.albumCount} album${item.albumCount !== 1 ? 's' : ''}`;
-        iconName = 'chevron-right';
         break;
       case 'albums':
         title = item.name;
         subtitle = item.artist || 'Unknown Artist';
-        iconName = 'chevron-right';
         break;
       case 'liked':
         title = item.title;
         subtitle = item.artist || 'Unknown Artist';
-        iconName = 'play-arrow';
         break;
       case 'playlists':
         title = item.name;
         subtitle = `${item.songCount || 0} song${(item.songCount || 0) !== 1 ? 's' : ''}`;
-        iconName = 'chevron-right';
         break;
     }
     
-    const imageUrl = getImageUrl(item);
+    // Pre-calculate values to avoid recalculation
+    const imageData = useMemo(() => {
+      let result = null;
+      switch (viewMode) {
+        case 'artists':
+          result = item?.artistImageUrl || null;
+          break;
+        case 'albums':
+          result = (item.coverArt && SubsonicAPI.baseUrl) ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
+          break;
+        case 'liked':
+          result = (item.coverArt && SubsonicAPI.baseUrl) ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
+          break;
+        case 'playlists':
+          const collageData = playlistCollages[item.id];
+          if (collageData) {
+            if (typeof collageData === 'string') {
+              result = collageData;
+              console.log('🎨 Playlist single cover URL:', result);
+            } else if (collageData.type === 'collage') {
+              result = collageData;
+              console.log('🎨 Playlist collage data:', {
+                type: collageData.type,
+                albumCount: collageData.albumCount,
+                coverArtUrls: collageData.coverArtUrls
+              });
+            }
+          } else {
+            console.log('❌ No collage data for playlist:', item.name, '| ID:', item.id);
+          }
+          break;
+        default:
+          result = null;
+      }
+      
+      
+      return result;
+    }, [item, viewMode, playlistCollages]);
+
+    const duration = useMemo(() => {
+      if (!item.duration) return '';
+      
+      const seconds = item.duration;
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+      return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+    }, [item.duration]);
+
+    const showDuration = viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
+    const showMenu = viewMode === 'liked' || viewMode === 'playlists';
+    
+    // Memoized image component
+    const imageComponent = useMemo(() => {
+      if (viewMode === 'playlists' && imageData && typeof imageData === 'object' && imageData.type === 'collage') {
+        return (
+          <PlaylistCollage 
+            collageData={imageData} 
+            size={56} 
+            style={styles.itemImage} 
+          />
+        );
+      } else {
+        const imageUrl = typeof imageData === 'string' ? imageData : null;
+        return (
+          <Image
+            source={imageUrl ? { uri: imageUrl } : require('../../assets/default-album.png')}
+            style={styles.itemImage}
+            defaultSource={require('../../assets/default-album.png')}
+            onError={(error) => {
+              console.log('❌ Image load error for URL:', imageUrl);
+              console.log('❌ Error details:', error.nativeEvent.error);
+            }}
+            onLoad={() => {
+              console.log('✅ Image loaded successfully:', imageUrl);
+            }}
+          />
+        );
+      }
+    }, [imageData, viewMode]);
     
     return (
-      <TouchableOpacity onPress={() => handleItemPress(item, index)}>
-        <Card style={styles.itemCard}>
-          <View style={styles.itemContent}>
-            <Image
-              source={imageUrl ? { uri: imageUrl } : require('../../assets/default-album.png')}
-              style={styles.itemImage}
-              defaultSource={require('../../assets/default-album.png')}
-            />
-            <View style={styles.itemInfo}>
-              <Text style={styles.itemTitle}>{title}</Text>
-              <Text style={styles.itemSubtitle}>{subtitle}</Text>
-            </View>
-            <MaterialIcons 
-              name={iconName} 
-              size={24} 
-              color={theme.colors.onSurface} 
-            />
+      <TouchableOpacity 
+        style={styles.flatListItem}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
+        {viewMode === 'liked' && (
+          <MaterialIcons
+            name="favorite"
+            size={16}
+            color={theme.colors.primary}
+            style={styles.itemLeadingIcon}
+          />
+        )}
+        {imageComponent}
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemTitle}>{title}</Text>
+          <Text style={styles.itemSubtitle}>{subtitle}</Text>
+        </View>
+        
+        {(showDuration || showMenu) && (
+          <View style={styles.itemRightContent}>
+            {showDuration && duration && (
+              <Text style={styles.itemDuration}>{duration}</Text>
+            )}
+            {showMenu && (
+              <TouchableOpacity 
+                style={styles.itemMenuButton}
+                onPress={handleMenuPressCallback}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.itemMenuDots}>⋯</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        </Card>
+        )}
       </TouchableOpacity>
     );
-  };
+  }, (prevProps, nextProps) => {
+    // Optimized comparison function - avoid JSON.stringify for better performance
+    if (prevProps.item.id !== nextProps.item.id ||
+        prevProps.viewMode !== nextProps.viewMode ||
+        prevProps.index !== nextProps.index) {
+      return false;
+    }
+    
+    // Only check playlist collages for playlist view mode
+    if (prevProps.viewMode === 'playlists') {
+      const prevCollage = prevProps.playlistCollages[prevProps.item.id];
+      const nextCollage = nextProps.playlistCollages[nextProps.item.id];
+      
+      // Quick reference equality check first
+      if (prevCollage === nextCollage) {
+        return true;
+      }
+      
+      // Deep comparison only if both exist and are objects
+      if (prevCollage && nextCollage && 
+          typeof prevCollage === 'object' && typeof nextCollage === 'object') {
+        return JSON.stringify(prevCollage) === JSON.stringify(nextCollage);
+      }
+      
+      return prevCollage === nextCollage;
+    }
+    
+    return true;
+  });
+
+
+  const renderItem = useCallback(({ item, index }) => {
+    return (
+      <ListItem
+        item={item}
+        index={index}
+        viewMode={viewMode}
+        playlistCollages={playlistCollages}
+      />
+    );
+  }, [viewMode, playlistCollages]);
+
+  // Performance optimization: getItemLayout for FlatList
+  const getItemLayout = useCallback((data, index) => ({
+    length: 72, // minHeight from styles
+    offset: 72 * index,
+    index,
+  }), []);
 
   const keyExtractor = useCallback((item, index) => {
     const baseKey = item?.id ?? item?.name ?? item?.title ?? `item-${index}`;
@@ -478,11 +966,16 @@ export default function LibraryScreen({ navigation }) {
   }, [viewMode]);
 
   const renderEmptyState = () => {
+    // Don't show empty state during transitions
+    if (isAnimatingList.current) {
+      return null;
+    }
+    
     const emptyMessages = {
       artists: { text: 'No artists found', icon: 'person' },
       albums: { text: 'No albums found', icon: 'album' },
       liked: { text: 'No liked songs found', icon: 'favorite' },
-      playlists: { text: 'No playlists found', icon: 'playlist-music' }
+      playlists: { text: 'No playlists found', icon: 'queue-music' }
     };
     
     const { text, icon } = emptyMessages[viewMode];
@@ -498,6 +991,89 @@ export default function LibraryScreen({ navigation }) {
     );
   };
 
+  const titleAnimatedStyle = {
+    opacity: searchReveal.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0],
+    }),
+    transform: [
+      {
+        translateY: searchReveal.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -6],
+        }),
+      },
+    ],
+  };
+
+  const actionAnimatedStyle = {
+    opacity: searchReveal.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0],
+    }),
+    transform: [
+      {
+        scale: searchReveal.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 0.86],
+        }),
+      },
+    ],
+  };
+
+  const measuredHeaderWidth = Math.max(headerContentWidth, 1);
+
+  const searchOverlayAnimatedStyle = {
+    opacity: searchReveal,
+    transform: [
+      {
+        translateX: searchReveal.interpolate({
+          inputRange: [0, 1],
+          outputRange: [measuredHeaderWidth, 0],
+          extrapolate: 'clamp',
+        }),
+      },
+    ],
+  };
+
+  const chipSectionWrapperAnimatedStyle = {
+    height: chipSectionProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, Math.max(chipSectionHeight, CHIP_SECTION_DEFAULT_HEIGHT)],
+      extrapolate: 'clamp',
+    }),
+    marginTop: chipSectionProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 12],
+    }),
+    opacity: chipSectionProgress,
+  };
+
+  const chipSectionContentAnimatedStyle = {
+    transform: [
+      {
+        translateY: chipSectionProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-6, 0],
+        }),
+      },
+    ],
+    opacity: chipSectionProgress,
+  };
+
+  const headerAnimatedStyle = {
+    paddingTop: chipSectionProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [12, 16],
+      extrapolate: 'clamp',
+    }),
+    paddingBottom: chipSectionProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [8, 12],
+      extrapolate: 'clamp',
+    }),
+  };
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -509,102 +1085,139 @@ export default function LibraryScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        {isSearchActive ? (
-          <Searchbar
-            autoFocus
-            placeholder={`Search ${viewMode}...`}
-            onChangeText={setSearchQuery}
-            value={searchQuery}
-            style={styles.searchbar}
-            icon="chevron-left"
-            onIconPress={closeSearch}
-            inputStyle={styles.searchbarInput}
-            onClearIconPress={() => setSearchQuery('')}
-          />
-        ) : (
-          <View style={styles.headerContent}>
+      <AnimatedHeader style={[styles.header, headerAnimatedStyle]}>
+        <View style={styles.headerContent} onLayout={handleHeaderLayout}>
+          <Animated.View
+            style={[styles.headerTitleWrapper, titleAnimatedStyle]}
+            pointerEvents={isSearchActive ? 'none' : 'auto'}
+          >
             <Text style={styles.headerTitle}>Your Library</Text>
+          </Animated.View>
+          <Animated.View
+            style={[styles.headerActionWrapper, actionAnimatedStyle]}
+            pointerEvents={isSearchActive ? 'none' : 'auto'}
+          >
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Open search"
-              style={styles.headerAction}
+              style={styles.headerActionTouchable}
               onPress={openSearch}
+              activeOpacity={0.7}
             >
               <MaterialIcons name="search" size={24} color={theme.colors.onSurface} />
             </TouchableOpacity>
-          </View>
-        )}
-
-        {!isSearchActive && (
-          <ScrollView
-            horizontal
-            ref={chipScrollRef}
-            showsHorizontalScrollIndicator={false}
-            contentInsetAdjustmentBehavior="never"
-            style={styles.chipScrollContainer}
-            contentContainerStyle={styles.chipContainer}
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.searchOverlay,
+              { width: measuredHeaderWidth },
+              searchOverlayAnimatedStyle,
+            ]}
+            pointerEvents={isSearchActive ? 'auto' : 'none'}
           >
-            {chipOrder.map(({ key, label }) => {
-              if (!chipAnimations[key]) {
-                chipAnimations[key] = new Animated.Value(0);
-              }
-              if (!chipHighlightAnimations[key]) {
-                chipHighlightAnimations[key] = new Animated.Value(activeChip === key ? 1 : 0);
-              }
+            <Searchbar
+              ref={searchInputRef}
+              placeholder={`Search ${viewMode}...`}
+              onChangeText={setSearchQuery}
+              value={searchQuery}
+              style={styles.searchbar}
+              icon="chevron-left"
+              onIconPress={closeSearch}
+              inputStyle={styles.searchbarInput}
+            />
+          </Animated.View>
+        </View>
 
-              const translateValue = chipAnimations[key];
-              const highlightValue = chipHighlightAnimations[key];
+        <Animated.View
+          style={[styles.chipSectionWrapper, chipSectionWrapperAnimatedStyle]}
+          pointerEvents={isSearchActive ? 'none' : 'auto'}
+        >
+          <Animated.View
+            style={chipSectionContentAnimatedStyle}
+          >
+            <View onLayout={handleChipSectionLayout}>
+              <ScrollView
+                horizontal
+                ref={chipScrollRef}
+                showsHorizontalScrollIndicator={false}
+                contentInsetAdjustmentBehavior="never"
+                style={styles.chipScrollContainer}
+                contentContainerStyle={styles.chipContainer}
+              >
+                {chipDisplayOrder.map(({ key, label }) => {
+                  if (!chipAnimations[key]) {
+                    chipAnimations[key] = new Animated.Value(0);
+                  }
+                  if (!chipHighlightAnimations[key]) {
+                    chipHighlightAnimations[key] = new Animated.Value(activeChip === key ? 1 : 0);
+                  }
 
-              const translateStyle = {
-                transform: [
-                  {
-                    translateX: translateValue,
-                  },
-                ],
-                zIndex: activeChip === key ? 2 : 1,
-              };
+                  const translateValue = chipAnimations[key];
+                  const highlightValue = chipHighlightAnimations[key];
 
-              const chipStyle = {
-                backgroundColor: highlightValue.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [theme.colors.surfaceVariant, theme.colors.secondary],
-                }),
-              };
+                  const translateStyle = {
+                    transform: [
+                      {
+                        translateX: translateValue,
+                      },
+                    ],
+                    zIndex: activeChip === key ? 2 : 1,
+                  };
 
-              const animatedTextStyle = {
-                color: highlightValue.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [theme.colors.onSurfaceVariant, theme.colors.onSecondary],
-                }),
-              };
+                  // Interpolate background color with smoother transition
+                  const backgroundColor = highlightValue.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [theme.colors.surfaceVariant, theme.colors.secondary],
+                    extrapolate: 'clamp',
+                  });
 
-              return (
-                <Animated.View
-                  key={key}
-                  onLayout={handleChipLayout(key)}
-                  style={translateStyle}
-                >
-                  <AnimatedTouchableOpacity
-                    onPress={() => handleViewModePress(key)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: activeChip === key }}
-                    style={[styles.bubbleChip, chipStyle, activeChip === key ? styles.bubbleChipElevated : null]}
-                  >
-                    <AnimatedText style={[styles.bubbleChipText, animatedTextStyle]}>
-                      {label}
-                    </AnimatedText>
-                  </AnimatedTouchableOpacity>
-                </Animated.View>
-              );
-            })}
-          </ScrollView>
-        )}
-      </View>
+                  // Interpolate text color with smoother transition
+                  const textColor = highlightValue.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [theme.colors.onSurfaceVariant, theme.colors.onSecondary],
+                    extrapolate: 'clamp',
+                  });
+
+
+                  return (
+                    <Animated.View
+                      key={key}
+                      onLayout={handleChipLayout(key)}
+                      style={translateStyle}
+                    >
+                      <AnimatedTouchableOpacity
+                        onPress={() => handleViewModePress(key)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: activeChip === key }}
+                        style={[
+                          styles.bubbleChip,
+                          { backgroundColor },
+                          activeChip === key ? styles.bubbleChipElevated : null
+                        ]}
+                        activeOpacity={0.8}
+                      >
+                        <AnimatedText
+                          style={[
+                            styles.bubbleChipText,
+                            { color: textColor }
+                          ]}
+                        >
+                          {label}
+                        </AnimatedText>
+                      </AnimatedTouchableOpacity>
+                    </Animated.View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </AnimatedHeader>
       <AnimatedFlatList
-        data={filteredData}
+        data={displayedData}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl
@@ -616,8 +1229,24 @@ export default function LibraryScreen({ navigation }) {
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         style={{ opacity: listOpacity }}
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={15}
+        windowSize={5}
+        legacyImplementation={false}
+        disableVirtualization={false}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.1}
+        ListFooterComponent={isLoadingMore ? (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+          </View>
+        ) : null}
       />
     </View>
   );
 }
+
 

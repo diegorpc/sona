@@ -2,7 +2,7 @@ class CacheService {
   constructor() {
     this.cache = new Map();
     this.cacheTimestamps = new Map();
-    this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+    this.CACHE_DURATION = 5 * 60 * 1000; // 5 minutes 
   }
 
   // Set cache with timestamp

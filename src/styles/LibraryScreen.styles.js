@@ -11,47 +11,66 @@ export const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: theme.colors.surface,
-    elevation: 6,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
+    elevation: 10,
+    shadowColor: 'rgba(15, 23, 42, 0.35)',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 44,
+    justifyContent: 'flex-start',
+    minHeight: 44,
+    position: 'relative',
   },
   headerTitle: {
     fontSize: 28,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
   },
-  headerAction: {
+  headerTitleWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  headerActionWrapper: {
+    marginLeft: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  headerActionTouchable: {
     padding: 6,
     borderRadius: 999,
   },
   searchbar: {
     borderRadius: 10,
     height: 44,
-    marginBottom: 8,
+    marginBottom: 0,
+    flex: 1,
   },
   searchbarInput: {
     fontFamily: 'Lexend_500Medium',
     fontSize: 16,
-    paddingVertical: 0,
+    paddingTop: 0,
+    paddingBottom: 10,
+  },
+  searchOverlay: {
+    position: 'absolute',
+    right: 0,
+    height: 44,
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   chipScrollContainer: {
     maxHeight: 44,
-    marginTop: 12,
     marginHorizontal: -16, // Extend to screen edges
   },
   chipContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 16, // Add padding back for first chip
-    paddingRight: 16, // Add padding back for last chip
+    paddingLeft: 16, 
+    paddingRight: 16,
   },
   bubbleChip: {
     paddingHorizontal: 14,
@@ -60,12 +79,7 @@ export const styles = StyleSheet.create({
     minWidth: 68,
     alignItems: 'center',
     marginHorizontal: 4,
-  },
-  bubbleChipSelected: {
-    backgroundColor: theme.colors.secondary,
-  },
-  bubbleChipUnselected: {
-    backgroundColor: theme.colors.surfaceVariant,
+    // backgroundColor will be animated, no static color needed
   },
   bubbleChipElevated: {
     elevation: 4,
@@ -77,46 +91,77 @@ export const styles = StyleSheet.create({
   bubbleChipText: {
     fontSize: 14,
     fontFamily: 'Lexend_500Medium',
+    textAlign: 'center',
   },
-  bubbleChipTextSelected: {
-    color: theme.colors.onSecondary,
-  },
-  bubbleChipTextUnselected: {
-    color: theme.colors.onSurfaceVariant,
+  chipSectionWrapper: {
+    width: '100%',
+    marginTop: 12,
   },
   listContainer: {
-    padding: 16,
-    paddingBottom: 80, // Space for FAB
+    paddingBottom: 80,
   },
-  itemCard: {
-    marginBottom: 8,
-    backgroundColor: theme.colors.surface,
-  },
-  itemContent: {
+
+  // Flat list item container 
+  flatListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 8, // item height
+    backgroundColor: theme.colors.background,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.outline,
+    minHeight: 72, // Minimum height
+  },
+  itemLeadingIcon: {
+    marginRight: 8,
   },
   itemImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    marginRight: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 2,
+    marginRight: 10,
+    objectFit: 'contain',
+    resizeMode: 'contain',
   },
   itemInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   itemTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   itemSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
+  },
+  
+  // Right side content for songs and playlists
+  itemRightContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  itemDuration: {
+    fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.6,
+    marginRight: 12,
+  },
+  itemMenuButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemMenuDots: {
+    fontSize: 16,
+    color: theme.colors.onSurface,
+    opacity: 0.6,
   },
   loadingContainer: {
     flex: 1,

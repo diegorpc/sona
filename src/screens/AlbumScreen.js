@@ -223,9 +223,9 @@ export default function AlbumScreen({ route, navigation }) {
       {albumData.song && albumData.song.length > 0 && (
         <FAB
           style={styles.fab}
-          icon="PlayArrow"
+          icon="play-arrow"
           onPress={playAlbum}
-          label="PlayArrow"
+          label="Play"
         />
       )}
     </View>
