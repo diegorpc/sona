@@ -54,16 +54,7 @@ export const styles = StyleSheet.create({
   },
   slider: {
     width: '100%',
-    height: 40,
-  },
-  sliderThumb: {
-    backgroundColor: theme.colors.primary,
-    width: 8,
-    height: 8,
-  },
-  sliderTrack: {
-    height: 4,
-    borderRadius: 2,
+    height: 35,
   },
   timeContainer: {
     flexDirection: 'row',

@@ -153,8 +153,7 @@ export default function PlayerScreen({ navigation }) {
             onSlidingComplete={handleSliderComplete}
             minimumTrackTintColor={theme.colors.primary}
             maximumTrackTintColor={theme.colors.outline}
-            thumbStyle={styles.sliderThumb}
-            trackStyle={styles.sliderTrack}
+            thumbTintColor={theme.colors.primary}
           />
           <View style={styles.timeContainer}>
             <Text style={styles.timeText}>

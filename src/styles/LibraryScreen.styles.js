@@ -7,45 +7,75 @@ export const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
     backgroundColor: theme.colors.surface,
-    elevation: 2,
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 44,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontFamily: 'Lexend_700Bold',
+    color: theme.colors.onSurface,
+  },
+  headerAction: {
+    padding: 6,
+    borderRadius: 999,
   },
   searchbar: {
-    marginBottom: 12,
+    borderRadius: 10,
+    height: 44,
+    marginBottom: 8,
+  },
+  searchbarInput: {
+    fontFamily: 'Lexend_500Medium',
+    fontSize: 16,
+    paddingVertical: 0,
   },
   chipScrollContainer: {
-    maxHeight: 50,
+    maxHeight: 44,
+    marginTop: 12,
+    marginHorizontal: -16, // Extend to screen edges
   },
   chipContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 8,
+    alignItems: 'center',
+    paddingLeft: 16, // Add padding back for first chip
+    paddingRight: 16, // Add padding back for last chip
   },
   bubbleChip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 70,
+    borderRadius: 18,
+    minWidth: 68,
     alignItems: 'center',
+    marginHorizontal: 4,
   },
   bubbleChipSelected: {
     backgroundColor: theme.colors.secondary,
   },
   bubbleChipUnselected: {
-    backgroundColor: theme.colors.outline,
-    opacity: 0.6,
+    backgroundColor: theme.colors.surfaceVariant,
   },
   bubbleChipText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: 'Lexend_500Medium',
   },
   bubbleChipTextSelected: {
     color: theme.colors.onSecondary,
   },
   bubbleChipTextUnselected: {
-    color: theme.colors.onSurface,
-    opacity: 0.7,
+    color: theme.colors.onSurfaceVariant,
   },
   listContainer: {
     padding: 16,
@@ -71,12 +101,13 @@ export const styles = StyleSheet.create({
   },
   itemTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
     marginBottom: 4,
   },
   itemSubtitle: {
     fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
   },
@@ -89,6 +120,7 @@ export const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    fontFamily: 'Lexend_500Medium',
     color: theme.colors.onBackground,
   },
   emptyState: {
@@ -99,23 +131,17 @@ export const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onBackground,
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onBackground,
     opacity: 0.7,
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 32,
-  },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
-    backgroundColor: theme.colors.primary,
-  },
+  }
 });

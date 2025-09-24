@@ -18,7 +18,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.yourname.sona",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSAppleMusicUsageDescription": "This app plays music from your personal server"
       }
     },
@@ -33,7 +35,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-av",
+      "expo-audio",
       [
         "expo-build-properties",
         {
@@ -44,7 +46,8 @@
             "newArchEnabled": false
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "sdkVersion": "54.0.0"
   }

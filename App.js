@@ -6,6 +6,13 @@ import { StatusBar } from 'expo-status-bar';
 import { Provider as PaperProvider } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
+import {
+  useFonts,
+  Lexend_400Regular,
+  Lexend_500Medium,
+  Lexend_600SemiBold,
+  Lexend_700Bold,
+} from '@expo-google-fonts/lexend';
 
 import LoginScreen from './src/screens/LoginScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
@@ -46,11 +53,9 @@ function MainTabs() {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.outline,
         },
-        headerStyle: {
-          backgroundColor: theme.colors.surface,
-        },
-        headerTintColor: theme.colors.onSurface,
+        headerShown: false,
       })}
+      sceneContainerStyle={{ paddingTop: 40, backgroundColor: theme.colors.surface }}
     >
       <Tab.Screen name="Library" component={LibraryScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
@@ -63,6 +68,12 @@ function MainTabs() {
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [fontsLoaded] = useFonts({
+    Lexend_400Regular,
+    Lexend_500Medium,
+    Lexend_600SemiBold,
+    Lexend_700Bold,
+  });
 
   useEffect(() => {
     checkLoginStatus();
@@ -92,7 +103,7 @@ export default function App() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || !fontsLoaded) {
     return null; // TODO: add loading element
   }
 

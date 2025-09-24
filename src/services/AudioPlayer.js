@@ -1,4 +1,20 @@
-import { Audio } from 'expo-av';
+let Audio;
+
+try {
+  const expoAudio = require('expo-audio');
+  Audio = expoAudio?.Audio ?? expoAudio?.default ?? expoAudio;
+} catch (error) {
+  Audio = undefined;
+}
+
+if (!Audio || typeof Audio.setAudioModeAsync !== 'function') {
+  const fallbackModule = require('expo-av');
+  Audio = fallbackModule.Audio ?? fallbackModule;
+  console.warn(
+    '[AudioPlayerService] expo-audio did not provide the expected API. Falling back to expo-av which is deprecated and will be removed in a future Expo SDK. Ensure expo-audio is installed and compatible to silence this warning.'
+  );
+}
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from './SubsonicAPI';
 

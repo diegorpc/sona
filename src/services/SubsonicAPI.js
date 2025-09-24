@@ -109,6 +109,15 @@ class SubsonicAPI {
     return response.album;
   }
 
+  // Get paginated album lists with sorting
+  async getAlbumList(type = 'alphabeticalByName', size = 50, offset = 0) {
+    const params = { type, size };
+    if (offset) params.offset = offset;
+
+    const response = await this.request('getAlbumList2', params);
+    return response.albumList2?.album || [];
+  }
+
   // Search for music
   async search(query, artistCount = 20, albumCount = 20, songCount = 50) {
     const response = await this.request('search3', {
@@ -129,6 +138,15 @@ class SubsonicAPI {
 
     const response = await this.request('getRandomSongs', params);
     return response.randomSongs;
+  }
+
+  // Get paginated song lists with sorting
+  async getSongList(type = 'alphabeticalByName', size = 50, offset = 0) {
+    const params = { type, size };
+    if (offset) params.offset = offset;
+
+    const response = await this.request('getSongList2', params);
+    return response.songList2?.song || [];
   }
 
   // Get playlists
