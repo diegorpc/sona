@@ -67,6 +67,13 @@ export const styles = StyleSheet.create({
   bubbleChipUnselected: {
     backgroundColor: theme.colors.surfaceVariant,
   },
+  bubbleChipElevated: {
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+  },
   bubbleChipText: {
     fontSize: 14,
     fontFamily: 'Lexend_500Medium',

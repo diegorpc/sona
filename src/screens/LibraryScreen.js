@@ -8,9 +8,6 @@ import {
   ScrollView,
   Animated,
   Easing,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { Text, ActivityIndicator, Searchbar, Card } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -21,6 +18,8 @@ import { theme } from '../theme/theme';
 import { styles } from '../styles/LibraryScreen.styles';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+const AnimatedText = Animated.createAnimatedComponent(Text);
 const CHIP_DEFINITIONS = [
   { key: 'artists', label: 'Artists' },
   { key: 'albums', label: 'Albums' },
@@ -28,9 +27,15 @@ const CHIP_DEFINITIONS = [
   { key: 'playlists', label: 'Playlists' },
 ];
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+const CHIP_ANIMATION_DURATION = 600;
+
+const buildChipOrder = (selectedKey) => {
+  const selected = CHIP_DEFINITIONS.find(chip => chip.key === selectedKey);
+  if (!selected) {
+    return CHIP_DEFINITIONS;
+  }
+  return [selected, ...CHIP_DEFINITIONS.filter(chip => chip.key !== selectedKey)];
+};
 
 export default function LibraryScreen({ navigation }) {
   const [artists, setArtists] = useState([]);
@@ -42,12 +47,57 @@ export default function LibraryScreen({ navigation }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('liked'); // 'artists', 'albums', 'liked', 'playlists'
+  const [selectedChip, setSelectedChip] = useState('liked');
+  const [chipDisplayOrder, setChipDisplayOrder] = useState(() => buildChipOrder('liked'));
+  const [activeChip, setActiveChip] = useState('liked');
   const [isSearchActive, setIsSearchActive] = useState(false);
 
   const chipScrollRef = useRef(null);
   const listOpacity = useRef(new Animated.Value(1)).current;
   const isAnimatingList = useRef(false);
   const hasLoadedInitialData = useRef(false);
+  const chipAnimations = useRef({}).current;
+  const chipHighlightAnimations = useRef({}).current;
+  const chipLayoutsRef = useRef({});
+  const pendingChipAnimation = useRef(null);
+  const chipAnimationTimeout = useRef(null);
+
+  useEffect(() => {
+    chipDisplayOrder.forEach(({ key }) => {
+      if (!chipAnimations[key]) {
+        chipAnimations[key] = new Animated.Value(0);
+      }
+      if (!chipHighlightAnimations[key]) {
+        chipHighlightAnimations[key] = new Animated.Value(activeChip === key ? 1 : 0);
+      }
+    });
+  }, [chipDisplayOrder, chipAnimations, chipHighlightAnimations, activeChip]);
+
+  useEffect(() => {
+    const highlightKeys = Object.keys(chipHighlightAnimations);
+    if (highlightKeys.length === 0) {
+      return;
+    }
+
+    const highlightAnimations = highlightKeys.map(key =>
+      Animated.timing(chipHighlightAnimations[key], {
+        toValue: key === activeChip ? 1 : 0,
+        duration: 160,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      })
+    );
+
+    Animated.parallel(highlightAnimations).start();
+  }, [activeChip, chipHighlightAnimations]);
+
+  useEffect(() => {
+    return () => {
+      if (chipAnimationTimeout.current) {
+        clearTimeout(chipAnimationTimeout.current);
+      }
+    };
+  }, []);
 
   const animateListOpacityTo = useCallback(
     (toValue, duration = 140) =>
@@ -176,13 +226,42 @@ export default function LibraryScreen({ navigation }) {
     loadLibraryData(false);
   }, [loadLibraryData]);
 
-  const chipOrder = useMemo(() => {
-    const selected = CHIP_DEFINITIONS.find(chip => chip.key === viewMode);
-    if (!selected) {
-      return CHIP_DEFINITIONS;
-    }
-    return [selected, ...CHIP_DEFINITIONS.filter(chip => chip.key !== viewMode)];
-  }, [viewMode]);
+  const chipOrder = chipDisplayOrder;
+
+  const handleChipLayout = useCallback(
+    (key) => (event) => {
+      const { x, width } = event.nativeEvent.layout;
+      chipLayoutsRef.current[key] = { x, width };
+
+      const pending = pendingChipAnimation.current;
+      if (pending && Object.prototype.hasOwnProperty.call(pending, key)) {
+        const previous = pending[key];
+        const delta = previous ? previous.x - x : 0;
+
+        if (!chipAnimations[key]) {
+          chipAnimations[key] = new Animated.Value(0);
+        }
+
+        if (delta !== 0) {
+          chipAnimations[key].setValue(delta);
+          Animated.timing(chipAnimations[key], {
+            toValue: 0,
+            duration: CHIP_ANIMATION_DURATION,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();
+        } else {
+          chipAnimations[key].setValue(0);
+        }
+
+        delete pending[key];
+        if (Object.keys(pending).length === 0) {
+          pendingChipAnimation.current = null;
+        }
+      }
+    },
+    [chipAnimations]
+  );
 
   const filteredData = useMemo(() => {
     const dataByView = {
@@ -233,25 +312,20 @@ export default function LibraryScreen({ navigation }) {
     setIsRefreshing(false);
   };
 
-  const handleViewModePress = useCallback(async (mode) => {
-    if (mode === viewMode || isAnimatingList.current) {
-      return;
-    }
-
-    isAnimatingList.current = true;
-    
+  const runViewModeTransition = useCallback(async (mode) => {
     try {
-      // STEP 1: Update view mode immediately (no animation)
-      setViewMode(mode);
-      
-      // Scroll chips to start position instantly
-      chipScrollRef.current?.scrollTo({ x: 0, animated: false });
-      
       // Fade out the library content 
       await animateListOpacityTo(0, 700);
       
       // Do the query (load data)
       await loadLibraryData(false); // Don't animate here, we'll do it manually
+
+      setViewMode(mode);
+
+      // Wait for next render frame before re-highlighting and fading in
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      setActiveChip(mode);
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Fade in the library once data is ready
       await animateListOpacityTo(1, 700);
@@ -260,11 +334,48 @@ export default function LibraryScreen({ navigation }) {
       console.error('Error in view mode transition:', error);
       // Ensure we fade back in even if there's an error
       await animateListOpacityTo(1, 700);
+      setViewMode(mode);
+      setActiveChip(mode);
     } finally {
       isAnimatingList.current = false;
     }
+  }, [animateListOpacityTo, loadLibraryData]);
+
+  const handleViewModePress = useCallback((mode) => {
+    if (mode === selectedChip || isAnimatingList.current) {
+      return;
+    }
     
-  }, [viewMode, animateListOpacityTo, loadLibraryData]);
+    isAnimatingList.current = true;
+    
+    if (chipAnimationTimeout.current) {
+      clearTimeout(chipAnimationTimeout.current);
+    }
+
+    // Keep active highlighting while loading new content
+    setActiveChip(mode);
+
+    const previousLayouts = Object.keys(chipLayoutsRef.current).reduce((acc, key) => {
+      acc[key] = { ...chipLayoutsRef.current[key] };
+      return acc;
+    }, {});
+    pendingChipAnimation.current = previousLayouts;
+
+    const nextOrder = buildChipOrder(mode);
+
+    // 1. Execute chip reordering animation immediately
+    setChipDisplayOrder(nextOrder);
+    setSelectedChip(mode);
+    
+    // 2. Scroll chips to start position
+    chipScrollRef.current?.scrollTo({ x: 0, animated: true });
+    
+    // 3. Begin the view mode transition sequence after chip animation completes
+    chipAnimationTimeout.current = setTimeout(() => {
+      runViewModeTransition(mode);
+    }, CHIP_ANIMATION_DURATION);
+    
+  }, [selectedChip, runViewModeTransition]);
 
   const openSearch = useCallback(() => {
     setIsSearchActive(true);
@@ -435,31 +546,61 @@ export default function LibraryScreen({ navigation }) {
             contentContainerStyle={styles.chipContainer}
           >
             {chipOrder.map(({ key, label }) => {
-              const isActive = viewMode === key;
+              if (!chipAnimations[key]) {
+                chipAnimations[key] = new Animated.Value(0);
+              }
+              if (!chipHighlightAnimations[key]) {
+                chipHighlightAnimations[key] = new Animated.Value(activeChip === key ? 1 : 0);
+              }
+
+              const translateValue = chipAnimations[key];
+              const highlightValue = chipHighlightAnimations[key];
+
+              const translateStyle = {
+                transform: [
+                  {
+                    translateX: translateValue,
+                  },
+                ],
+                zIndex: activeChip === key ? 2 : 1,
+              };
+
+              const chipStyle = {
+                backgroundColor: highlightValue.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [theme.colors.surfaceVariant, theme.colors.secondary],
+                }),
+              };
+
+              const animatedTextStyle = {
+                color: highlightValue.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [theme.colors.onSurfaceVariant, theme.colors.onSecondary],
+                }),
+              };
+
               return (
-                <TouchableOpacity
+                <Animated.View
                   key={key}
-                  onPress={() => handleViewModePress(key)}
-                  style={[
-                    styles.bubbleChip,
-                    isActive ? styles.bubbleChipSelected : styles.bubbleChipUnselected,
-                  ]}
+                  onLayout={handleChipLayout(key)}
+                  style={translateStyle}
                 >
-                  <Text
-                    style={[
-                      styles.bubbleChipText,
-                      isActive ? styles.bubbleChipTextSelected : styles.bubbleChipTextUnselected,
-                    ]}
+                  <AnimatedTouchableOpacity
+                    onPress={() => handleViewModePress(key)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activeChip === key }}
+                    style={[styles.bubbleChip, chipStyle, activeChip === key ? styles.bubbleChipElevated : null]}
                   >
-                    {label}
-                  </Text>
-                </TouchableOpacity>
+                    <AnimatedText style={[styles.bubbleChipText, animatedTextStyle]}>
+                      {label}
+                    </AnimatedText>
+                  </AnimatedTouchableOpacity>
+                </Animated.View>
               );
             })}
           </ScrollView>
         )}
       </View>
-
       <AnimatedFlatList
         data={filteredData}
         renderItem={renderItem}
