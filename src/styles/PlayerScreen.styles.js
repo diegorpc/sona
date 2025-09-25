@@ -6,15 +6,16 @@ const { width } = Dimensions.get('window');
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: theme.colors.background,
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 16,
     justifyContent: 'space-between',
   },
   albumArtContainer: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 60,
   },
   albumArtCard: {
     elevation: 8,
@@ -54,6 +55,7 @@ export const styles = StyleSheet.create({
   },
   slider: {
     width: '100%',
+    borderRadius: 2,
     height: 35,
   },
   timeContainer: {
@@ -70,14 +72,11 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: 50,
-    paddingVertical: 10,
-    elevation: 4,
+    backgroundColor: 'transparent',
   },
   playButton: {
-    backgroundColor: theme.colors.primaryContainer,
-    marginHorizontal: 20,
+    backgroundColor: theme.colors.primary,
+    marginHorizontal: 40,
   },
   additionalControls: {
     flexDirection: 'row',

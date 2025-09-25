@@ -113,7 +113,6 @@ export default function LibraryScreen({ navigation }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('liked'); // 'liked', 'playlists', 'albums', 'artists'
-  const [selectedChip, setSelectedChip] = useState('liked');
   const [chipDisplayOrder, setChipDisplayOrder] = useState(() => buildChipOrder('liked'));
   const [activeChip, setActiveChip] = useState('liked');
   const [isSearchActive, setIsSearchActive] = useState(false);
@@ -285,7 +284,7 @@ export default function LibraryScreen({ navigation }) {
     if (sortOption === LIKED_DEFAULT_SORT_OPTION) {
       setSortOption(DEFAULT_SORT_OPTION);
     }
-  }, [viewMode, sortOption]);
+  }, [viewMode]);
 
 
   const animateListOpacityTo = useCallback(
@@ -731,15 +730,14 @@ export default function LibraryScreen({ navigation }) {
   }, [animateListOpacityTo, loadLibraryData, artists, albums, likedSongs, playlists]);
 
   const handleViewModePress = useCallback((mode) => {
-    if (mode === selectedChip || isAnimatingList.current) {
+    if (mode === activeChip || isAnimatingList.current) {
       return;
     }
-    
+
     isAnimatingList.current = true;
-    
+
     // Start chip color changes IMMEDIATELY for instant visual feedback
     setActiveChip(mode);
-    setSelectedChip(mode);
 
     // Capture current layouts for animation
     const previousLayouts = Object.keys(chipLayoutsRef.current).reduce((acc, key) => {
@@ -759,7 +757,7 @@ export default function LibraryScreen({ navigation }) {
     // Start the data transition immediately in parallel with chip animations
     runViewModeTransition(mode);
 
-  }, [selectedChip, runViewModeTransition]);
+  }, [activeChip, runViewModeTransition]);
 
   const handleHeaderLayout = useCallback(({ nativeEvent }) => {
     const width = nativeEvent?.layout?.width ?? 0;
@@ -1408,7 +1406,7 @@ export default function LibraryScreen({ navigation }) {
         }
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
-        style={{ opacity: listOpacity }}
+        style={[styles.libraryList, { opacity: listOpacity }]}
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={5}
@@ -1420,7 +1418,7 @@ export default function LibraryScreen({ navigation }) {
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.1}
         ListFooterComponent={isLoadingMore ? (
-          <View style={{ padding: 20, alignItems: 'center' }}>
+          <View style={styles.listFooter}>
             <ActivityIndicator size="small" color={theme.colors.primary} />
           </View>
         ) : null}

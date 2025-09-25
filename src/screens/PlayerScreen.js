@@ -11,7 +11,7 @@ import {
   Card,
   Surface,
 } from 'react-native-paper';
-import Slider from '@react-native-community/slider';
+import Slider from '@react-native-assets/slider';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -106,123 +106,120 @@ export default function PlayerScreen({ navigation }) {
   }
 
   return (
-    <LinearGradient
-      colors={[theme.colors.background, theme.colors.surface]}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        {/* Album Art */}
-        <View style={styles.albumArtContainer}>
-          <Card style={styles.albumArtCard}>
-            <Image
-              source={
-                getCoverArtUrl(currentTrack)
-                  ? { uri: getCoverArtUrl(currentTrack) }
-                  : require('../../assets/default-album.png')
-              }
-              style={styles.albumArt}
-              defaultSource={require('../../assets/default-album.png')}
-            />
-          </Card>
-        </View>
+    <View style={styles.content}>
+      {/* Album Art */}
+      <View style={styles.albumArtContainer}>
+        <Card style={styles.albumArtCard}>
+          <Image
+            source={
+              getCoverArtUrl(currentTrack)
+                ? { uri: getCoverArtUrl(currentTrack) }
+                : require('../../assets/default-album.png')
+            }
+            style={styles.albumArt}
+            defaultSource={require('../../assets/default-album.png')}
+          />
+        </Card>
+      </View>
 
-        {/* Track Info */}
-        <View style={styles.trackInfo}>
-          <Text style={styles.trackTitle} numberOfLines={2}>
-            {currentTrack.title}
+      {/* Track Info */}
+      <View style={styles.trackInfo}>
+        <Text style={styles.trackTitle} numberOfLines={2}>
+          {currentTrack.title}
+        </Text>
+        <Text style={styles.trackArtist} numberOfLines={1}>
+          {currentTrack.artist}
+        </Text>
+        {currentTrack.album && (
+          <Text style={styles.trackAlbum} numberOfLines={1}>
+            {currentTrack.album}
           </Text>
-          <Text style={styles.trackArtist} numberOfLines={1}>
-            {currentTrack.artist}
+        )}
+      </View>
+
+      {/* Progress */}
+      <View style={styles.progressContainer}>
+        <Slider
+          style={styles.slider} 
+          minimumValue={0}
+          maximumValue={100}
+          value={duration > 0 ? (isSliding ? (sliderValue / duration) * 100 : (position / duration) * 100) : 0}
+          onValueChange={handleSliderChange}
+          onSlidingStart={handleSliderStart}
+          onSlidingComplete={handleSliderComplete}
+          minimumTrackTintColor={theme.colors.primary}
+          maximumTrackTintColor={theme.colors.outline}
+          thumbTintColor={theme.colors.primary}
+          thumbSize={16}
+          trackHeight={5}
+        />
+        <View style={styles.timeContainer}>
+          <Text style={styles.timeText}>
+            {formatTime(isSliding ? sliderValue : position)}
           </Text>
-          {currentTrack.album && (
-            <Text style={styles.trackAlbum} numberOfLines={1}>
-              {currentTrack.album}
-            </Text>
-          )}
-        </View>
-
-        {/* Progress */}
-        <View style={styles.progressContainer}>
-          <Slider
-            style={styles.slider} 
-            minimumValue={0}
-            maximumValue={100}
-            value={duration > 0 ? (isSliding ? (sliderValue / duration) * 100 : (position / duration) * 100) : 0}
-            onValueChange={handleSliderChange}
-            onSlidingStart={handleSliderStart}
-            onSlidingComplete={handleSliderComplete}
-            minimumTrackTintColor={theme.colors.primary}
-            maximumTrackTintColor={theme.colors.outline}
-            thumbTintColor={theme.colors.primary}
-          />
-          <View style={styles.timeContainer}>
-            <Text style={styles.timeText}>
-              {formatTime(isSliding ? sliderValue : position)}
-            </Text>
-            <Text style={styles.timeText}>
-              {formatTime(duration)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Controls */}
-        <Surface style={styles.controlsContainer}>
-          <IconButton
-            icon="skip-previous"
-            size={32}
-            onPress={handlePrevious}
-            iconColor={theme.colors.onSurface}
-          />
-          
-          <IconButton
-            icon={isLoading ? 'timer-sand' : isPlaying ? 'pause' : 'play'}
-            size={48}
-            onPress={handlePlayPause}
-            disabled={isLoading}
-            iconColor={theme.colors.primary}
-            style={styles.playButton}
-          />
-          
-          <IconButton
-            icon="skip-next"
-            size={32}
-            onPress={handleNext}
-            iconColor={theme.colors.onSurface}
-          />
-        </Surface>
-
-        {/* Additional Controls */}
-        <View style={styles.additionalControls}>
-          <IconButton
-            icon="shuffle"
-            size={24}
-            onPress={() => {/* TODO: Implement shuffle */}}
-            iconColor={theme.colors.onSurface}
-          />
-          
-          <IconButton
-            icon="heart-outline"
-            size={24}
-            onPress={() => {/* TODO: Implement favorite */}}
-            iconColor={theme.colors.onSurface}
-          />
-          
-          <IconButton
-            icon="repeat"
-            size={24}
-            onPress={() => {/* TODO: Implement repeat */}}
-            iconColor={theme.colors.onSurface}
-          />
-          
-          <IconButton
-            icon="playlist-music"
-            size={24}
-            onPress={() => {/* TODO: Show queue */}}
-            iconColor={theme.colors.onSurface}
-          />
+          <Text style={styles.timeText}>
+            {formatTime(duration)}
+          </Text>
         </View>
       </View>
-    </LinearGradient>
+
+      {/* Controls */}
+      <Surface style={styles.controlsContainer}>
+        <IconButton
+          icon="skip-previous"
+          size={32}
+          onPress={handlePrevious}
+          iconColor={theme.colors.onSurface}
+        />
+        
+        <IconButton
+          icon={isLoading ? 'timer-sand' : isPlaying ? 'pause' : 'play'}
+          size={48}
+          onPress={handlePlayPause}
+          disabled={isLoading}
+          iconColor={theme.colors.onSurface}
+          style={styles.playButton}
+        />
+        
+        <IconButton
+          icon="skip-next"
+          size={32}
+          onPress={handleNext}
+          iconColor={theme.colors.onSurface}
+        />
+      </Surface>
+
+      {/* Additional Controls */}
+      <View style={styles.additionalControls}>
+        <IconButton
+          icon="shuffle"
+          size={24}
+          onPress={() => {/* TODO: Implement shuffle */}}
+          iconColor={theme.colors.onSurface}
+        />
+        
+        <IconButton
+          icon="heart-outline"
+          size={24}
+          onPress={() => {/* TODO: Implement favorite */}}
+          iconColor={theme.colors.onSurface}
+        />
+        
+        <IconButton
+          icon="repeat"
+          size={24}
+          onPress={() => {/* TODO: Implement repeat */}}
+          iconColor={theme.colors.onSurface}
+        />
+        
+        <IconButton
+          icon="playlist-music"
+          size={24}
+          onPress={() => {/* TODO: Show queue */}}
+          iconColor={theme.colors.onSurface}
+        />
+      </View>
+    </View>
   );
 }
 

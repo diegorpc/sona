@@ -1,19 +1,4 @@
-let Audio;
-
-try {
-  const expoAudio = require('expo-audio');
-  Audio = expoAudio?.Audio ?? expoAudio?.default ?? expoAudio;
-} catch (error) {
-  Audio = undefined;
-}
-
-if (!Audio || typeof Audio.setAudioModeAsync !== 'function') {
-  const fallbackModule = require('expo-av');
-  Audio = fallbackModule.Audio ?? fallbackModule;
-  console.warn(
-    '[AudioPlayerService] expo-audio did not provide the expected API. Falling back to expo-av which is deprecated and will be removed in a future Expo SDK. Ensure expo-audio is installed and compatible to silence this warning.'
-  );
-}
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from './SubsonicAPI';
@@ -35,12 +20,12 @@ class AudioPlayerService {
 
   async initializeAudio() {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        shouldPlayInBackground: true,
+        playsInSilentMode: true,
+        interruptionModeAndroid: 'duckOthers',
+        interruptionMode: 'mixWithOthers',
       });
     } catch (error) {
       console.error('Error initializing audio:', error);
@@ -76,7 +61,8 @@ class AudioPlayerService {
 
       // Stop current track if playing
       if (this.sound) {
-        await this.sound.unloadAsync();
+        this.clearStatusTimer();
+        this.sound.remove();
         this.sound = null;
       }
 
@@ -93,18 +79,17 @@ class AudioPlayerService {
       // Get stream URL
       const streamUrl = SubsonicAPI.getStreamUrl(track.id);
 
-      // Create and load sound
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: streamUrl },
-        { 
-          shouldPlay: true,
-          isLooping: false,
-          volume: 1.0,
-        },
-        this.onPlaybackStatusUpdate.bind(this)
-      );
+      // Create audio player
+      this.sound = createAudioPlayer({ uri: streamUrl }, {
+        loop: false,
+        volume: 1.0,
+      });
 
-      this.sound = sound;
+      // Set up status monitoring
+      this.setupAudioPlayerListeners();
+
+      // Start playback
+      this.sound.play();
       this.isPlaying = true;
       this.isLoading = false;
 
@@ -127,17 +112,30 @@ class AudioPlayerService {
     }
   }
 
-  onPlaybackStatusUpdate(status) {
-    if (status.isLoaded) {
-      this.position = status.positionMillis || 0;
-      this.duration = status.durationMillis || 0;
-      this.isPlaying = status.isPlaying || false;
+  setupAudioPlayerListeners() {
+    if (!this.sound) return;
 
-      if (status.didJustFinish) {
-        this.onTrackFinished();
+    // Set up a timer to monitor playback status
+    this.statusTimer = setInterval(() => {
+      if (this.sound) {
+        this.position = this.sound.currentTime * 1000; 
+        this.duration = this.sound.duration * 1000; 
+        this.isPlaying = this.sound.playing;
+
+        // Check if track finished
+        if (this.sound.currentTime >= this.sound.duration && this.sound.duration > 0) {
+          this.onTrackFinished();
+        }
+
+        this.notifyListeners();
       }
+    }, 100); // Update 
+  }
 
-      this.notifyListeners();
+  clearStatusTimer() {
+    if (this.statusTimer) {
+      clearInterval(this.statusTimer);
+      this.statusTimer = null;
     }
   }
 
@@ -158,9 +156,9 @@ class AudioPlayerService {
 
     try {
       if (this.isPlaying) {
-        await this.sound.pauseAsync();
+        this.sound.pause();
       } else {
-        await this.sound.playAsync();
+        this.sound.play();
       }
     } catch (error) {
       console.error('Error toggling play/pause:', error);
@@ -196,7 +194,8 @@ class AudioPlayerService {
     if (!this.sound) return;
 
     try {
-      await this.sound.setPositionAsync(positionMillis);
+      const positionSeconds = positionMillis / 1000;
+      this.sound.seekTo(positionSeconds);
     } catch (error) {
       console.error('Error seeking:', error);
     }
@@ -207,7 +206,7 @@ class AudioPlayerService {
     if (!this.sound) return;
 
     try {
-      await this.sound.setVolumeAsync(volume);
+      this.sound.volume = volume;
     } catch (error) {
       console.error('Error setting volume:', error);
     }
@@ -217,8 +216,9 @@ class AudioPlayerService {
   async stop() {
     if (this.sound) {
       try {
-        await this.sound.stopAsync();
-        await this.sound.unloadAsync();
+        this.sound.pause();
+        this.clearStatusTimer();
+        this.sound.remove();
         this.sound = null;
         this.isPlaying = false;
         this.position = 0;

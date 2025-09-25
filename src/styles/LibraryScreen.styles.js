@@ -121,6 +121,9 @@ export const styles = StyleSheet.create({
   listContainer: {
     paddingBottom: 80,
   },
+  libraryList: {
+    flex: 1,
+  },
 
   // Flat list item container 
   flatListItem: {
@@ -183,6 +186,10 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.onSurface,
     opacity: 0.6,
+  },
+  listFooter: {
+    padding: 20,
+    alignItems: 'center',
   },
   loadingContainer: {
     flex: 1,
