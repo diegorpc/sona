@@ -8,14 +8,7 @@ export const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
     backgroundColor: theme.colors.surface,
-    elevation: 10,
-    shadowColor: 'rgba(15, 23, 42, 0.35)',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
   },
   headerContent: {
     flexDirection: 'row',
@@ -28,6 +21,9 @@ export const styles = StyleSheet.create({
     fontSize: 28,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowColor: '#9a6bff',
+
   },
   headerTitleWrapper: {
     flex: 1,
@@ -79,7 +75,7 @@ export const styles = StyleSheet.create({
     minWidth: 68,
     alignItems: 'center',
     marginHorizontal: 4,
-    // backgroundColor will be animated, no static color needed
+
   },
   bubbleChipElevated: {
     elevation: 4,
@@ -97,6 +93,31 @@ export const styles = StyleSheet.create({
     width: '100%',
     marginTop: 12,
   },
+  sortControlContainer: {
+    paddingHorizontal: 8,
+    boxShadow: '0px 5px 9px 0px rgba(0,0,0,0.6)',
+  },
+  sortTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+  },
+  sortTriggerIcon: {
+    marginRight: 6,
+  },
+  sortTriggerLabel: {
+    fontSize: 13,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.onSurfaceVariant,
+  },
+  sortMenuContent: {
+    borderRadius: 12,
+    backgroundColor: theme.colors.surface,
+  },
+  sortMenuItemLabel: {
+    fontFamily: 'Lexend_500Medium',
+  },
   listContainer: {
     paddingBottom: 80,
   },
@@ -113,7 +134,7 @@ export const styles = StyleSheet.create({
     minHeight: 72, // Minimum height
   },
   itemLeadingIcon: {
-    marginRight: 8,
+    marginRight: 6,
   },
   itemImage: {
     width: 56,
@@ -139,7 +160,7 @@ export const styles = StyleSheet.create({
     color: theme.colors.onSurface,
     opacity: 0.7,
   },
-  
+
   // Right side content for songs and playlists
   itemRightContent: {
     flexDirection: 'row',
@@ -151,10 +172,10 @@ export const styles = StyleSheet.create({
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.6,
-    marginRight: 12,
+    marginRight: 6,
   },
   itemMenuButton: {
-    padding: 8,
+    padding: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -167,7 +188,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
   },
   loadingText: {
     marginTop: 16,

@@ -55,7 +55,7 @@ function MainTabs() {
         },
         headerShown: false,
       })}
-      sceneContainerStyle={{ paddingTop: 40, backgroundColor: theme.colors.surface }}
+      sceneContainerStyle={{ backgroundColor: theme.colors.surface, paddingTop: 40 }}
     >
       <Tab.Screen name="Library" component={LibraryScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />

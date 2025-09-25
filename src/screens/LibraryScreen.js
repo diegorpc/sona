@@ -8,8 +8,10 @@ import {
   ScrollView,
   Animated,
   Easing,
+  Platform,
+  ActionSheetIOS,
 } from 'react-native';
-import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
+import { Text, ActivityIndicator, Searchbar, Menu } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
@@ -29,6 +31,63 @@ const CHIP_DEFINITIONS = [
   { key: 'artists', label: 'Artists' },
 ];
 
+const BASE_SORT_OPTIONS = [
+  { key: 'recentlyListened', label: 'Recently Listened', icon: 'history' },
+  { key: 'recentlyAdded', label: 'Recently Added', icon: 'library-add' },
+  { key: 'dateLoved', label: 'Date Loved', icon: 'star' },
+  { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
+];
+
+const DEFAULT_SORT_OPTION = 'recentlyListened';
+const LIKED_DEFAULT_SORT_OPTION = 'dateLoved';
+
+const SORT_OPTION_LABELS = BASE_SORT_OPTIONS.reduce((acc, option) => {
+  acc[option.key] = option.label;
+  return acc;
+}, {});
+
+const ALPHABETICAL_COMPARE_OPTIONS = { sensitivity: 'base' };
+
+const getItemDisplayName = (item, mode) => {
+  if (!item) {
+    return '';
+  }
+
+  switch (mode) {
+    case 'liked':
+      return item.title || item.name || '';
+    case 'albums':
+    case 'artists':
+    case 'playlists':
+      return item.name || item.title || '';
+    default:
+      return item.name || item.title || '';
+  }
+};
+
+const getFirstAvailableTimestamp = (item, fields) => {
+  if (!item) {
+    return 0;
+  }
+
+  for (const field of fields) {
+    const value = item[field];
+    if (!value) {
+      continue;
+    }
+
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+};
 
 const CHIP_FADE_OUT_DURATION = 200;
 const CHIP_FADE_IN_DURATION = 240;
@@ -59,6 +118,8 @@ export default function LibraryScreen({ navigation }) {
   const [activeChip, setActiveChip] = useState('liked');
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [headerContentWidth, setHeaderContentWidth] = useState(0);
+  const [sortOption, setSortOption] = useState(DEFAULT_SORT_OPTION);
+  const [isSortMenuVisible, setIsSortMenuVisible] = useState(false);
   
   // Pagination state
   const [displayedData, setDisplayedData] = useState([]);
@@ -80,6 +141,77 @@ export default function LibraryScreen({ navigation }) {
   const searchInputRef = useRef(null);
   const chipSectionProgress = useRef(new Animated.Value(1)).current;
   const [chipSectionHeight, setChipSectionHeight] = useState(CHIP_SECTION_DEFAULT_HEIGHT);
+
+  const sortComparator = useMemo(() => {
+    // Base alphabetical comparator shared across all sort modes.
+    const alphabeticalCompare = (a, b) => {
+      const aName = getItemDisplayName(a, viewMode).toLowerCase();
+      const bName = getItemDisplayName(b, viewMode).toLowerCase();
+      return aName.localeCompare(bName, undefined, ALPHABETICAL_COMPARE_OPTIONS);
+    };
+
+    // When the user explicitly picks "Alphabetical", short-circuit to the base comparator.
+    if (sortOption === 'alphabetical') {
+      return alphabeticalCompare;
+    }
+
+    if (sortOption === 'recentlyAdded') {
+      // Prefer items most recently added to the library
+      const dateFields = ['created', 'dateAdded', 'dateCreated', 'updated', 'starred'];
+      return (a, b) => {
+        const aValue = getFirstAvailableTimestamp(a, dateFields);
+        const bValue = getFirstAvailableTimestamp(b, dateFields);
+
+        if (aValue !== bValue) {
+          return bValue - aValue;
+        }
+
+        return alphabeticalCompare(a, b);
+      };
+    }
+
+    if (sortOption === 'dateLoved') {
+      // Prefer items most recently favorited (starred), fall back to creation timestamp
+      const dateFields = ['starred', 'dateLoved', 'dateFavorited', 'created', 'dateAdded'];
+      return (a, b) => {
+        const aValue = getFirstAvailableTimestamp(a, dateFields);
+        const bValue = getFirstAvailableTimestamp(b, dateFields);
+
+        if (aValue !== bValue) {
+          return bValue - aValue;
+        }
+
+        return alphabeticalCompare(a, b);
+      };
+    }
+
+    // Default to recently listened
+    const dateFields = ['lastPlayed', 'playedDate', 'played', 'recentPlayed', 'created'];
+    return (a, b) => {
+      const aValue = getFirstAvailableTimestamp(a, dateFields);
+      const bValue = getFirstAvailableTimestamp(b, dateFields);
+
+      if (aValue !== bValue) {
+        return bValue - aValue;
+      }
+
+      const aCount = typeof a?.playCount === 'number' ? a.playCount : (a?.songCount ?? 0);
+      const bCount = typeof b?.playCount === 'number' ? b.playCount : (b?.songCount ?? 0);
+
+      if (aCount !== bCount) {
+        return bCount - aCount;
+      }
+
+      return alphabeticalCompare(a, b);
+    };
+  }, [sortOption, viewMode]);
+
+  const sortOptions = useMemo(() => {
+    if (viewMode === 'liked') {
+      return BASE_SORT_OPTIONS;
+    }
+    return BASE_SORT_OPTIONS.filter(option => option.key !== 'dateLoved');
+  }, [viewMode]);
 
   useEffect(() => {
     chipDisplayOrder.forEach(({ key }) => {
@@ -144,6 +276,17 @@ export default function LibraryScreen({ navigation }) {
     previousActiveChipRef.current = activeChip;
   }, [activeChip, chipHighlightAnimations]);
 
+  useEffect(() => {
+    if (viewMode === 'liked') {
+      setSortOption(prev => (prev === LIKED_DEFAULT_SORT_OPTION ? prev : LIKED_DEFAULT_SORT_OPTION));
+      return;
+    }
+
+    if (sortOption === LIKED_DEFAULT_SORT_OPTION) {
+      setSortOption(DEFAULT_SORT_OPTION);
+    }
+  }, [viewMode, sortOption]);
+
 
   const animateListOpacityTo = useCallback(
     (toValue, duration = 300) =>
@@ -184,7 +327,7 @@ export default function LibraryScreen({ navigation }) {
           hasLoadedInitialData.current = true;
           
           if (shouldAnimate) {
-            await animateListOpacityTo(1, 220);
+            await animateListOpacityTo(1, 400);
           }
           return;
         }
@@ -314,7 +457,7 @@ export default function LibraryScreen({ navigation }) {
       
       if (shouldAnimate) {
         await new Promise(resolve => requestAnimationFrame(resolve));
-        await animateListOpacityTo(1, 220);
+        await animateListOpacityTo(1, 400);
       }
     }
   }, [animateListOpacityTo]);
@@ -438,48 +581,54 @@ export default function LibraryScreen({ navigation }) {
       return [];
     }
 
-    if (!searchQuery) {
-      const seenKeys = new Set();
-      return baseData.filter(item => {
-        if (!item) return false;
-        const key = item.id ?? item.name ?? item.title;
-        if (!key || seenKeys.has(key)) {
+    const uniqueItems = [];
+    const seenKeys = new Set();
+
+    baseData.forEach(item => {
+      if (!item) {
+        return;
+      }
+
+      const key = item.id ?? item.name ?? item.title;
+      if (!key || seenKeys.has(key)) {
+        return;
+      }
+
+      seenKeys.add(key);
+      uniqueItems.push(item);
+    });
+
+    let filteredItems = uniqueItems;
+
+    if (searchQuery) {
+      const searchFieldByView = {
+        artists: 'name',
+        albums: 'name',
+        liked: 'title',
+        playlists: 'name',
+      };
+
+      const searchField = searchFieldByView[viewMode] || 'name';
+      const normalizedQuery = searchQuery.toLowerCase();
+
+      filteredItems = uniqueItems.filter(item => {
+        if (!item) {
           return false;
         }
-        seenKeys.add(key);
-        return true;
+
+        const value = item[searchField];
+        if (typeof value !== 'string') {
+          return false;
+        }
+
+        return value.toLowerCase().includes(normalizedQuery);
       });
     }
 
-    // Search path - combine deduplication and filtering in single pass
-    const searchFieldByView = {
-      artists: 'name',
-      albums: 'name',
-      liked: 'title',
-      playlists: 'name',
-    };
-    
-    const searchField = searchFieldByView[viewMode] || 'name';
-    const normalizedQuery = searchQuery.toLowerCase();
-    const seenKeys = new Set();
-    
-    return baseData.filter(item => {
-      if (!item) return false;
-      
-      const key = item.id ?? item.name ?? item.title;
-      if (!key || seenKeys.has(key)) {
-        return false;
-      }
-      
-      const value = item[searchField];
-      if (!value || !value.toLowerCase().includes(normalizedQuery)) {
-        return false;
-      }
-      
-      seenKeys.add(key);
-      return true;
-    });
-  }, [albums, artists, viewMode, likedSongs, playlists, searchQuery]);
+    const sortedItems = filteredItems.slice().sort(sortComparator);
+
+    return sortedItems;
+  }, [albums, artists, viewMode, likedSongs, playlists, searchQuery, sortComparator]);
 
   // Paginated data for display (when not searching)
   const paginatedData = useMemo(() => {
@@ -675,6 +824,65 @@ export default function LibraryScreen({ navigation }) {
       setSearchQuery('');
     });
   }, [chipSectionProgress, searchReveal]);
+
+  const handleSortOptionSelect = useCallback(async (optionKey) => {
+    if (optionKey === sortOption || isAnimatingList.current) {
+      return;
+    }
+
+    isAnimatingList.current = true;
+
+    try {
+      await animateListOpacityTo(0, 400);
+      setSortOption(optionKey);
+      setCurrentPage(0);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await animateListOpacityTo(1, 400);
+    } catch (error) {
+      console.error('Error applying sort option:', error);
+      await animateListOpacityTo(1, 400);
+    } finally {
+      isAnimatingList.current = false;
+      if (Platform.OS !== 'ios') {
+        setIsSortMenuVisible(false);
+      }
+    }
+  }, [animateListOpacityTo, sortOption]);
+
+  const closeSortMenu = useCallback(() => {
+    setIsSortMenuVisible(false);
+  }, []);
+
+  const showSortOptions = useCallback(() => {
+    if (isAnimatingList.current) {
+      return;
+    }
+
+    if (Platform.OS === 'ios') {
+      const optionLabels = sortOptions.map(option => option.label);
+      const cancelButtonIndex = optionLabels.length;
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: 'Sort By',
+          options: [...optionLabels, 'Cancel'],
+          cancelButtonIndex,
+        },
+        buttonIndex => {
+          if (buttonIndex === cancelButtonIndex) {
+            return;
+          }
+
+          const selected = sortOptions[buttonIndex];
+          if (selected) {
+            handleSortOptionSelect(selected.key);
+          }
+        }
+      );
+    } else {
+      setIsSortMenuVisible(true);
+    }
+  }, [handleSortOptionSelect]);
 
   const handleItemPress = useCallback((item, index) => {
     switch (viewMode) {
@@ -1006,6 +1214,45 @@ export default function LibraryScreen({ navigation }) {
     }),
   };
 
+  const sortListHeader = useMemo(() => (
+    <View style={styles.sortControlContainer}>
+      <Menu
+        visible={isSortMenuVisible}
+        onDismiss={closeSortMenu}
+        anchor={
+          <TouchableOpacity
+            style={styles.sortTrigger}
+            onPress={showSortOptions}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Change sort order"
+            accessibilityState={{ expanded: isSortMenuVisible }}
+          >
+            <MaterialIcons
+              name="sort"
+              size={18}
+              color={theme.colors.onSurfaceVariant}
+              style={styles.sortTriggerIcon}
+            />
+            <Text style={styles.sortTriggerLabel}>{SORT_OPTION_LABELS[sortOption]}</Text>
+          </TouchableOpacity>
+        }
+        contentStyle={styles.sortMenuContent}
+      >
+        {sortOptions.map(option => (
+          <Menu.Item
+            key={option.key}
+            title={option.label}
+            leadingIcon={(props) => <MaterialIcons {...props} name={option.icon} />}
+            trailingIcon={sortOption === option.key ? (props) => <MaterialIcons {...props} name="check" /> : undefined}
+            onPress={() => handleSortOptionSelect(option.key)}
+            titleStyle={styles.sortMenuItemLabel}
+          />
+        ))}
+      </Menu>
+    </View>
+  ), [sortOptions, isSortMenuVisible, closeSortMenu, showSortOptions, sortOption, handleSortOptionSelect]);
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -1023,7 +1270,7 @@ export default function LibraryScreen({ navigation }) {
             style={[styles.headerTitleWrapper, titleAnimatedStyle]}
             pointerEvents={isSearchActive ? 'none' : 'auto'}
           >
-            <Text style={styles.headerTitle}>Your Library</Text>
+            <Text style={styles.headerTitle}>Library</Text>
           </Animated.View>
           <Animated.View
             style={[styles.headerActionWrapper, actionAnimatedStyle]}
@@ -1150,6 +1397,7 @@ export default function LibraryScreen({ navigation }) {
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         getItemLayout={getItemLayout}
+        ListHeaderComponent={sortListHeader}
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl

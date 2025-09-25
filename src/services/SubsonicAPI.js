@@ -267,7 +267,7 @@ class SubsonicAPI {
         return null;
       }
 
-      // If only one album, return that album's cover art at higher resolution
+      // If only one album, return that album's cover art
       if (albumCoverArtIds.length === 1) {
         const singleCoverSize = Math.max(200, size);
         return this.getCoverArtUrl(albumCoverArtIds[0], singleCoverSize);
