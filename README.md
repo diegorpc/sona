@@ -1,3 +1,3 @@
-# Sona Music - Subsonic/Navidrome Client
+# Sona
 
-A music streaming client for Subsonic and Navidrome servers built on React Native and Expo. Designed for iOS.
+A music streaming client for Subsonic media servers built with React Native and Expo. Designed for iOS.
