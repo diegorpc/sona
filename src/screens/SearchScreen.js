@@ -16,6 +16,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/SearchScreen.styles';
 
@@ -56,7 +57,7 @@ export default function SearchScreen({ navigation }) {
   const handleSongPress = async (song, songs, index) => {
     try {
       await AudioPlayer.playTrack(song, songs, index);
-      navigation.navigate('Player');
+      expandPlayerOverlay();
     } catch (error) {
       console.error('Error playing song:', error);
     }

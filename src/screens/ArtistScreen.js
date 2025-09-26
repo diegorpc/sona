@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/ArtistScreen.styles';
 
@@ -67,7 +68,7 @@ export default function ArtistScreen({ route, navigation }) {
 
       if (allSongs.length > 0) {
         await AudioPlayer.playTrack(allSongs[0], allSongs, 0);
-        navigation.navigate('Player');
+        expandPlayerOverlay();
       }
     } catch (error) {
       console.error('Error playing all songs:', error);

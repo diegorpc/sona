@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -17,11 +18,13 @@ import {
 import LoginScreen from './src/screens/LoginScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import SearchScreen from './src/screens/SearchScreen';
-import PlayerScreen from './src/screens/PlayerScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import ArtistScreen from './src/screens/ArtistScreen';
 import AlbumScreen from './src/screens/AlbumScreen';
 import SubsonicAPI from './src/services/SubsonicAPI';
+
+import PlayerOverlay from './src/components/PlayerOverlay';
+import { PlayerProvider } from './src/contexts/PlayerContext';
 
 import { theme } from './src/theme/theme';
 
@@ -39,8 +42,6 @@ function MainTabs() {
             iconName = 'library-music';
           } else if (route.name === 'Search') {
             iconName = 'search';
-          } else if (route.name === 'Player') {
-            iconName = 'music-note';
           } else if (route.name === 'Settings') {
             iconName = 'settings';
           }
@@ -55,11 +56,13 @@ function MainTabs() {
         },
         headerShown: false,
       })}
-      sceneContainerStyle={{ backgroundColor: theme.colors.surface, paddingTop: 40 }}
+      sceneContainerStyle={{
+        backgroundColor: theme.colors.surface,
+        paddingTop: 40,
+      }}
     >
       <Tab.Screen name="Library" component={LibraryScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="Player" component={PlayerScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -114,43 +117,48 @@ export default function App() {
 
   return (
     <PaperProvider theme={theme}>
-      <NavigationContainer onStateChange={handleNavigationStateChange}>
-        <StatusBar style="auto" />
-        <Stack.Navigator
-          screenOptions={{
-            headerStyle: {
-              backgroundColor: theme.colors.surface,
-            },
-            headerTintColor: theme.colors.onSurface,
-          }}
-        >
-          {!isLoggedIn ? (
-            <Stack.Screen 
-              name="Login" 
-              component={LoginScreen}
-              options={{ headerShown: false }}
-            />
-          ) : (
-            <>
-              <Stack.Screen 
-                name="Main" 
-                component={MainTabs}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen 
-                name="Artist" 
-                component={ArtistScreen}
-                options={{ title: 'Artist' }}
-              />
-              <Stack.Screen 
-                name="Album" 
-                component={AlbumScreen}
-                options={{ title: 'Album' }}
-              />
-            </>
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
+      <PlayerProvider>
+        <View style={{ flex: 1 }}>
+          <NavigationContainer onStateChange={handleNavigationStateChange}>
+            <StatusBar style="auto" />
+            <Stack.Navigator
+              screenOptions={{
+                headerStyle: {
+                  backgroundColor: theme.colors.surface,
+                },
+                headerTintColor: theme.colors.onSurface,
+              }}
+            >
+              {!isLoggedIn ? (
+                <Stack.Screen 
+                  name="Login" 
+                  component={LoginScreen}
+                  options={{ headerShown: false }}
+                />
+              ) : (
+                <>
+                  <Stack.Screen 
+                    name="Main" 
+                    component={MainTabs}
+                    options={{ headerShown: false }}
+                  />
+                  <Stack.Screen 
+                    name="Artist" 
+                    component={ArtistScreen}
+                    options={{ title: 'Artist' }}
+                  />
+                  <Stack.Screen 
+                    name="Album" 
+                    component={AlbumScreen}
+                    options={{ title: 'Album' }}
+                  />
+                </>
+              )}
+            </Stack.Navigator>
+          </NavigationContainer>
+          <PlayerOverlay />
+        </View>
+      </PlayerProvider>
     </PaperProvider>
   );
 }

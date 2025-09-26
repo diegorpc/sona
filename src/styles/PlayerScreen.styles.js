@@ -6,11 +6,30 @@ const { width } = Dimensions.get('window');
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
+  },
+  header: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  dragIndicator: {
+    width: 48,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: theme.colors.outline,
+    opacity: 0.4,
+    marginBottom: 8,
+  },
+  closeButton: {
+    position: 'absolute',
+    right: 12,
+    top: 4,
   },
   content: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 32,
     justifyContent: 'space-between',
   },
   albumArtContainer: {

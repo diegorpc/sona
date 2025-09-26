@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/AlbumScreen.styles';
 
@@ -57,7 +58,7 @@ export default function AlbumScreen({ route, navigation }) {
 
     try {
       await AudioPlayer.playTrack(song, albumData.song, index);
-      navigation.navigate('Player');
+      expandPlayerOverlay();
     } catch (error) {
       console.error('Error playing song:', error);
     }
@@ -68,7 +69,7 @@ export default function AlbumScreen({ route, navigation }) {
 
     try {
       await AudioPlayer.playTrack(albumData.song[0], albumData.song, 0);
-      navigation.navigate('Player');
+      expandPlayerOverlay();
     } catch (error) {
       console.error('Error playing album:', error);
     }

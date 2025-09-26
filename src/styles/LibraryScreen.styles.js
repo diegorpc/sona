@@ -91,7 +91,6 @@ export const styles = StyleSheet.create({
   },
   chipSectionWrapper: {
     width: '100%',
-    marginTop: 12,
   },
   sortControlContainer: {
     paddingHorizontal: 8,
@@ -102,6 +101,9 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  sortTriggerActive: {
   },
   sortTriggerIcon: {
     marginRight: 6,
@@ -111,12 +113,55 @@ export const styles = StyleSheet.create({
     fontFamily: 'Lexend_500Medium',
     color: theme.colors.onSurfaceVariant,
   },
+  sortMenuPortal: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+  },
+  sortMenuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+  },
   sortMenuContent: {
     borderRadius: 12,
     backgroundColor: theme.colors.surface,
   },
+  sortMenuContainer: {
+    position: 'absolute',
+    width: 220,
+    borderRadius: 14,
+    paddingVertical: 4,
+    backgroundColor: theme.colors.surface,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  sortMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  sortMenuItemActive: {
+    backgroundColor: theme.colors.secondaryContainer,
+  },
+  sortMenuItemIcon: {
+    marginRight: 12,
+    opacity: 0.8,
+  },
   sortMenuItemLabel: {
     fontFamily: 'Lexend_500Medium',
+    fontSize: 14,
+    color: theme.colors.onSurface,
+    flex: 1,
+  },
+  sortMenuItemLabelActive: {
+    color: theme.colors.primary,
+  },
+  sortMenuItemCheck: {
+    marginLeft: 12,
   },
   listContainer: {
     paddingBottom: 80,
@@ -130,11 +175,11 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 8, // item height
+    paddingVertical: 2, // item height
     backgroundColor: theme.colors.background,
     borderBottomWidth: 0.5,
     borderBottomColor: theme.colors.outline,
-    minHeight: 72, // Minimum height
+    minHeight: 68, // Minimum height
   },
   itemLeadingIcon: {
     marginRight: 6,

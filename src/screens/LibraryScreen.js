@@ -8,14 +8,15 @@ import {
   ScrollView,
   Animated,
   Easing,
-  Platform,
-  ActionSheetIOS,
+  Pressable,
+  Dimensions,
 } from 'react-native';
-import { Text, ActivityIndicator, Searchbar, Menu } from 'react-native-paper';
+import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
+import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import PlaylistCollage from '../components/PlaylistCollage';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/LibraryScreen.styles';
@@ -119,6 +120,7 @@ export default function LibraryScreen({ navigation }) {
   const [headerContentWidth, setHeaderContentWidth] = useState(0);
   const [sortOption, setSortOption] = useState(DEFAULT_SORT_OPTION);
   const [isSortMenuVisible, setIsSortMenuVisible] = useState(false);
+  const [sortMenuAnchor, setSortMenuAnchor] = useState(null);
   
   // Pagination state
   const [displayedData, setDisplayedData] = useState([]);
@@ -128,6 +130,7 @@ export default function LibraryScreen({ navigation }) {
   const ITEMS_PER_PAGE = 50;
   
   const chipScrollRef = useRef(null);
+  const sortTriggerRef = useRef(null);
   const listOpacity = useRef(new Animated.Value(1)).current;
   const isAnimatingList = useRef(false);
   const hasLoadedInitialData = useRef(false);
@@ -140,6 +143,7 @@ export default function LibraryScreen({ navigation }) {
   const searchInputRef = useRef(null);
   const chipSectionProgress = useRef(new Animated.Value(1)).current;
   const [chipSectionHeight, setChipSectionHeight] = useState(CHIP_SECTION_DEFAULT_HEIGHT);
+  const sortMenuAnimation = useRef(new Animated.Value(0)).current;
 
   const sortComparator = useMemo(() => {
     // Base alphabetical comparator shared across all sort modes.
@@ -734,6 +738,10 @@ export default function LibraryScreen({ navigation }) {
       return;
     }
 
+    if (isSortMenuVisible) {
+      closeSortMenu();
+    }
+
     isAnimatingList.current = true;
 
     // Start chip color changes IMMEDIATELY for instant visual feedback
@@ -757,7 +765,7 @@ export default function LibraryScreen({ navigation }) {
     // Start the data transition immediately in parallel with chip animations
     runViewModeTransition(mode);
 
-  }, [activeChip, runViewModeTransition]);
+  }, [activeChip, runViewModeTransition, isSortMenuVisible, closeSortMenu]);
 
   const handleHeaderLayout = useCallback(({ nativeEvent }) => {
     const width = nativeEvent?.layout?.width ?? 0;
@@ -779,6 +787,10 @@ export default function LibraryScreen({ navigation }) {
   }, []);
 
   const openSearch = useCallback(() => {
+    if (isSortMenuVisible) {
+      closeSortMenu();
+    }
+
     if (isSearchActive) {
       searchInputRef.current?.focus();
       return;
@@ -800,7 +812,7 @@ export default function LibraryScreen({ navigation }) {
       setIsSearchActive(true);
       searchInputRef.current?.focus();
     });
-  }, [chipSectionProgress, isSearchActive, searchReveal]);
+  }, [chipSectionProgress, isSearchActive, searchReveal, isSortMenuVisible, closeSortMenu]);
 
   const closeSearch = useCallback(() => {
     Animated.parallel([
@@ -823,12 +835,38 @@ export default function LibraryScreen({ navigation }) {
     });
   }, [chipSectionProgress, searchReveal]);
 
+  const closeSortMenu = useCallback(() => {
+    if (!isSortMenuVisible) {
+      return Promise.resolve();
+    }
+
+    return new Promise(resolve => {
+      Animated.timing(sortMenuAnimation, {
+        toValue: 0,
+        duration: 140,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        setIsSortMenuVisible(false);
+        setSortMenuAnchor(null);
+        resolve();
+      });
+    });
+  }, [isSortMenuVisible, sortMenuAnimation]);
+
   const handleSortOptionSelect = useCallback(async (optionKey) => {
-    if (optionKey === sortOption || isAnimatingList.current) {
+    if (isAnimatingList.current) {
+      return;
+    }
+
+    if (optionKey === sortOption) {
+      await closeSortMenu();
       return;
     }
 
     isAnimatingList.current = true;
+
+    await closeSortMenu();
 
     try {
       await animateListOpacityTo(0, 400);
@@ -841,46 +879,50 @@ export default function LibraryScreen({ navigation }) {
       await animateListOpacityTo(1, 400);
     } finally {
       isAnimatingList.current = false;
-      if (Platform.OS !== 'ios') {
-        setIsSortMenuVisible(false);
-      }
     }
-  }, [animateListOpacityTo, sortOption]);
-
-  const closeSortMenu = useCallback(() => {
-    setIsSortMenuVisible(false);
-  }, []);
+  }, [animateListOpacityTo, sortOption, closeSortMenu]);
 
   const showSortOptions = useCallback(() => {
     if (isAnimatingList.current) {
       return;
     }
 
-    if (Platform.OS === 'ios') {
-      const optionLabels = sortOptions.map(option => option.label);
-      const cancelButtonIndex = optionLabels.length;
-
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: 'Sort By',
-          options: [...optionLabels, 'Cancel'],
-          cancelButtonIndex,
-        },
-        buttonIndex => {
-          if (buttonIndex === cancelButtonIndex) {
-            return;
-          }
-
-          const selected = sortOptions[buttonIndex];
-          if (selected) {
-            handleSortOptionSelect(selected.key);
-          }
-        }
-      );
-    } else {
-      setIsSortMenuVisible(true);
+    if (isSortMenuVisible) {
+      closeSortMenu();
+      return;
     }
-  }, [handleSortOptionSelect]);
+
+    const openMenu = (anchor) => {
+      setSortMenuAnchor(anchor);
+      setIsSortMenuVisible(true);
+      sortMenuAnimation.stopAnimation();
+      sortMenuAnimation.setValue(0);
+      Animated.timing(sortMenuAnimation, {
+        toValue: 1,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    };
+
+    if (sortTriggerRef.current?.measureInWindow) {
+      sortTriggerRef.current.measureInWindow((x, y, width, height) => {
+        const windowWidth = Dimensions.get('window').width;
+        const menuWidth = 220;
+        const horizontalMargin = 16;
+        const left = Math.min(
+          Math.max(x + width - menuWidth, horizontalMargin),
+          windowWidth - menuWidth - horizontalMargin
+        );
+        const top = Math.max(y + height-40, horizontalMargin);
+
+        openMenu({ top, left });
+      });
+    } else {
+      const windowWidth = Dimensions.get('window').width;
+      openMenu({ top: 100, left: windowWidth - 220 - 16 });
+    }
+  }, [closeSortMenu, isSortMenuVisible, sortMenuAnimation]);
 
   const handleItemPress = useCallback((item, index) => {
     switch (viewMode) {
@@ -892,7 +934,7 @@ export default function LibraryScreen({ navigation }) {
         break;
       case 'liked':
         AudioPlayer.playTrack(item, displayedData, index);
-        navigation.navigate('Player');
+        expandPlayerOverlay();
         break;
       case 'playlists':
         // TODO: Navigate to playlist screen when implemented
@@ -1214,42 +1256,28 @@ export default function LibraryScreen({ navigation }) {
 
   const sortListHeader = useMemo(() => (
     <View style={styles.sortControlContainer}>
-      <Menu
-        visible={isSortMenuVisible}
-        onDismiss={closeSortMenu}
-        anchor={
-          <TouchableOpacity
-            style={styles.sortTrigger}
-            onPress={showSortOptions}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Change sort order"
-            accessibilityState={{ expanded: isSortMenuVisible }}
-          >
-            <MaterialIcons
-              name="sort"
-              size={18}
-              color={theme.colors.onSurfaceVariant}
-              style={styles.sortTriggerIcon}
-            />
-            <Text style={styles.sortTriggerLabel}>{SORT_OPTION_LABELS[sortOption]}</Text>
-          </TouchableOpacity>
-        }
-        contentStyle={styles.sortMenuContent}
+      <TouchableOpacity
+        ref={sortTriggerRef}
+        style={[
+          styles.sortTrigger,
+          isSortMenuVisible ? styles.sortTriggerActive : null,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Change sort order"
+        onPress={showSortOptions}
+        activeOpacity={0.8}
       >
-        {sortOptions.map(option => (
-          <Menu.Item
-            key={option.key}
-            title={option.label}
-            leadingIcon={(props) => <MaterialIcons {...props} name={option.icon} />}
-            trailingIcon={sortOption === option.key ? (props) => <MaterialIcons {...props} name="check" /> : undefined}
-            onPress={() => handleSortOptionSelect(option.key)}
-            titleStyle={styles.sortMenuItemLabel}
-          />
-        ))}
-      </Menu>
+        <MaterialIcons
+          name="sort"
+          size={18}
+          color={theme.colors.onSurfaceVariant}
+          style={styles.sortTriggerIcon}
+        />
+        <Text style={styles.sortTriggerLabel}>{SORT_OPTION_LABELS[sortOption]}</Text>
+
+      </TouchableOpacity>
     </View>
-  ), [sortOptions, isSortMenuVisible, closeSortMenu, showSortOptions, sortOption, handleSortOptionSelect]);
+  ), [sortOption, showSortOptions, isSortMenuVisible]);
 
   if (isLoading) {
     return (
@@ -1423,6 +1451,73 @@ export default function LibraryScreen({ navigation }) {
           </View>
         ) : null}
       />
+      {isSortMenuVisible && (
+        <View style={styles.sortMenuPortal} pointerEvents="box-none">
+          <Pressable style={styles.sortMenuBackdrop} onPress={() => closeSortMenu()} />
+          <Animated.View
+            style={[
+              styles.sortMenuContainer,
+              {
+                top: sortMenuAnchor?.top ?? 120,
+                left: sortMenuAnchor?.left ?? 16,
+                opacity: sortMenuAnimation,
+                transform: [
+                  {
+                    translateY: sortMenuAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-8, 0],
+                    }),
+                  },
+                  {
+                    scale: sortMenuAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.98, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {sortOptions.map(option => {
+              const isSelected = option.key === sortOption;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[
+                    styles.sortMenuItem,
+                    isSelected ? styles.sortMenuItemActive : null,
+                  ]}
+                  onPress={() => handleSortOptionSelect(option.key)}
+                  activeOpacity={0.75}
+                >
+                  <MaterialIcons
+                    name={option.icon}
+                    size={18}
+                    color={isSelected ? theme.colors.primary : theme.colors.onSurfaceVariant}
+                    style={styles.sortMenuItemIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.sortMenuItemLabel,
+                      isSelected ? styles.sortMenuItemLabelActive : null,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                  {isSelected && (
+                    <MaterialIcons
+                      name="check"
+                      size={18}
+                      color={theme.colors.primary}
+                      style={styles.sortMenuItemCheck}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </Animated.View>
+        </View>
+      )}
     </View>
   );
 }
