@@ -7,7 +7,7 @@ export const styles = StyleSheet.create({
   },
   blurOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(8, 8, 8, 0.55)',
+    backgroundColor: 'rgba(8, 8, 8, 0.77)',
   },
   container: {
     flex: 1,
@@ -181,20 +181,20 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 2, // item height
+    paddingVertical: 4, // item height
     backgroundColor: theme.colors.transparent,
     borderBottomWidth: 0.5,
     borderBottomColor: theme.colors.outline,
-    minHeight: 68, // Minimum height
   },
   itemLeadingIcon: {
     marginRight: 6,
   },
   itemImage: {
-    width: 56,
-    height: 56,
+    width: 52,
+    height: 52,
     borderRadius: 2,
     marginRight: 10,
+    paddingVertical: 2,
     objectFit: 'contain',
     resizeMode: 'contain',
   },

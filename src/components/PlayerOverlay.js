@@ -40,6 +40,7 @@ const PlayerOverlay = () => {
   const insets = useSafeAreaInsets();
   const animation = useRef(new Animated.Value(0)).current;
   const dragOffset = useRef(new Animated.Value(0)).current;
+  const isCollapsingRef = useRef(false);
   const screenHeight = Dimensions.get('window').height;
   const skipNextAnimationRef = useRef(false);
   const queueAnimation = useRef(new Animated.Value(0)).current;
@@ -120,21 +121,32 @@ const PlayerOverlay = () => {
   }, [handleHideQueue, isExpanded, isQueueVisible, dragOffset]);
 
   const collapseFromGesture = useCallback(() => {
-    if (!isExpanded || isQueueVisible) {
+    if (!isExpanded || isQueueVisible || isCollapsingRef.current) {
       return;
     }
 
+    isCollapsingRef.current = true;
     skipNextAnimationRef.current = true;
 
-    Animated.timing(animation, {
-      toValue: 0,
-      duration: COLLAPSE_DURATION,
-      easing: undefined,
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(animation, {
+        toValue: 0,
+        duration: COLLAPSE_DURATION,
+        easing: undefined,
+        useNativeDriver: true,
+      }),
+      Animated.timing(dragOffset, {
+        toValue: 0,
+        duration: COLLAPSE_DURATION,
+        easing: undefined,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      dragOffset.setValue(0);
+      isCollapsingRef.current = false;
       setIsExpanded(false);
     });
-  }, [animation, isExpanded, isQueueVisible]);
+  }, [animation, dragOffset, isExpanded, isQueueVisible]);
 
   useEffect(() => {
     registerPlayerOverlay({
@@ -160,25 +172,25 @@ const PlayerOverlay = () => {
         },
         onPanResponderMove: (_, gestureState) => {
           // Only respond to downward gestures
-          if (gestureState.dy > 0) {
+          if (gestureState.dy > 0 && !isCollapsingRef.current) {
             const resistance = 0.4; // drag resistance
             dragOffset.setValue(gestureState.dy * resistance);
             
             const collapseThreshold = 200; 
             
             if (gestureState.dy > collapseThreshold) {
-              // Reset drag offset and trigger collapse
-              dragOffset.setValue(0);
               collapseFromGesture();
             }
           }
         },
         onPanResponderRelease: (_, gestureState) => {
+          if (isCollapsingRef.current) {
+            return;
+          }
           // If we haven't collapsed yet, check one more time with lower thresholds
           const shouldClose = gestureState.dy > 40 || gestureState.vy > 0.3;
           
           if (shouldClose) {
-            dragOffset.setValue(0);
             collapseFromGesture();
           } else {
             // Reset drag offset smoothly back to 0
