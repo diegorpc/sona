@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Image, TouchableOpacity, Animated, Easing } from 'react-native';
+import { View, Image, Pressable, Animated, Easing } from 'react-native';
 import { IconButton, Text } from 'react-native-paper';
 import { theme } from '../theme/theme';
 
@@ -109,10 +109,12 @@ const MiniPlayer = ({
   }, [shouldScrollArtist, artistWidth, artistContainerWidth, duration, track?.artist]);
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
+    <Pressable
       onPress={onExpand}
-      style={styles.touchable}
+      style={({ pressed }) => [
+        styles.touchable,
+        pressed && styles.touchablePressed,
+      ]}
     >
       <View style={styles.content}>
         <Image
@@ -168,7 +170,7 @@ const MiniPlayer = ({
         <View style={[styles.progressFill, { flex: progress }]} />
         <View style={{ flex: Math.max(1 - progress, 0) }} />
       </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 };
 

@@ -17,16 +17,21 @@ export const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
+    paddingTop: 12,
   },
   dragIndicator: {
-    width: 48,
-    height: 5,
+    width: 56,
+    height: 6,
     borderRadius: 999,
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.outline,
-    borderWidth: 1,
-    opacity: 0.4,
-    marginBottom: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    marginBottom: 12,
+    borderWidth: 0,
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
   },
   closeButton: {
     position: 'absolute',
@@ -35,7 +40,7 @@ export const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingBottom: 32,
     justifyContent: 'space-between',
   },
@@ -56,6 +61,7 @@ export const styles = StyleSheet.create({
   trackInfo: {
     alignItems: 'center',
     paddingHorizontal: 20,
+    paddingTop: 4,
   },
   trackTitle: {
     fontSize: 24,

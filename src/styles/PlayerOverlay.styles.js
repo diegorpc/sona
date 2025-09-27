@@ -31,7 +31,7 @@ export const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     top: 0,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
   },
   queueOverlay: {
     position: 'absolute',

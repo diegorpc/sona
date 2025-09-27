@@ -5,6 +5,7 @@ import {
   PanResponder,
   TouchableWithoutFeedback,
   View,
+  Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,6 +21,8 @@ import {
 } from '../services/PlayerOverlayController';
 
 const ANIMATION_DURATION = 280;
+const COLLAPSE_DURATION = 150;
+
 const TAB_BAR_OFFSET = 50;
 
 const PlayerOverlay = () => {
@@ -36,7 +39,7 @@ const PlayerOverlay = () => {
   const [isQueueVisible, setIsQueueVisible] = useState(false);
   const insets = useSafeAreaInsets();
   const animation = useRef(new Animated.Value(0)).current;
-  const dragY = useRef(new Animated.Value(0)).current;
+  const dragOffset = useRef(new Animated.Value(0)).current;
   const screenHeight = Dimensions.get('window').height;
   const skipNextAnimationRef = useRef(false);
   const queueAnimation = useRef(new Animated.Value(0)).current;
@@ -71,12 +74,10 @@ const PlayerOverlay = () => {
     outputRange: [0, 0.4],
   });
 
-  const fullscreenBaseTranslateY = animation.interpolate({
+  const baseTranslateY = animation.interpolate({
     inputRange: [0, 1],
     outputRange: [screenHeight, 0],
   });
-
-  const fullscreenTranslateY = Animated.add(fullscreenBaseTranslateY, dragY);
 
   const miniOpacity = animation.interpolate({
     inputRange: [0, 0.2],
@@ -88,15 +89,16 @@ const PlayerOverlay = () => {
 
   const handleExpand = useCallback(() => {
     if (!isExpanded) {
+      dragOffset.setValue(0); // Reset drag offset when expanding
       setIsExpanded(true);
     }
-  }, [isExpanded]);
+  }, [isExpanded, dragOffset]);
 
   const handleHideQueue = useCallback(() => {
     Animated.timing(queueAnimation, {
       toValue: 0,
       duration: ANIMATION_DURATION,
-      easing: undefined,
+      easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) {
@@ -112,13 +114,10 @@ const PlayerOverlay = () => {
     }
 
     if (isExpanded) {
+      dragOffset.setValue(0); // Reset drag offset when collapsing
       setIsExpanded(false);
-      Animated.spring(dragY, {
-        toValue: 0,
-        useNativeDriver: true,
-      }).start();
     }
-  }, [dragY, handleHideQueue, isExpanded, isQueueVisible]);
+  }, [handleHideQueue, isExpanded, isQueueVisible, dragOffset]);
 
   const collapseFromGesture = useCallback(() => {
     if (!isExpanded || isQueueVisible) {
@@ -127,23 +126,15 @@ const PlayerOverlay = () => {
 
     skipNextAnimationRef.current = true;
 
-    Animated.parallel([
-      Animated.timing(animation, {
-        toValue: 0,
-        duration: ANIMATION_DURATION,
-        easing: undefined,
-        useNativeDriver: true,
-      }),
-      Animated.timing(dragY, {
-        toValue: 0,
-        duration: ANIMATION_DURATION,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      dragY.setValue(0);
+    Animated.timing(animation, {
+      toValue: 0,
+      duration: COLLAPSE_DURATION,
+      easing: undefined,
+      useNativeDriver: true,
+    }).start(() => {
       setIsExpanded(false);
     });
-  }, [animation, dragY, isExpanded, isQueueVisible]);
+  }, [animation, isExpanded, isQueueVisible]);
 
   useEffect(() => {
     registerPlayerOverlay({
@@ -162,29 +153,45 @@ const PlayerOverlay = () => {
         onMoveShouldSetPanResponder: (_, gestureState) =>
           !isQueueVisible &&
           isExpanded &&
-          (gestureState.dy > 6 || Math.abs(gestureState.vy) > 0.15),
+          (gestureState.dy > 2 || Math.abs(gestureState.vy) > 0.05),
         onPanResponderGrant: () => {
-          dragY.setValue(0);
+          // Reset drag offset
+          dragOffset.setValue(0);
         },
         onPanResponderMove: (_, gestureState) => {
+          // Only respond to downward gestures
           if (gestureState.dy > 0) {
-            dragY.setValue(gestureState.dy);
+            const resistance = 0.4; // drag resistance
+            dragOffset.setValue(gestureState.dy * resistance);
+            
+            const collapseThreshold = 200; 
+            
+            if (gestureState.dy > collapseThreshold) {
+              // Reset drag offset and trigger collapse
+              dragOffset.setValue(0);
+              collapseFromGesture();
+            }
           }
         },
         onPanResponderRelease: (_, gestureState) => {
-          const shouldClose = gestureState.dy > 160 || gestureState.vy > 0.8;
-
+          // If we haven't collapsed yet, check one more time with lower thresholds
+          const shouldClose = gestureState.dy > 40 || gestureState.vy > 0.3;
+          
           if (shouldClose) {
+            dragOffset.setValue(0);
             collapseFromGesture();
           } else {
-            Animated.spring(dragY, {
+            // Reset drag offset smoothly back to 0
+            Animated.spring(dragOffset, {
               toValue: 0,
               useNativeDriver: true,
             }).start();
           }
         },
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
       }),
-    [collapseFromGesture, dragY, isExpanded, isQueueVisible]
+    [collapseFromGesture, dragOffset, isExpanded, isQueueVisible]
   );
 
   const handleShowQueue = useCallback(() => {
@@ -196,7 +203,7 @@ const PlayerOverlay = () => {
     Animated.timing(queueAnimation, {
       toValue: 1,
       duration: ANIMATION_DURATION,
-      easing: undefined,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [isQueueVisible, queueAnimation]);
@@ -282,14 +289,18 @@ const PlayerOverlay = () => {
         style={[
           styles.fullscreenContainer,
           {
-            transform: [{ translateY: fullscreenTranslateY }],
-            paddingBottom: insets.bottom,
-            paddingTop: insets.top,
+            transform: [{ 
+              translateY: Animated.add(baseTranslateY, dragOffset)
+            }],
           },
         ]}
         {...panResponder.panHandlers}
       >
-        <PlayerScreen onClose={handleCollapse} onShowQueue={handleShowQueue} />
+        <PlayerScreen
+          onClose={handleCollapse}
+          onShowQueue={handleShowQueue}
+          safeAreaInsets={insets}
+        />
       </Animated.View>
 
       {isQueueVisible && (

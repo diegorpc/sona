@@ -15,6 +15,9 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     overflow: 'hidden',
   },
+  touchablePressed: {
+    backgroundColor: theme.colors.surfaceVariant || theme.colors.surface,
+  },
   content: {
     height: MINI_HEIGHT,
     flexDirection: 'row',

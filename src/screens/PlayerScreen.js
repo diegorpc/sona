@@ -12,11 +12,13 @@ import { styles } from '../styles/PlayerScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
-export default function PlayerScreen({ onClose, onShowQueue }) {
+export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const isSlidingRef = useRef(false);
+  const topInset = safeAreaInsets?.top ?? 0;
+  const bottomInset = safeAreaInsets?.bottom ?? 0;
 
   useEffect(() => {
     // Load saved state
@@ -121,18 +123,18 @@ export default function PlayerScreen({ onClose, onShowQueue }) {
     >
       <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
         <View style={styles.container}>
-          <View style={styles.header}>
+          <View style={[styles.header, { paddingTop: topInset + 12 }]}>
             <View style={styles.dragIndicator} />
             <IconButton
               icon="chevron-down"
               size={28}
               onPress={handleClose}
               iconColor={theme.colors.onBackground}
-              style={styles.closeButton}
+              style={[styles.closeButton, { top: topInset + 4 }]}
             />
           </View>
 
-          <View style={styles.content}>
+          <View style={[styles.content, { paddingBottom: bottomInset + 32 }]}>
             <View style={styles.albumArtContainer}>
               <Image
                 source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
@@ -212,7 +214,7 @@ export default function PlayerScreen({ onClose, onShowQueue }) {
               />
             </Surface>
 
-            <View style={styles.additionalControls}>
+            <View style={[styles.additionalControls, { paddingBottom: bottomInset > 0 ? bottomInset + 16 : 32 }]}>
               <IconButton
                 icon="shuffle"
                 size={24}
