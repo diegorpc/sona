@@ -2,19 +2,28 @@ import { StyleSheet } from 'react-native';
 import { theme } from '../theme/theme';
 
 export const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+  },
+  blurOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 8, 8, 0.55)',
+  },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: 'transparent',
+    paddingTop: 40,
   },
   header: {
     paddingHorizontal: 16,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
+    // borderBottomWidth: 1,
+    // borderBottomColor: theme.colors.primary,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    minHeight: 44,
     position: 'relative',
   },
   headerTitle: {
@@ -59,7 +68,6 @@ export const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   chipScrollContainer: {
-    maxHeight: 44,
     marginHorizontal: -16, // Extend to screen edges
   },
   chipContainer: {
@@ -75,14 +83,13 @@ export const styles = StyleSheet.create({
     minWidth: 68,
     alignItems: 'center',
     marginHorizontal: 4,
-
   },
   bubbleChipElevated: {
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 },
+    // elevation: 4,
+    // shadowColor: '#000',
+    // shadowOpacity: 0.25,
+    // shadowRadius: 6,
+    // shadowOffset: { width: 0, height: 4 },
   },
   bubbleChipText: {
     fontSize: 14,
@@ -94,7 +101,6 @@ export const styles = StyleSheet.create({
   },
   sortControlContainer: {
     paddingHorizontal: 8,
-    boxShadow: '0px 5px 9px 0px rgba(0,0,0,0.6)',
   },
   sortTrigger: {
     flexDirection: 'row',
@@ -176,7 +182,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 2, // item height
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.transparent,
     borderBottomWidth: 0.5,
     borderBottomColor: theme.colors.outline,
     minHeight: 68, // Minimum height
@@ -240,7 +246,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
   },
   loadingText: {
     marginTop: 16,

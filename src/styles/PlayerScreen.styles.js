@@ -4,20 +4,27 @@ import { theme } from '../theme/theme';
 const { width } = Dimensions.get('window');
 
 export const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+  },
+  blurOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
   },
   header: {
     alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 4,
   },
   dragIndicator: {
     width: 48,
     height: 5,
     borderRadius: 999,
-    backgroundColor: theme.colors.outline,
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.outline,
+    borderWidth: 1,
     opacity: 0.4,
     marginBottom: 8,
   },
@@ -38,12 +45,12 @@ export const styles = StyleSheet.create({
   },
   albumArtCard: {
   },
-  
+
   albumArt: {
     width: 270,
     height: 270,
     objectFit: 'contain',
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent'
 
   },
   trackInfo: {
@@ -108,7 +115,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: 'transparent',
     padding: 40,
   },
   emptyText: {

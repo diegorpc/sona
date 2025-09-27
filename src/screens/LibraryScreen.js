@@ -4,6 +4,7 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  ImageBackground,
   RefreshControl,
   ScrollView,
   Animated,
@@ -13,11 +14,13 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import PlaylistCollage from '../components/PlaylistCollage';
+import { usePlayer } from '../contexts/PlayerContext';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/LibraryScreen.styles';
 
@@ -25,6 +28,7 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedText = Animated.createAnimatedComponent(Text);
 const AnimatedHeader = Animated.createAnimatedComponent(View);
+const DEFAULT_ART = require('../../assets/default-album.png');
 const CHIP_DEFINITIONS = [
   { key: 'liked', label: 'Liked Songs' },
   { key: 'playlists', label: 'Playlists' },
@@ -105,6 +109,9 @@ const buildChipOrder = (selectedKey) => {
 };
 
 export default function LibraryScreen({ navigation }) {
+  const {
+    playerState: { currentTrack },
+  } = usePlayer();
   const [artists, setArtists] = useState([]);
   const [albums, setAlbums] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
@@ -1283,8 +1290,29 @@ export default function LibraryScreen({ navigation }) {
     </View>
   ), [sortOption, showSortOptions, isSortMenuVisible]);
 
+  const backgroundArt = useMemo(() => {
+    if (currentTrack?.coverArt) {
+      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    }
+    if (currentTrack?.albumId) {
+      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    }
+    return DEFAULT_ART;
+  }, [currentTrack?.albumId, currentTrack?.coverArt]);
+
+  const renderWithBackdrop = useCallback(
+    content => (
+      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
+        <BlurView intensity={65} tint="dark"  style={styles.blurOverlay}>
+          {content}
+        </BlurView>
+      </ImageBackground>
+    ),
+    [backgroundArt]
+  );
+
   if (isLoading) {
-    return (
+    return renderWithBackdrop(
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text style={styles.loadingText}>Loading your library...</Text>
@@ -1292,7 +1320,7 @@ export default function LibraryScreen({ navigation }) {
     );
   }
 
-  return (
+  return renderWithBackdrop(
     <View style={styles.container}>
       <AnimatedHeader style={[styles.header, headerAnimatedStyle]}>
         <View style={styles.headerContent} onLayout={handleHeaderLayout}>

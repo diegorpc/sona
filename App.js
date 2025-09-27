@@ -58,8 +58,7 @@ function MainTabs() {
         headerShown: false,
       })}
       sceneContainerStyle={{
-        backgroundColor: theme.colors.surface,
-        paddingTop: 40,
+        backgroundColor: 'transparent',
       }}
     >
       <Tab.Screen name="Library" component={LibraryScreen} />

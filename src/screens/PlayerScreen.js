@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image } from 'react-native';
+import { View, Image, ImageBackground } from 'react-native';
 import { Text, IconButton, Card, Surface } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
 
 import { MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
 import { theme } from '../theme/theme';
@@ -113,145 +114,151 @@ export default function PlayerScreen({ onClose, onShowQueue }) {
   const coverArtUrl = getCoverArtUrl(currentTrack);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.dragIndicator} />
-        <IconButton
-          icon="chevron-down"
-          size={28}
-          onPress={handleClose}
-          iconColor={theme.colors.onBackground}
-          style={styles.closeButton}
-        />
-      </View>
-
-      <View style={styles.content}>
-        <View style={styles.albumArtContainer}>
-          <Card style={styles.albumArtCard}>
-            <Image
-              source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-              style={styles.albumArt}
-              defaultSource={DEFAULT_ART}
+    <ImageBackground
+      source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+      style={styles.backgroundImage}
+      resizeMode="cover"
+    >
+      <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <View style={styles.dragIndicator} />
+            <IconButton
+              icon="chevron-down"
+              size={28}
+              onPress={handleClose}
+              iconColor={theme.colors.onBackground}
+              style={styles.closeButton}
             />
-          </Card>
-        </View>
+          </View>
 
-      {/* Track Info */}
-        <View style={styles.trackInfo}>
-          <Text style={styles.trackTitle} numberOfLines={2}>
-            {currentTrack.title}
-          </Text>
-          <Text style={styles.trackArtist} numberOfLines={1}>
-            {currentTrack.artist}
-          </Text>
-          {currentTrack.album && (
-            <Text style={styles.trackAlbum} numberOfLines={1}>
-              {currentTrack.album}
-            </Text>
-          )}
-        </View>
+          <View style={styles.content}>
+            <View style={styles.albumArtContainer}>
+              <Image
+                source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+                style={styles.albumArt}
+                defaultSource={DEFAULT_ART}
+              />
+            </View>
 
-      {/* Progress */}
-        <View style={styles.progressContainer}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={100}
-            value={
-              duration > 0
-                ? isSliding
-                  ? (sliderValue / duration) * 100
-                  : (position / duration) * 100
-                : 0
-            }
-            onValueChange={handleSliderChange}
-            onSlidingStart={handleSliderStart}
-            onSlidingComplete={handleSliderComplete}
-            minimumTrackTintColor={theme.colors.primary}
-            maximumTrackTintColor={theme.colors.outline}
-            thumbTintColor={theme.colors.primary}
-            thumbSize={16}
-            trackHeight={5}
-          />
-          <View style={styles.timeContainer}>
-            <Text style={styles.timeText}>
-              {formatTime(isSliding ? sliderValue : position)}
-            </Text>
-            <Text style={styles.timeText}>{endTimeDisplay}</Text>
+            {/* Track Info */}
+            <View style={styles.trackInfo}>
+              <Text style={styles.trackTitle} numberOfLines={2}>
+                {currentTrack.title}
+              </Text>
+              <Text style={styles.trackArtist} numberOfLines={1}>
+                {currentTrack.artist}
+              </Text>
+              {currentTrack.album && (
+                <Text style={styles.trackAlbum} numberOfLines={1}>
+                  {currentTrack.album}
+                </Text>
+              )}
+            </View>
+
+            {/* Progress */}
+            <View style={styles.progressContainer}>
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={100}
+                value={
+                  duration > 0
+                    ? isSliding
+                      ? (sliderValue / duration) * 100
+                      : (position / duration) * 100
+                    : 0
+                }
+                onValueChange={handleSliderChange}
+                onSlidingStart={handleSliderStart}
+                onSlidingComplete={handleSliderComplete}
+                minimumTrackTintColor={theme.colors.primary}
+                maximumTrackTintColor={theme.colors.outline}
+                thumbTintColor={theme.colors.primary}
+                thumbSize={16}
+                trackHeight={5}
+              />
+              <View style={styles.timeContainer}>
+                <Text style={styles.timeText}>
+                  {formatTime(isSliding ? sliderValue : position)}
+                </Text>
+                <Text style={styles.timeText}>{endTimeDisplay}</Text>
+              </View>
+            </View>
+
+            {/* Controls */}
+            <Surface style={styles.controlsContainer}>
+              <IconButton
+                icon="skip-previous"
+                size={32}
+                onPress={handlePrevious}
+                iconColor={theme.colors.onSurface}
+              />
+
+              <IconButton
+                icon={isLoading ? 'timer-sand' : isPlaying ? 'pause' : 'play'}
+                size={48}
+                onPress={handlePlayPause}
+                disabled={isLoading}
+                iconColor={theme.colors.onSurface}
+                style={styles.playButton}
+              />
+
+              <IconButton
+                icon="skip-next"
+                size={32}
+                onPress={handleNext}
+                iconColor={theme.colors.onSurface}
+              />
+            </Surface>
+
+            <View style={styles.additionalControls}>
+              <IconButton
+                icon="shuffle"
+                size={24}
+                onPress={() => {
+                  /* TODO: Implement shuffle */
+                }}
+                iconColor={theme.colors.onSurface}
+              />
+
+              <IconButton
+                icon={isStarred.current ? 'heart' : 'heart-outline'}
+                size={24}
+                onPress={() => {
+                  if (isStarred.current) {
+                    SubsonicAPI.unstar(currentTrack.id);
+                    isStarred.current = false;
+                  } else {
+                    SubsonicAPI.star(currentTrack.id);
+                    isStarred.current = true;
+                  }
+                }}
+                iconColor={theme.colors.onSurface}
+              />
+
+              <IconButton
+                icon="repeat"
+                size={24}
+                onPress={() => {
+                  /* TODO: Implement repeat */
+                }}
+                iconColor={theme.colors.onSurface}
+              />
+
+              <IconButton
+                icon="playlist-music"
+                size={24}
+                onPress={() => {
+                  onShowQueue();
+                }}
+                iconColor={theme.colors.onSurface}
+              />
+            </View>
           </View>
         </View>
-
-        {/* Controls */}
-        <Surface style={styles.controlsContainer}>
-          <IconButton
-            icon="skip-previous"
-            size={32}
-            onPress={handlePrevious}
-            iconColor={theme.colors.onSurface}
-          />
-
-          <IconButton
-            icon={isLoading ? 'timer-sand' : isPlaying ? 'pause' : 'play'}
-            size={48}
-            onPress={handlePlayPause}
-            disabled={isLoading}
-            iconColor={theme.colors.onSurface}
-            style={styles.playButton}
-          />
-
-          <IconButton
-            icon="skip-next"
-            size={32}
-            onPress={handleNext}
-            iconColor={theme.colors.onSurface}
-          />
-        </Surface>
-
-        <View style={styles.additionalControls}>
-          <IconButton
-            icon="shuffle"
-            size={24}
-            onPress={() => {
-              /* TODO: Implement shuffle */
-            }}
-            iconColor={theme.colors.onSurface}
-          />
-
-          <IconButton
-            icon={isStarred.current ? 'heart' : 'heart-outline'}
-            size={24}
-            onPress={() => {
-              if (isStarred.current) {
-                SubsonicAPI.unstar(currentTrack.id);
-                isStarred.current = false;
-              } else {
-                SubsonicAPI.star(currentTrack.id);
-                isStarred.current = true;
-              }
-            }}
-            iconColor={theme.colors.onSurface}
-          />
-
-          <IconButton
-            icon="repeat"
-            size={24}
-            onPress={() => {
-              /* TODO: Implement repeat */
-            }}
-            iconColor={theme.colors.onSurface}
-          />
-
-          <IconButton
-            icon="playlist-music"
-            size={24}
-            onPress={() => {
-              onShowQueue();
-            }}
-            iconColor={theme.colors.onSurface}
-          />
-        </View>
-      </View>
-    </View>
+      </BlurView>
+    </ImageBackground>
   );
 }
 
