@@ -80,7 +80,7 @@ export const styles = StyleSheet.create({
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: -10,
+    marginTop: 5,
   },
   timeText: {
     fontSize: 12,

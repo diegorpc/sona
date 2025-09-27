@@ -212,6 +212,7 @@ class SubsonicAPI {
     if (id) params.id = id;
     if (albumId) params.albumId = albumId;
     if (artistId) params.artistId = artistId;
+    console.log('starred');
     return await this.request('star', params);
   }
 
@@ -220,6 +221,7 @@ class SubsonicAPI {
     if (id) params.id = id;
     if (albumId) params.albumId = albumId;
     if (artistId) params.artistId = artistId;
+    console.log('unstarred');
     return await this.request('unstar', params);
   }
 

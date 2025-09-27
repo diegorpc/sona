@@ -13,6 +13,7 @@ const DEFAULT_ART = require('../../assets/default-album.png');
 
 export default function PlayerScreen({ onClose }) {
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
+  const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const isSlidingRef = useRef(false);
 
@@ -57,15 +58,17 @@ export default function PlayerScreen({ onClose }) {
 
   const handleSliderStart = () => {
     isSlidingRef.current = true;
+    setIsSliding(true);
   };
 
   const handleSliderComplete = async (value) => {
     await handleSeek(value);
     isSlidingRef.current = false;
+    setIsSliding(false);
   };
 
   const handleSliderChange = (value) => {
-    if (isSlidingRef.current) {
+    if (isSliding) {
       setSliderValue((value / 100) * duration);
     }
   };
@@ -91,6 +94,11 @@ export default function PlayerScreen({ onClose }) {
   );
 
   const { currentTrack, isPlaying, position, duration, isLoading } = playerState;
+
+  const shouldShowDuration = !isLoading && Number.isFinite(duration) && duration > 0;
+  const endTimeDisplay = shouldShowDuration ? formatTime(duration) : 'Loading…';
+
+  const isStarred = useRef(currentTrack.starred);
 
   const handleClose = () => {
     if (typeof onClose === 'function') {
@@ -151,7 +159,7 @@ export default function PlayerScreen({ onClose }) {
             maximumValue={100}
             value={
               duration > 0
-                ? isSlidingRef.current
+                ? isSliding
                   ? (sliderValue / duration) * 100
                   : (position / duration) * 100
                 : 0
@@ -167,17 +175,17 @@ export default function PlayerScreen({ onClose }) {
           />
           <View style={styles.timeContainer}>
             <Text style={styles.timeText}>
-              {formatTime(isSlidingRef.current ? sliderValue : position)}
+              {formatTime(isSliding ? sliderValue : position)}
             </Text>
-            <Text style={styles.timeText}>{formatTime(duration)}</Text>
+            <Text style={styles.timeText}>{endTimeDisplay}</Text>
           </View>
         </View>
-      </View>
 
         {/* Controls */}
         <Surface style={styles.controlsContainer}>
           <IconButton
             icon="skip-previous"
+            size={32}
             onPress={handlePrevious}
             iconColor={theme.colors.onSurface}
           />
@@ -210,10 +218,16 @@ export default function PlayerScreen({ onClose }) {
           />
 
           <IconButton
-            icon="heart-outline"
+            icon={isStarred.current ? 'heart' : 'heart-outline'}
             size={24}
             onPress={() => {
-              /* TODO: Implement favorite */
+              if (isStarred.current) {
+                SubsonicAPI.unstar(currentTrack.id);
+                isStarred.current = false;
+              } else {
+                SubsonicAPI.star(currentTrack.id);
+                isStarred.current = true;
+              }
             }}
             iconColor={theme.colors.onSurface}
           />
