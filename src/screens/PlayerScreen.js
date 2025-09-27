@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Image } from 'react-native';
 import { Text, IconButton, Card, Surface } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
@@ -13,8 +13,8 @@ const DEFAULT_ART = require('../../assets/default-album.png');
 
 export default function PlayerScreen({ onClose }) {
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
-  const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
+  const isSlidingRef = useRef(false);
 
   useEffect(() => {
     // Load saved state
@@ -23,7 +23,7 @@ export default function PlayerScreen({ onClose }) {
     // Add listener for player state changes
     const listener = (state) => {
       setPlayerState(state);
-      if (!isSliding) {
+      if (!isSlidingRef.current) {
         setSliderValue(state.position);
       }
     };
@@ -33,7 +33,7 @@ export default function PlayerScreen({ onClose }) {
     return () => {
       AudioPlayer.removeListener(listener);
     };
-  }, [isSliding]);
+  }, []);
 
   const handlePlayPause = () => {
     AudioPlayer.togglePlayPause();
@@ -47,24 +47,25 @@ export default function PlayerScreen({ onClose }) {
     AudioPlayer.playPrevious();
   };
 
-  const handleSeek = (value) => {
+  const handleSeek = async (value) => {
     if (duration > 0) {
       const seekPosition = (value / 100) * duration;
-      AudioPlayer.seekTo(seekPosition);
+      console.log('seeking to ' + seekPosition/1000 + 's ' , value);
+      await AudioPlayer.seekTo(seekPosition);
     }
   };
 
   const handleSliderStart = () => {
-    setIsSliding(true);
+    isSlidingRef.current = true;
   };
 
-  const handleSliderComplete = (value) => {
-    setIsSliding(false);
-    handleSeek(value);
+  const handleSliderComplete = async (value) => {
+    await handleSeek(value);
+    isSlidingRef.current = false;
   };
 
   const handleSliderChange = (value) => {
-    if (isSliding) {
+    if (isSlidingRef.current) {
       setSliderValue((value / 100) * duration);
     }
   };
@@ -150,7 +151,7 @@ export default function PlayerScreen({ onClose }) {
             maximumValue={100}
             value={
               duration > 0
-                ? isSliding
+                ? isSlidingRef.current
                   ? (sliderValue / duration) * 100
                   : (position / duration) * 100
                 : 0
@@ -166,17 +167,17 @@ export default function PlayerScreen({ onClose }) {
           />
           <View style={styles.timeContainer}>
             <Text style={styles.timeText}>
-              {formatTime(isSliding ? sliderValue : position)}
+              {formatTime(isSlidingRef.current ? sliderValue : position)}
             </Text>
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
           </View>
         </View>
+      </View>
 
         {/* Controls */}
         <Surface style={styles.controlsContainer}>
           <IconButton
             icon="skip-previous"
-            size={32}
             onPress={handlePrevious}
             iconColor={theme.colors.onSurface}
           />

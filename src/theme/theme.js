@@ -29,7 +29,7 @@ export const lightTheme = {
     secondary: '#9a6bff',
     secondaryContainer: '#7441e0',
     surface: '#ffffff',
-    surfaceVariant: '#f5f5f5',
+    surfaceariant: '#f5f5f5',
     background: '#fafafa',
     error: '#b00020',
     onPrimary: '#ffffff',

@@ -35,7 +35,7 @@ const CHIP_DEFINITIONS = [
 const BASE_SORT_OPTIONS = [
   { key: 'recentlyListened', label: 'Recently Listened', icon: 'history' },
   { key: 'recentlyAdded', label: 'Recently Added', icon: 'library-add' },
-  { key: 'dateLoved', label: 'Date Loved', icon: 'star' },
+  { key: 'dateLoved', label: 'Date Loved', icon: 'favorite' },
   { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
 ];
 
