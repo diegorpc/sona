@@ -933,7 +933,11 @@ export default function LibraryScreen({ navigation }) {
         navigation.navigate('Album', { album: item });
         break;
       case 'liked':
-        AudioPlayer.playTrack(item, displayedData, index);
+        AudioPlayer.playTrack(item, displayedData, index, {
+          contextName: 'Liked Songs',
+          contextType: 'liked',
+          contextId: 'liked',
+        });
         expandPlayerOverlay();
         break;
       case 'playlists':

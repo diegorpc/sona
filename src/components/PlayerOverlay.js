@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import MiniPlayer from './MiniPlayer';
 import PlayerScreen from '../screens/PlayerScreen';
+import QueueScreen from '../screens/QueueScreen';
 import { usePlayer } from '../contexts/PlayerContext';
 import SubsonicAPI from '../services/SubsonicAPI';
 import { styles } from '../styles/PlayerOverlay.styles';
@@ -22,14 +23,23 @@ const ANIMATION_DURATION = 280;
 const TAB_BAR_OFFSET = 50;
 
 const PlayerOverlay = () => {
-  const { playerState, togglePlayPause } = usePlayer();
+  const {
+    playerState,
+    togglePlayPause,
+    reorderPriorityQueue,
+    removePriorityTrack,
+    reorderContextQueue,
+    moveContextTrackToPriority,
+  } = usePlayer();
   const { currentTrack, isPlaying, isLoading, position, duration } = playerState;
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isQueueVisible, setIsQueueVisible] = useState(false);
   const insets = useSafeAreaInsets();
   const animation = useRef(new Animated.Value(0)).current;
   const dragY = useRef(new Animated.Value(0)).current;
   const screenHeight = Dimensions.get('window').height;
   const skipNextAnimationRef = useRef(false);
+  const queueAnimation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (skipNextAnimationRef.current) {
@@ -82,7 +92,25 @@ const PlayerOverlay = () => {
     }
   }, [isExpanded]);
 
+  const handleHideQueue = useCallback(() => {
+    Animated.timing(queueAnimation, {
+      toValue: 0,
+      duration: ANIMATION_DURATION,
+      easing: undefined,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setIsQueueVisible(false);
+      }
+    });
+  }, [queueAnimation]);
+
   const handleCollapse = useCallback(() => {
+    if (isQueueVisible) {
+      handleHideQueue();
+      return;
+    }
+
     if (isExpanded) {
       setIsExpanded(false);
       Animated.spring(dragY, {
@@ -90,10 +118,10 @@ const PlayerOverlay = () => {
         useNativeDriver: true,
       }).start();
     }
-  }, [dragY, isExpanded]);
+  }, [dragY, handleHideQueue, isExpanded, isQueueVisible]);
 
   const collapseFromGesture = useCallback(() => {
-    if (!isExpanded) {
+    if (!isExpanded || isQueueVisible) {
       return;
     }
 
@@ -115,7 +143,7 @@ const PlayerOverlay = () => {
       dragY.setValue(0);
       setIsExpanded(false);
     });
-  }, [animation, dragY, isExpanded]);
+  }, [animation, dragY, isExpanded, isQueueVisible]);
 
   useEffect(() => {
     registerPlayerOverlay({
@@ -132,7 +160,9 @@ const PlayerOverlay = () => {
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) =>
-          isExpanded && (gestureState.dy > 6 || Math.abs(gestureState.vy) > 0.15),
+          !isQueueVisible &&
+          isExpanded &&
+          (gestureState.dy > 6 || Math.abs(gestureState.vy) > 0.15),
         onPanResponderGrant: () => {
           dragY.setValue(0);
         },
@@ -154,8 +184,61 @@ const PlayerOverlay = () => {
           }
         },
       }),
-    [collapseFromGesture, dragY, isExpanded]
+    [collapseFromGesture, dragY, isExpanded, isQueueVisible]
   );
+
+  const handleShowQueue = useCallback(() => {
+    if (isQueueVisible) {
+      return;
+    }
+
+    setIsQueueVisible(true);
+    Animated.timing(queueAnimation, {
+      toValue: 1,
+      duration: ANIMATION_DURATION,
+      easing: undefined,
+      useNativeDriver: true,
+    }).start();
+  }, [isQueueVisible, queueAnimation]);
+
+  const queueTranslateY = useMemo(
+    () =>
+      queueAnimation.interpolate({
+        inputRange: [0, 1],
+        outputRange: [screenHeight, 0],
+      }),
+    [queueAnimation, screenHeight]
+  );
+
+  const priorityQueue = useMemo(
+    () => playerState.priorityQueue ?? [],
+    [playerState.priorityQueue]
+  );
+
+  const contextQueue = useMemo(() => {
+    if (!Array.isArray(playerState.playlist) || playerState.playlist.length === 0) {
+      return [];
+    }
+
+    const startIndex = Math.min(playerState.currentIndex + 1, playerState.playlist.length);
+    return playerState.playlist.slice(startIndex);
+  }, [playerState.playlist, playerState.currentIndex]);
+
+  const contextLabel = useMemo(() => {
+    if (playerState.queueContext?.name) {
+      return playerState.queueContext.name;
+    }
+
+    if (currentTrack?.album) {
+      return currentTrack.album;
+    }
+
+    if (currentTrack?.artist) {
+      return currentTrack.artist;
+    }
+
+    return 'Current Context';
+  }, [currentTrack?.album, currentTrack?.artist, playerState.queueContext?.name]);
 
   if (!currentTrack) {
     return null;
@@ -206,8 +289,34 @@ const PlayerOverlay = () => {
         ]}
         {...panResponder.panHandlers}
       >
-        <PlayerScreen onClose={handleCollapse} />
+        <PlayerScreen onClose={handleCollapse} onShowQueue={handleShowQueue} />
       </Animated.View>
+
+      {isQueueVisible && (
+        <Animated.View
+          pointerEvents="auto"
+          style={[
+            styles.queueOverlay,
+            {
+              paddingBottom: insets.bottom,
+              paddingTop: insets.top,
+              transform: [{ translateY: queueTranslateY }],
+            },
+          ]}
+        >
+          <QueueScreen
+            currentTrack={currentTrack}
+            priorityQueue={priorityQueue}
+            contextQueue={contextQueue}
+            contextLabel={contextLabel}
+            onClose={handleHideQueue}
+            onReorderPriority={reorderPriorityQueue}
+            onRemovePriority={removePriorityTrack}
+            onReorderContext={reorderContextQueue}
+            onMoveContextToPriority={moveContextTrackToPriority}
+          />
+        </Animated.View>
+      )}
     </View>
   );
 };

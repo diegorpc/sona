@@ -33,4 +33,12 @@ export const styles = StyleSheet.create({
     top: 0,
     backgroundColor: theme.colors.surface,
   },
+  queueOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+    backgroundColor: theme.colors.surface,
+  },
 });

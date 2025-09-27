@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -118,46 +119,48 @@ export default function App() {
   return (
     <PaperProvider theme={theme}>
       <PlayerProvider>
-        <View style={{ flex: 1 }}>
-          <NavigationContainer onStateChange={handleNavigationStateChange}>
-            <StatusBar style="auto" />
-            <Stack.Navigator
-              screenOptions={{
-                headerStyle: {
-                  backgroundColor: theme.colors.surface,
-                },
-                headerTintColor: theme.colors.onSurface,
-              }}
-            >
-              {!isLoggedIn ? (
-                <Stack.Screen 
-                  name="Login" 
-                  component={LoginScreen}
-                  options={{ headerShown: false }}
-                />
-              ) : (
-                <>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={{ flex: 1 }}>
+            <NavigationContainer onStateChange={handleNavigationStateChange}>
+              <StatusBar style="auto" />
+              <Stack.Navigator
+                screenOptions={{
+                  headerStyle: {
+                    backgroundColor: theme.colors.surface,
+                  },
+                  headerTintColor: theme.colors.onSurface,
+                }}
+              >
+                {!isLoggedIn ? (
                   <Stack.Screen 
-                    name="Main" 
-                    component={MainTabs}
+                    name="Login" 
+                    component={LoginScreen}
                     options={{ headerShown: false }}
                   />
-                  <Stack.Screen 
-                    name="Artist" 
-                    component={ArtistScreen}
-                    options={{ title: 'Artist' }}
-                  />
-                  <Stack.Screen 
-                    name="Album" 
-                    component={AlbumScreen}
-                    options={{ title: 'Album' }}
-                  />
-                </>
-              )}
-            </Stack.Navigator>
-          </NavigationContainer>
-          <PlayerOverlay />
-        </View>
+                ) : (
+                  <>
+                    <Stack.Screen 
+                      name="Main" 
+                      component={MainTabs}
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen 
+                      name="Artist" 
+                      component={ArtistScreen}
+                      options={{ title: 'Artist' }}
+                    />
+                    <Stack.Screen 
+                      name="Album" 
+                      component={AlbumScreen}
+                      options={{ title: 'Album' }}
+                    />
+                  </>
+                )}
+              </Stack.Navigator>
+            </NavigationContainer>
+            <PlayerOverlay />
+          </View>
+        </GestureHandlerRootView>
       </PlayerProvider>
     </PaperProvider>
   );

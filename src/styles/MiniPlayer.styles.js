@@ -2,11 +2,11 @@ import { StyleSheet } from 'react-native';
 
 import { theme } from '../theme/theme';
 
-export const MINI_HEIGHT = 62;
+export const MINI_HEIGHT = 54;
 
 export const styles = StyleSheet.create({
   touchable: {
-    borderRadius: 16,
+    borderRadius: 12,
     backgroundColor: theme.colors.surface,
     elevation: 6,
     shadowColor: '#00000040',
@@ -22,10 +22,12 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   coverArt: {
-    height: MINI_HEIGHT,
-    width: MINI_HEIGHT,
-    borderRadius: 16,
-    marginRight: 12,
+    height: MINI_HEIGHT-4,
+    width: MINI_HEIGHT-4,
+    marginRight: 8,
+    marginLeft: 6,
+    borderRadius: 8,
+    objectFit: 'contain',
   },
   infoContainer: {
     flex: 1,
@@ -41,16 +43,17 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginBottom: 2,
+    marginBottom: -8,
   },
   artist: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
+    marginBottom: 6
   },
   playPause: {
     marginRight: 4,

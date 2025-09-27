@@ -35,6 +35,12 @@ export const PlayerProvider = ({ children }) => {
       seekTo: AudioPlayer.seekTo.bind(AudioPlayer),
       stop: AudioPlayer.stop.bind(AudioPlayer),
       formatTime: AudioPlayer.formatTime.bind(AudioPlayer),
+      setPriorityQueue: AudioPlayer.setPriorityQueue.bind(AudioPlayer),
+      reorderPriorityQueue: AudioPlayer.reorderPriorityQueue.bind(AudioPlayer),
+      removePriorityTrack: AudioPlayer.removePriorityTrack.bind(AudioPlayer),
+      insertIntoPriorityQueue: AudioPlayer.insertIntoPriorityQueue.bind(AudioPlayer),
+      reorderContextQueue: AudioPlayer.reorderContextQueue.bind(AudioPlayer),
+      moveContextTrackToPriority: AudioPlayer.moveContextTrackToPriority.bind(AudioPlayer),
     }),
     [playerState]
   );

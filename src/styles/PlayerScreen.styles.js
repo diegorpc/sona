@@ -37,13 +37,14 @@ export const styles = StyleSheet.create({
     marginTop: 60,
   },
   albumArtCard: {
-    elevation: 8,
-    borderRadius: 12,
   },
+  
   albumArt: {
-    width: width * 0.7,
-    height: width * 0.7,
-    borderRadius: 12,
+    width: 270,
+    height: 270,
+    objectFit: 'contain',
+    backgroundColor: theme.colors.surface,
+
   },
   trackInfo: {
     alignItems: 'center',

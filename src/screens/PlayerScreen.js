@@ -11,7 +11,7 @@ import { styles } from '../styles/PlayerScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
-export default function PlayerScreen({ onClose }) {
+export default function PlayerScreen({ onClose, onShowQueue }) {
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
@@ -245,7 +245,7 @@ export default function PlayerScreen({ onClose }) {
             icon="playlist-music"
             size={24}
             onPress={() => {
-              /* TODO: Show queue */
+              onShowQueue();
             }}
             iconColor={theme.colors.onSurface}
           />
