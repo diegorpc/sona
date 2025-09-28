@@ -40,8 +40,8 @@ export const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 0,
-    paddingBottom: 32,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
     justifyContent: 'space-between',
   },
   albumArtContainer: {
@@ -61,7 +61,7 @@ export const styles = StyleSheet.create({
   trackInfo: {
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 4,
+    paddingTop: 12,
   },
   trackTitle: {
     fontSize: 24,
@@ -75,7 +75,7 @@ export const styles = StyleSheet.create({
     color: theme.colors.onBackground,
     opacity: 0.8,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   trackAlbum: {
     fontSize: 16,
@@ -94,7 +94,7 @@ export const styles = StyleSheet.create({
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 5,
+    marginTop: 4,
   },
   timeText: {
     fontSize: 12,
@@ -115,6 +115,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
+    paddingVertical: 12,
     paddingHorizontal: 40,
   },
   emptyContainer: {
