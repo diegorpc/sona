@@ -652,9 +652,7 @@ export default function LibraryScreen({ navigation }) {
 
   // Update displayed data when paginated data changes
   useEffect(() => {
-    if (!isAnimatingList.current || paginatedData.length > 0) {
-      setDisplayedData(paginatedData);
-    }
+    setDisplayedData(paginatedData);
     setHasMoreData(paginatedData.length < fullFilteredData.length);
   }, [paginatedData, fullFilteredData]);
 
@@ -663,10 +661,11 @@ export default function LibraryScreen({ navigation }) {
     setCurrentPage(0);
     // Don't clear displayedData immediately during view mode transitions
     // Let the fade animation handle the visual transition
-    if (!isAnimatingList.current) {
+    // Also don't clear when search is active to prevent empty state flash
+    if (!isAnimatingList.current && !isSearchActive) {
       setDisplayedData([]);
     }
-  }, [viewMode, searchQuery]);
+  }, [viewMode, searchQuery, isSearchActive]);
 
 
   const handleRefresh = async () => {
@@ -822,6 +821,8 @@ export default function LibraryScreen({ navigation }) {
   }, [chipSectionProgress, isSearchActive, searchReveal, isSortMenuVisible, closeSortMenu]);
 
   const closeSearch = useCallback(() => {
+    searchInputRef.current?.blur?.();
+    
     Animated.parallel([
       Animated.timing(searchReveal, {
         toValue: 0,
@@ -836,8 +837,8 @@ export default function LibraryScreen({ navigation }) {
         useNativeDriver: false,
       }),
     ]).start(() => {
-      searchInputRef.current?.blur?.();
       setIsSearchActive(false);
+      // Clear search query after animation completes and search is inactive
       setSearchQuery('');
     });
   }, [chipSectionProgress, searchReveal]);
