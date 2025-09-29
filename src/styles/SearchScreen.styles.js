@@ -8,116 +8,112 @@ export const styles = StyleSheet.create({
     paddingTop: 40,
   },
   header: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
     backgroundColor: theme.colors.surface,
-    elevation: 2,
   },
   searchbar: {
-    marginBottom: 12,
+    borderRadius: 10,
+    height: 44,
   },
-  tabContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tab: {
-    marginRight: 8,
-    marginBottom: 4,
+  searchbarInput: {
+    fontFamily: 'Lexend_500Medium',
+    fontSize: 16,
+    paddingTop: 0,
+    paddingBottom: 10,
   },
   resultsList: {
-    padding: 16,
+    paddingBottom: 80,
   },
-  resultCard: {
-    marginBottom: 8,
-    backgroundColor: theme.colors.surface,
-  },
-  resultContent: {
+  // Flat list item container matching LibraryScreen
+  flatListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: theme.colors.transparent,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.outline,
   },
-  albumThumbnail: {
-    width: 50,
-    height: 50,
-    borderRadius: 4,
-    marginRight: 12,
+  itemImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 2,
+    marginRight: 10,
+    paddingVertical: 2,
+    objectFit: 'contain',
+    resizeMode: 'contain',
   },
-  songThumbnail: {
-    width: 40,
-    height: 40,
-    borderRadius: 4,
-    marginRight: 12,
-  },
-  resultInfo: {
+  itemInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+  itemTitle: {
+    fontSize: 14,
+    fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
     marginBottom: 2,
   },
-  resultSubtitle: {
+  itemSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.7,
+  },
+  itemRightContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  itemDuration: {
     fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
-    opacity: 0.7,
-  },
-  resultAlbum: {
-    fontSize: 12,
-    color: theme.colors.onSurface,
-    opacity: 0.5,
-  },
-  resultYear: {
-    fontSize: 12,
-    color: theme.colors.onSurface,
-    opacity: 0.5,
-  },
-  songActions: {
-    alignItems: 'flex-end',
-  },
-  duration: {
-    fontSize: 12,
-    color: theme.colors.onSurface,
-    opacity: 0.7,
-    marginBottom: 4,
+    opacity: 0.6,
+    marginRight: 6,
   },
   sectionHeader: {
     paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
+    backgroundColor: theme.colors.background,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: 'Lexend_700Bold',
     color: theme.colors.onBackground,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    fontFamily: 'Lexend_500Medium',
     color: theme.colors.onBackground,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    paddingTop: 100,
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 18,
+    fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onBackground,
     marginTop: 16,
-    textAlign: 'center',
   },
   emptySubtext: {
-    fontSize: 16,
+    fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onBackground,
     opacity: 0.7,
     textAlign: 'center',
     marginTop: 8,
+    paddingHorizontal: 32,
   },
 });
