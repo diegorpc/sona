@@ -1,7 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
-  FlatList,
   TouchableOpacity,
   Image,
   SectionList,
@@ -12,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
@@ -19,11 +19,42 @@ import { theme } from '../theme/theme';
 import { styles } from '../styles/SearchScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
+const RECENT_SEARCHES_KEY = 'sona_recent_searches';
+const MAX_RECENT_SEARCHES = 20;
 
 export default function SearchScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [playlists, setPlaylists] = useState([]);
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
+  const [recentSearches, setRecentSearches] = useState([]);
+
+  const saveRecentSearch = useCallback((item, type) => {
+    if (!item) {
+      return;
+    }
+
+    const itemId = item.id || item.name || item.title;
+    if (!itemId) {
+      return;
+    }
+
+    setRecentSearches(prev => {
+      const filtered = prev.filter(entry => entry.storageId !== `${type}-${itemId}`);
+      const entry = {
+        storageId: `${type}-${itemId}`,
+        type,
+        item,
+        timestamp: Date.now(),
+      };
+      const updated = [entry, ...filtered].slice(0, MAX_RECENT_SEARCHES);
+      AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)).catch(error => {
+        console.error('Error saving recent searches:', error);
+      });
+      return updated;
+    });
+  }, []);
 
   const handleSearch = useCallback(async (query) => {
     setSearchQuery(query);
@@ -46,15 +77,18 @@ export default function SearchScreen({ navigation }) {
   }, []);
 
   const handleArtistPress = useCallback((artist) => {
+    saveRecentSearch(artist, 'artist');
     navigation.navigate('Artist', { artist });
-  }, [navigation]);
+  }, [navigation, saveRecentSearch]);
 
   const handleAlbumPress = useCallback((album) => {
+    saveRecentSearch(album, 'album');
     navigation.navigate('Album', { album });
-  }, [navigation]);
+  }, [navigation, saveRecentSearch]);
 
   const handleSongPress = useCallback(async (song, songs, index) => {
     try {
+      saveRecentSearch(song, 'song');
       await AudioPlayer.playTrack(song, songs, index, {
         contextName: 'Search Results',
         contextType: 'search',
@@ -69,6 +103,57 @@ export default function SearchScreen({ navigation }) {
   const handlePlaylistPress = useCallback((playlist) => {
     // TODO: Navigate to playlist screen when implemented
     console.log('Playlist pressed:', playlist.name);
+    saveRecentSearch(playlist, 'playlist');
+  }, [saveRecentSearch]);
+
+  const loadRecentSearches = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setRecentSearches(parsed);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading recent searches:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecentSearches();
+  }, [loadRecentSearches]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPlaylists = async () => {
+      try {
+        setIsLoadingPlaylists(true);
+        const response = await SubsonicAPI.getPlaylists();
+        const playlistsData = Array.isArray(response?.playlist)
+          ? response.playlist
+          : Array.isArray(response)
+            ? response
+            : [];
+
+        if (isMounted) {
+          setPlaylists(playlistsData);
+        }
+      } catch (error) {
+        console.error('Error loading playlists for search:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoadingPlaylists(false);
+        }
+      }
+    };
+
+    loadPlaylists();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const getCoverArtUrl = useCallback((item) => {
@@ -87,10 +172,17 @@ export default function SearchScreen({ navigation }) {
 
   // Filter results to strictly match search query
   const filteredResults = useMemo(() => {
-    if (!searchResults) return null;
-
     const query = searchQuery.toLowerCase().trim();
-    
+
+    if (!query) {
+      return {
+        artist: [],
+        album: [],
+        song: [],
+        playlist: [],
+      };
+    }
+
     const filterByName = (items, field) => {
       if (!items || !Array.isArray(items)) return [];
       return items.filter(item => {
@@ -100,13 +192,24 @@ export default function SearchScreen({ navigation }) {
       });
     };
 
+    const searchArtistResults = searchResults
+      ? filterByName(searchResults.artist, 'name')
+      : [];
+    const searchAlbumResults = searchResults
+      ? filterByName(searchResults.album, 'name')
+      : [];
+    const searchSongResults = searchResults
+      ? filterByName(searchResults.song, 'title')
+      : [];
+    const playlistResults = filterByName(playlists, 'name');
+
     return {
-      artist: filterByName(searchResults.artist, 'name'),
-      album: filterByName(searchResults.album, 'name'),
-      song: filterByName(searchResults.song, 'title'),
-      playlist: filterByName(searchResults.playlist, 'name'),
+      artist: searchArtistResults,
+      album: searchAlbumResults,
+      song: searchSongResults,
+      playlist: playlistResults,
     };
-  }, [searchResults, searchQuery]);
+  }, [searchResults, searchQuery, playlists]);
 
   const renderArtist = useCallback(({ item }) => (
     <TouchableOpacity 
@@ -153,7 +256,7 @@ export default function SearchScreen({ navigation }) {
   const renderSong = useCallback(({ item, index, section }) => (
     <TouchableOpacity 
       style={styles.flatListItem}
-      onPress={() => handleSongPress(item, section.data, index)}
+      onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
       activeOpacity={0.7}
     >
       <Image
@@ -197,7 +300,45 @@ export default function SearchScreen({ navigation }) {
     </TouchableOpacity>
   ), [handlePlaylistPress]);
 
+  const renderRecentItem = useCallback(({ item, index }) => {
+    const actualItem = item.item;
+    if (!actualItem) {
+      return null;
+    }
+
+    switch (item.type) {
+      case 'artist':
+        return renderArtist({ item: actualItem });
+      case 'album':
+        return renderAlbum({ item: actualItem });
+      case 'song':
+        return renderSong({ item: actualItem, index, section: { data: [actualItem] } });
+      case 'playlist':
+        return renderPlaylist({ item: actualItem });
+      default:
+        return null;
+    }
+  }, [renderAlbum, renderArtist, renderPlaylist, renderSong]);
+
   const sections = useMemo(() => {
+    const trimmedQuery = searchQuery.trim();
+
+    if (!trimmedQuery) {
+      if (recentSearches.length === 0) {
+        return [];
+      }
+
+      const sortedRecent = [...recentSearches].sort((a, b) => b.timestamp - a.timestamp);
+
+      return [
+        {
+          title: 'Recently Searched',
+          data: sortedRecent,
+          renderItem: renderRecentItem,
+        },
+      ];
+    }
+
     if (!filteredResults) return [];
 
     const { artist = [], album = [], song = [], playlist = [] } = filteredResults;
@@ -236,7 +377,7 @@ export default function SearchScreen({ navigation }) {
     }
 
     return result;
-  }, [filteredResults, renderArtist, renderAlbum, renderSong, renderPlaylist]);
+  }, [filteredResults, renderArtist, renderAlbum, renderSong, renderPlaylist, recentSearches, renderRecentItem, searchQuery]);
 
   const renderSectionHeader = useCallback(({ section: { title } }) => (
     <View style={styles.sectionHeader}>
@@ -245,8 +386,17 @@ export default function SearchScreen({ navigation }) {
   ), []);
 
   const keyExtractor = useCallback((item, index) => {
-    return `${item.id || index}`;
+    if (item?.storageId) {
+      return item.storageId;
+    }
+    if (item?.id) {
+      return `${item.id}`;
+    }
+    return `${index}`;
   }, []);
+
+  const hasSearchQuery = searchQuery.trim().length > 0;
+  const hasSections = sections.length > 0;
 
   return (
     <View style={styles.container}>
@@ -266,15 +416,31 @@ export default function SearchScreen({ navigation }) {
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Searching...</Text>
         </View>
-      ) : searchQuery && sections.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <MaterialIcons name="search-off" size={64} color={theme.colors.outline} />
-          <Text style={styles.emptyText}>No results found</Text>
-          <Text style={styles.emptySubtext}>
-            Try searching with different keywords
-          </Text>
-        </View>
-      ) : searchQuery && sections.length > 0 ? (
+      ) : hasSearchQuery ? (
+        hasSections && !isLoadingPlaylists ? (
+          <SectionList
+            sections={sections}
+            renderItem={({ item, index, section }) => section.renderItem({ item, index, section })}
+            renderSectionHeader={renderSectionHeader}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.resultsList}
+            showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
+          />
+        ) : (!isLoadingPlaylists && !hasSections) ? (
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="search-off" size={64} color={theme.colors.outline} />
+            <Text style={styles.emptyText}>No results found</Text>
+            <Text style={styles.emptySubtext}>
+              Try searching with different keywords
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </View>
+        )
+      ) : hasSections ? (
         <SectionList
           sections={sections}
           renderItem={({ item, index, section }) => section.renderItem({ item, index, section })}

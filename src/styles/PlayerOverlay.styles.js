@@ -22,8 +22,8 @@ export const styles = StyleSheet.create({
   },
   miniContainer: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 12,
+    right: 12,
   },
   fullscreenContainer: {
     position: 'absolute',

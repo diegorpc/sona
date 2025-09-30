@@ -7,13 +7,19 @@ export const MINI_HEIGHT = 54;
 export const styles = StyleSheet.create({
   touchable: {
     borderRadius: 12,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     elevation: 6,
     shadowColor: '#00000040',
     shadowOpacity: 0.15,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     overflow: 'hidden',
+    opacity: 0.95,
+  },
+  blurContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: `${theme.colors.surfaceVariant}66`,
   },
   touchablePressed: {
     backgroundColor: theme.colors.surfaceVariant || theme.colors.surface,
@@ -29,7 +35,7 @@ export const styles = StyleSheet.create({
     width: MINI_HEIGHT-10,
     marginRight: 10,
     marginLeft: 10,
-    borderRadius: 8,
+    borderRadius: 12,
     objectFit: 'contain',
   },
   infoContainer: {
@@ -49,21 +55,21 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginBottom: -8,
+    marginBottom: -10,
   },
   artist: {
     fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
-    marginBottom: 6
+    marginBottom: 8
   },
   playPause: {
     marginRight: 4,
   },
   progressTrack: {
     flexDirection: 'row',
-    height: 4,
+    height: 2,
     backgroundColor: theme.colors.outlineVariant || `${theme.colors.outline}33`,
   },
   progressFill: {

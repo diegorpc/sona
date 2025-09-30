@@ -27,6 +27,7 @@ class AudioPlayerService {
     this.currentTrackSource = 'context';
     this.statusTimer = null;
     this.statusUpdateCount = 0;
+    this.trackEndedFlag = false;
 
     this.initializeAudio();
   }
@@ -75,7 +76,15 @@ class AudioPlayerService {
       return;
     }
 
+    console.log('[AudioPlayer] playTrack called:', {
+      trackId: track.id,
+      title: track.title,
+      index,
+      options,
+    });
+
     try {
+      this.trackEndedFlag = false;
       await this.stopCurrentTrack();
 
       const {
@@ -176,6 +185,7 @@ class AudioPlayerService {
 
   setupAudioPlayerListeners() {
     if (!this.sound) {
+      console.warn('[AudioPlayer] setupAudioPlayerListeners: no sound object');
       return;
     }
 
@@ -184,25 +194,51 @@ class AudioPlayerService {
     }
 
     this.statusUpdateCount = 0;
+    this.trackEndedFlag = false;
+    console.log('[AudioPlayer] Status timer started for track:', this.currentTrack?.title);
+
     this.statusTimer = setInterval(() => {
       if (!this.sound) {
         return;
       }
 
-      this.position = this.sound.currentTime * 1000;
-      this.duration = this.sound.duration * 1000;
+      const currentTime = this.sound.currentTime;
+      const duration = this.sound.duration;
+
+      this.position = currentTime * 1000;
+      this.duration = duration * 1000;
       this.isPlaying = this.sound.playing;
 
+      // Track-end detection with threshold to prevent false positives
+      // Only trigger if we're within 0.5 seconds of the end AND haven't already triggered
+      const TRACK_END_THRESHOLD = 0.5; // seconds
       const trackEnded =
-        Number.isFinite(this.sound.duration) &&
-        this.sound.duration > 0 &&
-        this.sound.currentTime >= this.sound.duration;
+        !this.trackEndedFlag &&
+        Number.isFinite(duration) &&
+        duration > 0 &&
+        currentTime >= (duration - TRACK_END_THRESHOLD);
 
       if (trackEnded) {
+        console.log('[AudioPlayer] Track end detected:', {
+          trackId: this.currentTrack?.id,
+          title: this.currentTrack?.title,
+          currentTime: currentTime.toFixed(2),
+          duration: duration.toFixed(2),
+          timeRemaining: (duration - currentTime).toFixed(2),
+        });
+        this.trackEndedFlag = true;
         this.onTrackFinished();
       }
 
+      // Log periodic status (every 5 seconds)
       if (this.statusUpdateCount % 50 === 0) {
+        console.log('[AudioPlayer] Status update:', {
+          trackId: this.currentTrack?.id,
+          title: this.currentTrack?.title,
+          currentTime: currentTime.toFixed(2),
+          duration: duration.toFixed(2),
+          isPlaying: this.isPlaying,
+        });
         this.saveCurrentState();
       }
 
@@ -213,19 +249,24 @@ class AudioPlayerService {
 
   clearStatusTimer() {
     if (this.statusTimer) {
+      console.log('[AudioPlayer] Clearing status timer');
       clearInterval(this.statusTimer);
       this.statusTimer = null;
+      this.trackEndedFlag = false;
     }
   }
 
   async onTrackFinished() {
+    console.log('[AudioPlayer] onTrackFinished called for track:', this.currentTrack?.title);
     try {
       if (this.currentTrack) {
+        console.log('[AudioPlayer] Scrobbling track:', this.currentTrack.id);
         await SubsonicAPI.scrobble(this.currentTrack.id, true);
       }
+      console.log('[AudioPlayer] Calling playNext after track finished');
       await this.playNext();
     } catch (error) {
-      console.error('Error handling track completion:', error);
+      console.error('[AudioPlayer] Error handling track completion:', error);
     }
   }
 
@@ -272,21 +313,26 @@ class AudioPlayerService {
   }
 
   async togglePlayPause() {
+    console.log('[AudioPlayer] togglePlayPause called, current isPlaying:', this.isPlaying);
+
     if (!this.sound) {
+      console.log('[AudioPlayer] No sound object, initializing track for playback');
       if (this.currentTrack) {
         await this.initializeTrackForPlayback(this.currentTrack, this.position, true);
       } else {
-        console.warn('No current track available to toggle playback.');
+        console.warn('[AudioPlayer] No current track available to toggle playback.');
       }
       return;
     }
 
     try {
       if (this.isPlaying) {
+        console.log('[AudioPlayer] Pausing playback');
         this.sound.pause();
         this.isPlaying = false;
         await AsyncStorage.setItem('isPlaying', 'false');
       } else {
+        console.log('[AudioPlayer] Resuming playback');
         this.sound.play();
         this.isPlaying = true;
         await AsyncStorage.setItem('isPlaying', 'true');
@@ -294,7 +340,7 @@ class AudioPlayerService {
 
       this.notifyListeners();
     } catch (error) {
-      console.error('Error toggling play/pause:', error);
+      console.error('[AudioPlayer] Error toggling play/pause:', error);
       if (this.currentTrack) {
         await this.initializeTrackForPlayback(this.currentTrack, this.position, !this.isPlaying);
       }
@@ -302,8 +348,15 @@ class AudioPlayerService {
   }
 
   async playNext() {
+    console.log('[AudioPlayer] playNext called:', {
+      priorityQueueLength: this.priorityQueue.length,
+      playlistLength: this.playlist.length,
+      currentIndex: this.currentIndex,
+    });
+
     if (this.priorityQueue.length > 0) {
       const nextPriorityTrack = this.priorityQueue.shift();
+      console.log('[AudioPlayer] Playing next from priority queue:', nextPriorityTrack?.title);
       this.persistQueueState();
       this.notifyListeners();
 
@@ -317,17 +370,23 @@ class AudioPlayerService {
     }
 
     if (!Array.isArray(this.playlist) || this.playlist.length === 0) {
+      console.log('[AudioPlayer] playNext: no playlist available');
       return;
     }
 
     const nextIndex = this.currentIndex + 1;
     if (nextIndex >= this.playlist.length) {
+      console.log('[AudioPlayer] playNext: reached end of playlist, stopping');
       await this.stop();
       return;
     }
 
     const nextTrack = this.playlist[nextIndex];
     if (nextTrack) {
+      console.log('[AudioPlayer] Playing next track from playlist:', {
+        nextIndex,
+        title: nextTrack.title,
+      });
       await this.playTrack(nextTrack, this.playlist, nextIndex, {
         contextName: this.queueContext?.name,
         contextType: this.queueContext?.type,
@@ -338,17 +397,25 @@ class AudioPlayerService {
   }
 
   async playPrevious() {
+    console.log('[AudioPlayer] playPrevious called');
+
     if (!Array.isArray(this.playlist) || this.playlist.length === 0) {
+      console.log('[AudioPlayer] playPrevious: no playlist available');
       return;
     }
 
     const previousIndex = this.currentIndex - 1;
     if (previousIndex < 0) {
+      console.log('[AudioPlayer] playPrevious: already at first track');
       return;
     }
 
     const previousTrack = this.playlist[previousIndex];
     if (previousTrack) {
+      console.log('[AudioPlayer] Playing previous track:', {
+        previousIndex,
+        title: previousTrack.title,
+      });
       await this.playTrack(previousTrack, this.playlist, previousIndex, {
         contextName: this.queueContext?.name,
         contextType: this.queueContext?.type,
@@ -360,15 +427,19 @@ class AudioPlayerService {
 
   async seekTo(positionMillis) {
     if (!this.sound) {
+      console.warn('[AudioPlayer] seekTo: no sound object');
       return;
     }
 
     try {
+      console.log('[AudioPlayer] Seeking to:', positionMillis / 1000, 'seconds');
       this.sound.seekTo(positionMillis / 1000);
       this.position = positionMillis;
+      // Reset track ended flag when seeking (user might seek backwards)
+      this.trackEndedFlag = false;
       this.notifyListeners();
     } catch (error) {
-      console.error('Error seeking within track:', error);
+      console.error('[AudioPlayer] Error seeking within track:', error);
     }
   }
 
@@ -389,6 +460,8 @@ class AudioPlayerService {
       return;
     }
 
+    console.log('[AudioPlayer] Stopping current track:', this.currentTrack?.title);
+
     try {
       if (this.isPlaying) {
         this.sound.pause();
@@ -401,8 +474,9 @@ class AudioPlayerService {
       this.sound.remove();
       this.sound = null;
       this.isPlaying = false;
+      this.trackEndedFlag = false;
     } catch (error) {
-      console.error('Error stopping current track:', error);
+      console.error('[AudioPlayer] Error stopping current track:', error);
       this.sound = null;
       this.isPlaying = false;
       this.clearStatusTimer();
