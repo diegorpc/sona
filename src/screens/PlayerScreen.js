@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image, ImageBackground } from 'react-native';
+import { View, Image, ImageBackground, Easing } from 'react-native';
 import { Text, IconButton, Card, Surface } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
 
@@ -9,6 +9,7 @@ import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/PlayerScreen.styles';
+import TextTicker from 'react-native-text-ticker';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
@@ -145,16 +146,49 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
 
             {/* Track Info */}
             <View style={styles.trackInfo}>
-              <Text style={styles.trackTitle} numberOfLines={2}>
+              <TextTicker
+                style={styles.trackTitle}
+                duration={4000}
+                bounce
+                loop
+                easing={Easing.linear}
+                animationType="bounce"
+                repeatSpacer={50}
+                marqueeDelay={1000}
+                bouncePadding={{ left: 0, right: 5 }}
+                bounceDelay={1000}
+              >
                 {currentTrack.title}
-              </Text>
-              <Text style={styles.trackArtist} numberOfLines={1}>
+              </TextTicker>
+              <TextTicker
+                style={styles.trackArtist}
+                duration={4000}
+                bounce
+                loop
+                easing={Easing.linear}
+                animationType="bounce"
+                repeatSpacer={50}
+                marqueeDelay={1000}
+                bouncePadding={{ left: 0, right: 5 }}
+                bounceDelay={1000}
+              >
                 {currentTrack.artist}
-              </Text>
+              </TextTicker>
               {currentTrack.album && (
-                <Text style={styles.trackAlbum} numberOfLines={1}>
+                <TextTicker
+                  style={styles.trackAlbum}
+                  duration={4000}
+                  bounce
+                  loop
+                  easing={Easing.linear}
+                  animationType="bounce"
+                  repeatSpacer={50}
+                  marqueeDelay={1000}
+                  bouncePadding={{ left: 0, right: 5 }}
+                  bounceDelay={1000}
+                >
                   {currentTrack.album}
-                </Text>
+                </TextTicker>
               )}
             </View>
 

@@ -19,10 +19,10 @@ export const styles = StyleSheet.create({
   blurContainer: {
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: `${theme.colors.surfaceVariant}66`,
+    backgroundColor: `${theme.colors.surface}66`,
   },
   touchablePressed: {
-    backgroundColor: theme.colors.surfaceVariant || theme.colors.surface,
+    backgroundColor: `${theme.colors.surface}30`,
   },
   content: {
     height: MINI_HEIGHT,
@@ -42,27 +42,19 @@ export const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  animatedTextContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  scrollingText: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   title: {
     fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginBottom: -10,
+    marginTop: 4
   },
   artist: {
     fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
-    marginBottom: 8
+    marginBottom: 8,
+    marginTop: 2
   },
   playPause: {
     marginRight: 4,

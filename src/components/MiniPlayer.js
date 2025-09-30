@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Image, Pressable, Animated, Easing } from 'react-native';
+import React from 'react';
+import { View, Image, Pressable, Easing } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { IconButton, Text } from 'react-native-paper';
 import { theme } from '../theme/theme';
+import TextTicker from 'react-native-text-ticker'
 
 import { MINI_HEIGHT, styles } from '../styles/MiniPlayer.styles';
 
@@ -22,92 +23,7 @@ const MiniPlayer = ({
     return null;
   }
 
-  const scrollXTitle = useRef(new Animated.Value(0));
-  const scrollXArtist = useRef(new Animated.Value(0));
-  const [titleWidth, setTitleWidth] = useState(0);
-  const [artistWidth, setArtistWidth] = useState(0);
-  const [titleContainerWidth, setTitleContainerWidth] = useState(0);
-  const [artistContainerWidth, setArtistContainerWidth] = useState(0);
-
-  const measureTextTitle = useCallback(event => {
-    setTitleWidth(event.nativeEvent.layout.width);
-  }, []);
-
-  const measureTextArtist = useCallback(event => {
-    setArtistWidth(event.nativeEvent.layout.width);
-  }, []);
-
-  const handleTitleContainerLayout = useCallback(event => {
-    setTitleContainerWidth(event.nativeEvent.layout.width);
-  }, []);
-
-  const handleArtistContainerLayout = useCallback(event => {
-    setArtistContainerWidth(event.nativeEvent.layout.width);
-  }, []);
-
-  const shouldScrollTitle = useMemo(
-    () => titleWidth > titleContainerWidth + 1 && titleContainerWidth > 0,
-    [titleWidth, titleContainerWidth]
-  );
-
-  const shouldScrollArtist = useMemo(
-    () => artistWidth > artistContainerWidth + 1 && artistContainerWidth > 0,
-    [artistWidth, artistContainerWidth]
-  );
-
   const progress = duration > 0 ? Math.min(position / duration, 1) : 0;
-
-  useEffect(() => {
-    if (!shouldScrollTitle) {
-      scrollXTitle.current.stopAnimation();
-      scrollXTitle.current.setValue(0);
-      return undefined;
-    }
-
-    scrollXTitle.current.stopAnimation();
-    scrollXTitle.current.setValue(0);
-
-    const animation = Animated.loop(
-      Animated.timing(scrollXTitle.current, {
-        toValue: -(titleWidth - titleContainerWidth),
-        duration: duration || 8000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    animation.start();
-
-    return () => {
-      animation.stop();
-    };
-  }, [shouldScrollTitle, titleWidth, titleContainerWidth, duration, track?.title]);
-
-  useEffect(() => {
-    if (!shouldScrollArtist) {
-      scrollXArtist.current.stopAnimation();
-      scrollXArtist.current.setValue(0);
-      return undefined;
-    }
-
-    scrollXArtist.current.stopAnimation();
-    scrollXArtist.current.setValue(0);
-
-    const animation = Animated.loop(
-      Animated.timing(scrollXArtist.current, {
-        toValue: -(artistWidth - artistContainerWidth),
-        duration: duration || 8000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    animation.start();
-
-    return () => {
-      animation.stop();
-    };
-  }, [shouldScrollArtist, artistWidth, artistContainerWidth, duration, track?.artist]);
 
   return (
     <Pressable
@@ -117,7 +33,7 @@ const MiniPlayer = ({
         pressed && styles.touchablePressed,
       ]}
     >
-      <BlurView intensity={85} tint="dark" style={styles.blurContainer}>
+      <BlurView intensity={45} tint="light" style={styles.blurContainer}>
         <View style={styles.content}>
           <Image
             source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
@@ -126,38 +42,40 @@ const MiniPlayer = ({
           />
 
           <View style={styles.infoContainer}>
-            <View style={styles.animatedTextContainer} onLayout={handleTitleContainerLayout}>
-              <Animated.View
-                style={[
-                  styles.scrollingText,
-                  shouldScrollTitle && { transform: [{ translateX: scrollXTitle.current }] },
-                ]}
-                pointerEvents="none"
-              >
-                <Text numberOfLines={1} style={styles.title} onLayout={measureTextTitle}>
-                  {track.title}
-                </Text>
-              </Animated.View>
-            </View>
-            <View style={styles.animatedTextContainer} onLayout={handleArtistContainerLayout}>
-              <Animated.View
-                style={[
-                  styles.scrollingText,
-                  shouldScrollArtist && { transform: [{ translateX: scrollXArtist.current }] },
-                ]}
-                pointerEvents="none"
-              >
-                <Text numberOfLines={1} style={styles.artist} onLayout={measureTextArtist}>
-                  {track.artist || 'Unknown Artist'}
-                </Text>
-              </Animated.View>
-            </View>
+            <TextTicker
+              style={styles.title}
+              duration={4000}
+              bounce
+              loop
+              easing={Easing.linear}
+              animationType="bounce"
+              repeatSpacer={50}
+              marqueeDelay={1000}
+              bouncePadding={{ left: 0, right: 5 }}
+              bounceDelay={1000}
+            >
+              {track.title}
+            </TextTicker>
+            <TextTicker
+              style={styles.artist}
+              duration={4000}
+              bounce
+              loop
+              easing={Easing.linear}
+              animationType="bounce"
+              repeatSpacer={50}
+              marqueeDelay={1000}
+              bouncePadding={{ left: 0, right: 5 }}
+              bounceDelay={1000}
+            >
+              {track.artist || 'Unknown Artist'}
+            </TextTicker>
           </View>
 
           <IconButton
             icon={isLoading ? 'timer-sand' : isPlaying ? 'pause' : 'play'}
             size={24}
-            iconColor={theme.colors.onSurface}
+            iconColor={theme.colors.primary}
             onPress={(event) => {
               event.stopPropagation();
               if (!isLoading) {
