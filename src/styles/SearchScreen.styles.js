@@ -4,7 +4,7 @@ import { theme } from '../theme/theme';
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
     paddingTop: 40,
   },
   header: {
@@ -12,6 +12,14 @@ export const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: theme.colors.surface,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontFamily: 'Lexend_700Bold',
+    color: theme.colors.onSurface,
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowColor: '#9a6bff',
+    marginBottom: 12
   },
   searchbar: {
     borderRadius: 10,
@@ -74,20 +82,26 @@ export const styles = StyleSheet.create({
     marginRight: 6,
   },
   sectionHeader: {
-    paddingVertical: 12,
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
   },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Lexend_700Bold',
-    color: theme.colors.onBackground,
+    marginLeft: 4,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowColor: '#9a6bff',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
+  },
+  itemLeadingIcon: {
+    marginRight: 6,
   },
   loadingText: {
     marginTop: 16,
@@ -99,13 +113,13 @@ export const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 100,
+    paddingTop: 55,
   },
   emptyText: {
     fontSize: 18,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onBackground,
-    marginTop: 16,
+    marginTop: 4,
   },
   emptySubtext: {
     fontSize: 14,

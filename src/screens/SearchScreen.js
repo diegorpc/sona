@@ -259,6 +259,19 @@ export default function SearchScreen({ navigation }) {
       onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
       activeOpacity={0.7}
     >
+      {/* {item.starred ?(
+        <MaterialIcons
+          name="favorite"
+          size={16}
+          color={theme.colors.primary}
+          style={styles.itemLeadingIcon}
+        />
+      ): <MaterialIcons
+          name="favorite-outline"
+          size={16}
+          color={theme.colors.primary}
+          style={styles.itemLeadingIcon}
+        />} */}
       <Image
         source={
           getCoverArtUrl(item)
@@ -401,6 +414,7 @@ export default function SearchScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <Text style={styles.headerTitle}>Search</Text>
         <Searchbar
           placeholder="Search music..."
           onChangeText={handleSearch}

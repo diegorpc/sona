@@ -53,8 +53,7 @@ export const styles = StyleSheet.create({
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
-    marginBottom: 8,
-    marginTop: 2
+    marginBottom: 6,
   },
   playPause: {
     marginRight: 4,
