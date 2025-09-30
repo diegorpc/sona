@@ -11,6 +11,7 @@ import {
   Easing,
   Pressable,
   Dimensions,
+  InteractionManager,
 } from 'react-native';
 import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -135,6 +136,8 @@ export default function LibraryScreen({ navigation }) {
   const [hasMoreData, setHasMoreData] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
   const ITEMS_PER_PAGE = 50;
+  const loadMoreTimeoutRef = useRef(null);
+  const isScrollingRef = useRef(false);
   
   const chipScrollRef = useRef(null);
   const sortTriggerRef = useRef(null);
@@ -508,19 +511,46 @@ export default function LibraryScreen({ navigation }) {
         return;
       }
       
-      for (const playlist of playlistsNeedingCollages) {
-        try {
-          const collageData = await SubsonicAPI.generatePlaylistCollage(playlist.id, 50);
-          if (collageData) {
-            updatedCollages[playlist.id] = collageData;
-            // Update state and cache incrementally as each collage loads
-            setPlaylistCollages(prev => ({ ...prev, [playlist.id]: collageData }));
+      // Wait for interactions to complete before starting background loading
+      InteractionManager.runAfterInteractions(() => {
+        // Batch collage updates to prevent constant re-renders
+        const batchSize = 5;
+        let batchIndex = 0;
+        
+        const loadNextBatch = async () => {
+          const batch = playlistsNeedingCollages.slice(batchIndex, batchIndex + batchSize);
+          if (batch.length === 0) return;
+          
+          const batchUpdates = {};
+          
+          for (const playlist of batch) {
+            try {
+              const collageData = await SubsonicAPI.generatePlaylistCollage(playlist.id, 50);
+              if (collageData) {
+                updatedCollages[playlist.id] = collageData;
+                batchUpdates[playlist.id] = collageData;
+              }
+            } catch (error) {
+              console.error(`Error generating collage for playlist ${playlist.name}:`, error);
+            }
+          }
+          
+          // Only update state if user is not actively scrolling
+          if (!isScrollingRef.current && Object.keys(batchUpdates).length > 0) {
+            setPlaylistCollages(prev => ({ ...prev, ...batchUpdates }));
             CacheService.set('playlistCollages', updatedCollages);
           }
-        } catch (error) {
-          console.error(`Error generating collage for playlist ${playlist.name}:`, error);
-        }
-      }
+          
+          batchIndex += batchSize;
+          
+          // Continue loading next batch after a delay
+          if (batchIndex < playlistsNeedingCollages.length) {
+            setTimeout(loadNextBatch, 300);
+          }
+        };
+        
+        loadNextBatch();
+      });
     } catch (error) {
       console.error('Error in loadPlaylistCollagesAsync:', error);
     }
@@ -539,6 +569,13 @@ export default function LibraryScreen({ navigation }) {
     };
     
     initializeAndLoad();
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (loadMoreTimeoutRef.current) {
+        clearTimeout(loadMoreTimeoutRef.current);
+      }
+    };
   }, [loadLibraryData]);
 
 
@@ -652,8 +689,19 @@ export default function LibraryScreen({ navigation }) {
 
   // Update displayed data when paginated data changes
   useEffect(() => {
-    setDisplayedData(paginatedData);
-    setHasMoreData(paginatedData.length < fullFilteredData.length);
+    // Batch state updates together
+    const hasMore = paginatedData.length < fullFilteredData.length;
+    
+    // Use InteractionManager to defer update if actively scrolling
+    if (isScrollingRef.current) {
+      InteractionManager.runAfterInteractions(() => {
+        setDisplayedData(paginatedData);
+        setHasMoreData(hasMore);
+      });
+    } else {
+      setDisplayedData(paginatedData);
+      setHasMoreData(hasMore);
+    }
   }, [paginatedData, fullFilteredData]);
 
   // Reset pagination when view mode or search changes
@@ -680,12 +728,37 @@ export default function LibraryScreen({ navigation }) {
       return;
     }
     
+    // Clear any existing timeout
+    if (loadMoreTimeoutRef.current) {
+      clearTimeout(loadMoreTimeoutRef.current);
+    }
+    
     setIsLoadingMore(true);
-    setTimeout(() => {
-      setCurrentPage(prev => prev + 1);
-      setIsLoadingMore(false);
-    }, 100); // Small delay to prevent rapid firing
+    
+    // Use InteractionManager to wait for scroll animations to finish
+    loadMoreTimeoutRef.current = setTimeout(() => {
+      InteractionManager.runAfterInteractions(() => {
+        setCurrentPage(prev => prev + 1);
+        setIsLoadingMore(false);
+      });
+    }, 300); // Increased debounce to prevent rapid firing during scroll
   }, [isLoadingMore, hasMoreData, searchQuery]);
+  
+  // Track scroll state to prevent updates during active scrolling
+  const handleScrollBeginDrag = useCallback(() => {
+    isScrollingRef.current = true;
+  }, []);
+  
+  const handleScrollEndDrag = useCallback(() => {
+    // Keep scrolling flag active briefly after drag ends
+    setTimeout(() => {
+      isScrollingRef.current = false;
+    }, 500);
+  }, []);
+  
+  const handleMomentumScrollEnd = useCallback(() => {
+    isScrollingRef.current = false;
+  }, []);
 
   const runViewModeTransition = useCallback(async (mode) => {
     try {
@@ -982,68 +1055,44 @@ export default function LibraryScreen({ navigation }) {
       handleMenuPress(item);
     }, [item]);
 
-    let title, subtitle;
-    
-    switch (viewMode) {
-      case 'artists':
-        title = item.name;
-        subtitle = `${item.albumCount} album${item.albumCount !== 1 ? 's' : ''}`;
-        break;
-      case 'albums':
-        title = item.name;
-        subtitle = item.artist || 'Unknown Artist';
-        break;
-      case 'liked':
-        title = item.title;
-        subtitle = item.artist || 'Unknown Artist';
-        break;
-      case 'playlists':
-        title = item.name;
-        subtitle = `${item.songCount || 0} song${(item.songCount || 0) !== 1 ? 's' : ''}`;
-        break;
-    }
-    
-    // Pre-calculate values to avoid recalculation
-    const imageData = useMemo(() => {
-      let result = null;
+    // Calculate title and subtitle directly (simpler than switch statement)
+    const title = viewMode === 'liked' ? item.title : item.name;
+    const subtitle = useMemo(() => {
       switch (viewMode) {
         case 'artists':
-          result = item?.artistImageUrl || null;
-          break;
+          return `${item.albumCount} album${item.albumCount !== 1 ? 's' : ''}`;
         case 'albums':
-          result = (item.coverArt && SubsonicAPI.baseUrl) ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
-          break;
         case 'liked':
-          result = (item.coverArt && SubsonicAPI.baseUrl) ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
-          break;
+          return item.artist || 'Unknown Artist';
         case 'playlists':
-          const collageData = playlistCollages[item.id];
-          if (collageData) {
-            if (typeof collageData === 'string') {
-              result = collageData;
-            } else if (collageData.type === 'collage') {
-              result = collageData;
-            }
-          }
-          break;
+          return `${item.songCount || 0} song${(item.songCount || 0) !== 1 ? 's' : ''}`;
         default:
-          result = null;
+          return '';
       }
-      
-      
-      return result;
-    }, [item, viewMode, playlistCollages]);
+    }, [viewMode, item.albumCount, item.artist, item.songCount]);
+    
+    // Optimize image data calculation - avoid recreating objects
+    const imageData = useMemo(() => {
+      if (viewMode === 'artists') {
+        return item?.artistImageUrl || null;
+      }
+      if (viewMode === 'albums' || viewMode === 'liked') {
+        return (item.coverArt && SubsonicAPI.baseUrl) ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
+      }
+      if (viewMode === 'playlists') {
+        return playlistCollages[item.id] || null;
+      }
+      return null;
+    }, [viewMode, item.id, item.coverArt, item.artistImageUrl, playlistCollages]);
 
     const duration = useMemo(() => {
-      if (!item.duration) return '';
-      
-      return formatDuration(item.duration);
+      return item.duration ? formatDuration(item.duration) : '';
     }, [item.duration]);
 
     const showDuration = viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
     const showMenu = viewMode === 'liked' || viewMode === 'playlists';
     
-    // Memoized image component
+    // Memoized image component - only re-render when imageData changes
     const imageComponent = useMemo(() => {
       if (viewMode === 'playlists' && imageData && typeof imageData === 'object' && imageData.type === 'collage') {
         return (
@@ -1053,16 +1102,16 @@ export default function LibraryScreen({ navigation }) {
             style={styles.itemImage} 
           />
         );
-      } else {
-        const imageUrl = typeof imageData === 'string' ? imageData : null;
-        return (
-          <Image
-            source={imageUrl ? { uri: imageUrl } : require('../../assets/default-album.png')}
-            style={styles.itemImage}
-            defaultSource={require('../../assets/default-album.png')}
-          />
-        );
       }
+      
+      const imageUrl = typeof imageData === 'string' ? imageData : null;
+      return (
+        <Image
+          source={imageUrl ? { uri: imageUrl } : require('../../assets/default-album.png')}
+          style={styles.itemImage}
+          defaultSource={require('../../assets/default-album.png')}
+        />
+      );
     }, [imageData, viewMode]);
     
     return (
@@ -1104,30 +1153,23 @@ export default function LibraryScreen({ navigation }) {
       </TouchableOpacity>
     );
   }, (prevProps, nextProps) => {
-    // Optimized comparison function - avoid JSON.stringify for better performance
+    // Fast path: check if it's the same item
+    if (prevProps.item === nextProps.item && 
+        prevProps.viewMode === nextProps.viewMode &&
+        prevProps.index === nextProps.index) {
+      return true;
+    }
+    
+    // Check item identity and core props
     if (prevProps.item.id !== nextProps.item.id ||
         prevProps.viewMode !== nextProps.viewMode ||
         prevProps.index !== nextProps.index) {
       return false;
     }
     
-    // Only check playlist collages for playlist view mode
+    // Only check playlist collages reference for playlist view mode
     if (prevProps.viewMode === 'playlists') {
-      const prevCollage = prevProps.playlistCollages[prevProps.item.id];
-      const nextCollage = nextProps.playlistCollages[nextProps.item.id];
-      
-      // Quick reference equality check first
-      if (prevCollage === nextCollage) {
-        return true;
-      }
-      
-      // Deep comparison only if both exist and are objects
-      if (prevCollage && nextCollage && 
-          typeof prevCollage === 'object' && typeof nextCollage === 'object') {
-        return JSON.stringify(prevCollage) === JSON.stringify(nextCollage);
-      }
-      
-      return prevCollage === nextCollage;
+      return prevProps.playlistCollages[prevProps.item.id] === nextProps.playlistCollages[nextProps.item.id];
     }
     
     return true;
@@ -1470,14 +1512,17 @@ export default function LibraryScreen({ navigation }) {
         style={[styles.libraryList, { opacity: listOpacity }]}
         // Performance optimizations
         removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        updateCellsBatchingPeriod={100}
-        initialNumToRender={15}
-        windowSize={5}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={200}
+        initialNumToRender={20}
+        windowSize={10}
         legacyImplementation={false}
         disableVirtualization={false}
         onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.1}
+        onEndReachedThreshold={0.5}
+        onScrollBeginDrag={handleScrollBeginDrag}
+        onScrollEndDrag={handleScrollEndDrag}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
         ListFooterComponent={isLoadingMore ? (
           <View style={styles.listFooter}>
             <ActivityIndicator size="small" color={theme.colors.primary} />

@@ -47,16 +47,15 @@ export const styles = StyleSheet.create({
   albumArtContainer: {
     alignItems: 'center',
     marginTop: 60,
+    marginBottom: 20,
   },
   albumArtCard: {
   },
-
   albumArt: {
     width: 270,
     height: 270,
     objectFit: 'contain',
     backgroundColor: 'transparent'
-
   },
   trackInfo: {
     alignItems: 'center',
@@ -82,6 +81,7 @@ export const styles = StyleSheet.create({
     color: theme.colors.onBackground,
     opacity: 0.6,
     textAlign: 'center',
+    marginBottom: 20,
   },
   progressContainer: {
     paddingHorizontal: 20,
