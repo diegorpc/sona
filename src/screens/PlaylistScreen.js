@@ -12,31 +12,32 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import PlaylistCollage from '../components/PlaylistCollage';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
 import { theme } from '../theme/theme';
-import { styles } from '../styles/AlbumScreen.styles';
+import { styles } from '../styles/PlaylistScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
-export default function AlbumScreen({ route, navigation }) {
-  const { album } = route.params;
+export default function PlaylistScreen({ route, navigation }) {
+  const { playlist } = route.params;
   const { playerState: { currentTrack } } = usePlayer();
-  const [albumData, setAlbumData] = useState(null);
+  const [playlistData, setPlaylistData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    loadAlbumData();
+    loadPlaylistData();
   }, []);
 
-  const loadAlbumData = async () => {
+  const loadPlaylistData = async () => {
     try {
       setIsLoading(true);
-      const data = await SubsonicAPI.getAlbum(album.id);
-      setAlbumData(data);
+      const data = await SubsonicAPI.getPlaylist(playlist.id);
+      setPlaylistData(data);
     } catch (error) {
-      console.error('Error loading album data:', error);
+      console.error('Error loading playlist data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -44,18 +45,18 @@ export default function AlbumScreen({ route, navigation }) {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadAlbumData();
+    await loadPlaylistData();
     setIsRefreshing(false);
   };
 
   const handleSongPress = async (song, index) => {
-    if (!albumData || !albumData.song) return;
+    if (!playlistData || !playlistData.entry) return;
 
     try {
-      await AudioPlayer.playTrack(song, albumData.song, index, {
-        contextName: album.name,
-        contextType: 'album',
-        contextId: album.id,
+      await AudioPlayer.playTrack(song, playlistData.entry, index, {
+        contextName: playlist.name,
+        contextType: 'playlist',
+        contextId: playlist.id,
       });
       expandPlayerOverlay();
     } catch (error) {
@@ -63,26 +64,19 @@ export default function AlbumScreen({ route, navigation }) {
     }
   };
 
-  const playAlbum = async () => {
-    if (!albumData || !albumData.song || albumData.song.length === 0) return;
+  const playPlaylist = async () => {
+    if (!playlistData || !playlistData.entry || playlistData.entry.length === 0) return;
 
     try {
-      await AudioPlayer.playTrack(albumData.song[0], albumData.song, 0, {
-        contextName: album.name,
-        contextType: 'album',
-        contextId: album.id,
+      await AudioPlayer.playTrack(playlistData.entry[0], playlistData.entry, 0, {
+        contextName: playlist.name,
+        contextType: 'playlist',
+        contextId: playlist.id,
       });
       expandPlayerOverlay();
     } catch (error) {
-      console.error('Error playing album:', error);
+      console.error('Error playing playlist:', error);
     }
-  };
-
-  const getCoverArtUrl = () => {
-    if (album.coverArt || albumData?.coverArt) {
-      return SubsonicAPI.getCoverArtUrl(album.coverArt || albumData.coverArt, 300);
-    }
-    return null;
   };
 
   const formatDuration = (seconds) => {
@@ -93,8 +87,8 @@ export default function AlbumScreen({ route, navigation }) {
   };
 
   const getTotalDuration = () => {
-    if (!albumData || !albumData.song) return '';
-    const total = albumData.song.reduce((sum, song) => sum + (song.duration || 0), 0);
+    if (!playlistData || !playlistData.entry) return '';
+    const total = playlistData.entry.reduce((sum, song) => sum + (song.duration || 0), 0);
     const hours = Math.floor(total / 3600);
     const minutes = Math.floor((total % 3600) / 60);
     if (hours > 0) {
@@ -103,24 +97,44 @@ export default function AlbumScreen({ route, navigation }) {
     return `${minutes}m`;
   };
 
+  const getPlaylistImage = () => {
+    // Try to use a collage if we can generate one
+    if (playlistData && playlistData.entry && playlistData.entry.length > 0) {
+      // Use the first song's album art
+      const firstSong = playlistData.entry[0];
+      if (firstSong.coverArt) {
+        return { uri: SubsonicAPI.getCoverArtUrl(firstSong.coverArt, 300) };
+      }
+    }
+    return DEFAULT_ART;
+  };
+
   const SongItem = memo(({ item, index }) => {
     const handlePress = useCallback(() => {
       handleSongPress(item, index);
     }, [item, index]);
 
     const duration = useMemo(() => formatDuration(item.duration), [item.duration]);
+    const coverArtUrl = useMemo(() => {
+      return item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
+    }, [item.coverArt]);
 
     return (
       <TouchableOpacity style={styles.songItem} onPress={handlePress} activeOpacity={0.7}>
         <View style={styles.trackNumber}>
-          <Text style={styles.trackNumberText}>{item.track || index + 1}</Text>
+          <Text style={styles.trackNumberText}>{index + 1}</Text>
         </View>
+        <Image
+          source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+          style={styles.songImage}
+          defaultSource={DEFAULT_ART}
+        />
         <View style={styles.songInfo}>
           <Text style={styles.songTitle} numberOfLines={1}>
             {item.title}
           </Text>
-          {item.artist && item.artist !== album.artist && (
-            <Text style={styles.songArtistText} numberOfLines={1}>
+          {item.artist && (
+            <Text style={styles.songArtist} numberOfLines={1}>
               {item.artist}
             </Text>
           )}
@@ -139,8 +153,8 @@ export default function AlbumScreen({ route, navigation }) {
   const keyExtractor = useCallback((item, index) => item.id || `song-${index}`, []);
 
   const getItemLayout = useCallback((data, index) => ({
-    length: 57,
-    offset: 57 * index,
+    length: 64,
+    offset: 64 * index,
     index,
   }), []);
 
@@ -154,42 +168,21 @@ export default function AlbumScreen({ route, navigation }) {
         <MaterialIcons name="arrow-back" size={24} color={theme.colors.onSurface} />
       </TouchableOpacity>
       <View style={styles.headerContent}>
-        <Image
-          source={getCoverArtUrl() ? { uri: getCoverArtUrl() } : DEFAULT_ART}
-          style={styles.albumImage}
-          defaultSource={DEFAULT_ART}
-        />
+        <Image source={getPlaylistImage()} style={styles.playlistImage} />
         <View style={styles.headerInfo}>
-          <Text style={styles.albumName} numberOfLines={2}>
-            {album.name}
+          <Text style={styles.playlistName} numberOfLines={2}>
+            {playlist.name}
           </Text>
-          <Text style={styles.albumArtist} numberOfLines={1}>
-            {album.artist}
-          </Text>
-          <View style={styles.albumTags}>
-            {album.year && (
-              <View style={styles.tagChip}>
-                <Text style={styles.tagChipText}>{album.year}</Text>
-              </View>
-            )}
-            {albumData && (
-              <View style={styles.tagChip}>
-                <Text style={styles.tagChipText}>
-                  {albumData.songCount} song{albumData.songCount !== 1 ? 's' : ''}
-                </Text>
-              </View>
-            )}
-            {getTotalDuration() && (
-              <View style={styles.tagChip}>
-                <Text style={styles.tagChipText}>{getTotalDuration()}</Text>
-              </View>
-            )}
-            {album.genre && (
-              <View style={styles.tagChip}>
-                <Text style={styles.tagChipText}>{album.genre}</Text>
-              </View>
-            )}
-          </View>
+          {playlistData && (
+            <>
+              <Text style={styles.playlistDetails}>
+                {playlistData.songCount || 0} song{(playlistData.songCount || 0) !== 1 ? 's' : ''}
+              </Text>
+              {getTotalDuration() && (
+                <Text style={styles.playlistDetails}>{getTotalDuration()}</Text>
+              )}
+            </>
+          )}
         </View>
       </View>
     </BlurView>
@@ -197,9 +190,9 @@ export default function AlbumScreen({ route, navigation }) {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <MaterialIcons name="album" size={64} color={theme.colors.outline} />
-      <Text style={styles.emptyText}>No songs in album</Text>
-      <Text style={styles.emptySubtext}>This album is empty</Text>
+      <MaterialIcons name="queue-music" size={64} color={theme.colors.outline} />
+      <Text style={styles.emptyText}>No songs in playlist</Text>
+      <Text style={styles.emptySubtext}>This playlist is empty</Text>
     </View>
   );
 
@@ -219,20 +212,20 @@ export default function AlbumScreen({ route, navigation }) {
         <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.loadingText}>Loading album...</Text>
+            <Text style={styles.loadingText}>Loading playlist...</Text>
           </View>
         </BlurView>
       </ImageBackground>
     );
   }
 
-  if (!albumData) {
+  if (!playlistData) {
     return (
       <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
         <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
           <View style={styles.errorContainer}>
             <MaterialIcons name="error" size={64} color={theme.colors.error} />
-            <Text style={styles.errorText}>Failed to load album</Text>
+            <Text style={styles.errorText}>Failed to load playlist</Text>
             <Text style={styles.errorSubtext}>Please try again later</Text>
           </View>
         </BlurView>
@@ -245,7 +238,7 @@ export default function AlbumScreen({ route, navigation }) {
       <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
         <View style={styles.container}>
           <FlatList
-            data={albumData.song || []}
+            data={playlistData.entry || []}
             renderItem={renderSong}
             keyExtractor={keyExtractor}
             getItemLayout={getItemLayout}
@@ -267,11 +260,11 @@ export default function AlbumScreen({ route, navigation }) {
             windowSize={10}
           />
 
-          {albumData.song && albumData.song.length > 0 && (
+          {playlistData.entry && playlistData.entry.length > 0 && (
             <FAB
               style={styles.fab}
               icon="play-arrow"
-              onPress={playAlbum}
+              onPress={playPlaylist}
               label="Play"
             />
           )}
@@ -280,4 +273,3 @@ export default function AlbumScreen({ route, navigation }) {
     </ImageBackground>
   );
 }
-

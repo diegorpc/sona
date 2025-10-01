@@ -1,28 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   View,
   FlatList,
   TouchableOpacity,
   Image,
+  ImageBackground,
   RefreshControl,
 } from 'react-native';
-import {
-  Text,
-  Card,
-  ActivityIndicator,
-  FAB,
-  IconButton,
-} from 'react-native-paper';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Text, ActivityIndicator, FAB } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
+import { usePlayer } from '../contexts/PlayerContext';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/ArtistScreen.styles';
 
+const DEFAULT_ART = require('../../assets/default-album.png');
+
 export default function ArtistScreen({ route, navigation }) {
   const { artist } = route.params;
+  const { playerState: { currentTrack } } = usePlayer();
   const [artistData, setArtistData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -49,15 +48,14 @@ export default function ArtistScreen({ route, navigation }) {
     setIsRefreshing(false);
   };
 
-  const handleAlbumPress = (album) => {
+  const handleAlbumPress = useCallback((album) => {
     navigation.navigate('Album', { album });
-  };
+  }, [navigation]);
 
   const playAllSongs = async () => {
     if (!artistData || !artistData.album) return;
 
     try {
-      // Get all songs from all albums
       const allSongs = [];
       for (const album of artistData.album) {
         const albumData = await SubsonicAPI.getAlbum(album.id);
@@ -67,7 +65,11 @@ export default function ArtistScreen({ route, navigation }) {
       }
 
       if (allSongs.length > 0) {
-        await AudioPlayer.playTrack(allSongs[0], allSongs, 0);
+        await AudioPlayer.playTrack(allSongs[0], allSongs, 0, {
+          contextName: artist.name,
+          contextType: 'artist',
+          contextId: artist.id,
+        });
         expandPlayerOverlay();
       }
     } catch (error) {
@@ -75,111 +77,184 @@ export default function ArtistScreen({ route, navigation }) {
     }
   };
 
-  const getCoverArtUrl = (album) => {
-    if (album.coverArt) {
-      return SubsonicAPI.getCoverArtUrl(album.coverArt, 300);
+  const getArtistImageUrl = () => {
+    if (artist.artistImageUrl) {
+      return artist.artistImageUrl;
+    }
+    if (artist.id) {
+      return SubsonicAPI.getCoverArtUrl(artist.id, 300);
     }
     return null;
   };
 
-  const renderAlbum = ({ item }) => ( // TODO: add favorites query
-    <TouchableOpacity onPress={() => handleAlbumPress(item)}>
-      <Card style={styles.albumCard}>
-        <View style={styles.albumContent}>
-          <Image
-            source={
-              getCoverArtUrl(item)
-                ? { uri: getCoverArtUrl(item) }
-                : require('../../assets/default-album.png')
-            }
-            style={styles.albumArt}
-            defaultSource={require('../../assets/default-album.png')}
-          />
-          <View style={styles.albumInfo}>
-            <Text style={styles.albumTitle} numberOfLines={2}>
-              {item.name}
-            </Text>
-            {item.year && (
-              <Text style={styles.albumYear}>{item.year}</Text>
-            )}
-            <Text style={styles.albumDetails}>
-              {item.songCount} song{item.songCount !== 1 ? 's' : ''}
-              {item.duration && ` • ${Math.floor(item.duration / 60)} min`}
-            </Text>
+  const getCoverArtUrl = (album) => {
+    if (album.coverArt) {
+      return SubsonicAPI.getCoverArtUrl(album.coverArt, 200);
+    }
+    return null;
+  };
+
+  const AlbumItem = memo(({ item }) => {
+    const handlePress = useCallback(() => {
+      handleAlbumPress(item);
+    }, [item]);
+
+    const coverArtUrl = useMemo(() => getCoverArtUrl(item), [item]);
+
+    return (
+      <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
+        <View style={styles.albumCard}>
+          <View style={styles.albumContent}>
+            <Image
+              source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+              style={styles.albumArt}
+              defaultSource={DEFAULT_ART}
+            />
+            <View style={styles.albumInfo}>
+              <Text style={styles.albumTitle} numberOfLines={2}>
+                {item.name}
+              </Text>
+              {item.year && (
+                <Text style={styles.albumYear}>{item.year}</Text>
+              )}
+              <Text style={styles.albumDetails}>
+                {item.songCount} song{item.songCount !== 1 ? 's' : ''}
+                {item.duration && ` • ${Math.floor(item.duration / 60)} min`}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.albumPlayButton} onPress={handlePress}>
+              <MaterialIcons name="play-arrow" size={24} color={theme.colors.onPrimary} />
+            </TouchableOpacity>
           </View>
-          <IconButton
-            icon="play-arrow"
-            size={24}
-            onPress={() => handleAlbumPress(item)}
-            iconColor={theme.colors.primary}
-          />
         </View>
-      </Card>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  }, (prevProps, nextProps) => prevProps.item.id === nextProps.item.id);
+
+  const renderAlbum = useCallback(({ item }) => {
+    return <AlbumItem item={item} />;
+  }, []);
+
+  const keyExtractor = useCallback((item) => item.id, []);
+
+  const getItemLayout = useCallback((data, index) => ({
+    length: 116,
+    offset: 116 * index,
+    index,
+  }), []);
 
   const renderHeader = () => (
-    <LinearGradient
-      colors={[theme.colors.primary + '40', theme.colors.surface]}
-      style={styles.header}
-    >
-      <View style={styles.artistInfo}>
-        <Text style={styles.artistName}>{artist.name}</Text>
-        {artistData && (
-          <Text style={styles.artistStats}>
-            {artistData.albumCount} album{artistData.albumCount !== 1 ? 's' : ''}
+    <BlurView intensity={40} tint="dark" style={[styles.header, styles.headerBlur]}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.7}
+      >
+        <MaterialIcons name="arrow-back" size={24} color={theme.colors.onSurface} />
+      </TouchableOpacity>
+      <View style={styles.headerContent}>
+        <Image
+          source={getArtistImageUrl() ? { uri: getArtistImageUrl() } : DEFAULT_ART}
+          style={styles.artistImage}
+          defaultSource={DEFAULT_ART}
+        />
+        <View style={styles.headerInfo}>
+          <Text style={styles.artistName} numberOfLines={2}>
+            {artist.name}
           </Text>
-        )}
+          {artistData && (
+            <Text style={styles.artistStats}>
+              {artistData.albumCount} album{artistData.albumCount !== 1 ? 's' : ''}
+            </Text>
+          )}
+        </View>
       </View>
-    </LinearGradient>
+    </BlurView>
   );
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <MaterialIcons name="album" size={64} color={theme.colors.outline} />
+      <Text style={styles.emptyText}>No albums found</Text>
+      <Text style={styles.emptySubtext}>This artist has no albums</Text>
+    </View>
+  );
+
+  const backgroundArt = useMemo(() => {
+    if (currentTrack?.coverArt) {
+      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    }
+    if (currentTrack?.albumId) {
+      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    }
+    return DEFAULT_ART;
+  }, [currentTrack?.albumId, currentTrack?.coverArt]);
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={styles.loadingText}>Loading artist...</Text>
-      </View>
+      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
+        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Loading artist...</Text>
+          </View>
+        </BlurView>
+      </ImageBackground>
     );
   }
 
   if (!artistData) {
     return (
-      <View style={styles.errorContainer}>
-        <MaterialIcons name="error" size={64} color={theme.colors.error} />
-        <Text style={styles.errorText}>Failed to load artist</Text>
-        <Text style={styles.errorSubtext}>Please try again later</Text>
-      </View>
+      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
+        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+          <View style={styles.errorContainer}>
+            <MaterialIcons name="error" size={64} color={theme.colors.error} />
+            <Text style={styles.errorText}>Failed to load artist</Text>
+            <Text style={styles.errorSubtext}>Please try again later</Text>
+          </View>
+        </BlurView>
+      </ImageBackground>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={artistData.album || []}
-        renderItem={renderAlbum}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={[theme.colors.primary]}
+    <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
+      <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+        <View style={styles.container}>
+          <FlatList
+            data={artistData.album || []}
+            renderItem={renderAlbum}
+            keyExtractor={keyExtractor}
+            getItemLayout={getItemLayout}
+            ListHeaderComponent={renderHeader}
+            ListEmptyComponent={renderEmptyState}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                colors={[theme.colors.primary]}
+              />
+            }
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            updateCellsBatchingPeriod={50}
+            initialNumToRender={15}
+            windowSize={10}
           />
-        }
-        showsVerticalScrollIndicator={false}
-      />
 
-      {artistData.album && artistData.album.length > 0 && (
-        <FAB
-          style={styles.fab}
-          icon="play-arrow"
-          onPress={playAllSongs}
-          label="Play All"
-        />
-      )}
-    </View>
+          {artistData.album && artistData.album.length > 0 && (
+            <FAB
+              style={styles.fab}
+              icon="play-arrow"
+              onPress={playAllSongs}
+              label="Play All"
+            />
+          )}
+        </View>
+      </BlurView>
+    </ImageBackground>
   );
 }
 

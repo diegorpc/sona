@@ -70,81 +70,79 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  artistImage: {
+  playlistImage: {
     width: 100,
     height: 100,
-    borderRadius: 50,
+    borderRadius: 8,
     marginRight: 16,
   },
   headerInfo: {
     flex: 1,
     justifyContent: 'center',
   },
-  artistName: {
-    fontSize: 24,
+  playlistName: {
+    fontSize: 22,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
     marginBottom: 6,
   },
-  artistStats: {
-    fontSize: 14,
+  playlistDetails: {
+    fontSize: 13,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
+    marginBottom: 2,
   },
   listContainer: {
     paddingBottom: 100,
-    paddingHorizontal: 8,
   },
-  albumCard: {
-    backgroundColor: 'rgba(30, 30, 30, 0.5)',
-    borderRadius: 12,
-    marginVertical: 6,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(154, 107, 255, 0.15)',
-  },
-  albumContent: {
+  songItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.outline,
   },
-  albumArt: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 14,
+  trackNumber: {
+    width: 32,
+    alignItems: 'center',
+    marginRight: 8,
   },
-  albumInfo: {
+  trackNumberText: {
+    fontSize: 13,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.onSurface,
+    opacity: 0.6,
+  },
+  songImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  songInfo: {
     flex: 1,
     justifyContent: 'center',
   },
-  albumTitle: {
-    fontSize: 16,
+  songTitle: {
+    fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  albumYear: {
-    fontSize: 13,
-    fontFamily: 'Lexend_500Medium',
-    color: theme.colors.primary,
-    marginBottom: 4,
-  },
-  albumDetails: {
+  songArtist: {
     fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.7,
   },
-  albumPlayButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
+  songDuration: {
+    fontSize: 13,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.6,
+    marginRight: 8,
   },
   emptyState: {
     flex: 1,

@@ -4,155 +4,183 @@ import { theme } from '../theme/theme';
 const { width } = Dimensions.get('window');
 
 export const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+  },
+  blurOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 8, 8, 0.77)',
+  },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    padding: 20,
-    paddingBottom: 30,
-  },
-  albumArtContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  albumArtCard: {
-    elevation: 8,
-    borderRadius: 12,
-  },
-  albumArt: {
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: 12,
-  },
-  albumInfo: {
-    alignItems: 'center',
-  },
-  albumTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.colors.onSurface,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  albumArtist: {
-    fontSize: 18,
-    color: theme.colors.onSurface,
-    opacity: 0.8,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  albumMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  metaChip: {
-    backgroundColor: theme.colors.primaryContainer,
-  },
-  metaChipText: {
-    fontSize: 12,
-    color: theme.colors.onPrimaryContainer,
-  },
-  genreContainer: {
-    alignItems: 'center',
-  },
-  genreChip: {
-    backgroundColor: theme.colors.secondaryContainer,
-  },
-  genreChipText: {
-    fontSize: 12,
-    color: theme.colors.onSecondaryContainer,
-  },
-  listContainer: {
-    paddingBottom: 80, // Space for FAB
-  },
-  songCard: {
-    marginHorizontal: 16,
-    marginBottom: 4,
-    backgroundColor: theme.colors.surface,
-  },
-  songContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-  },
-  trackNumber: {
-    width: 32,
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  trackNumberText: {
-    fontSize: 14,
-    color: theme.colors.onSurface,
-    opacity: 0.7,
-  },
-  songInfo: {
-    flex: 1,
-  },
-  songTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: theme.colors.onSurface,
-    marginBottom: 2,
-  },
-  songArtist: {
-    fontSize: 14,
-    color: theme.colors.onSurface,
-    opacity: 0.7,
-  },
-  songActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  duration: {
-    fontSize: 12,
-    color: theme.colors.onSurface,
-    opacity: 0.7,
-    marginRight: 8,
-  },
-  playButton: {
-    margin: 0,
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: 'transparent',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    fontFamily: 'Lexend_500Medium',
     color: theme.colors.onBackground,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
-    padding: 40,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 32,
   },
   errorText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: theme.colors.error,
     marginTop: 16,
-    textAlign: 'center',
+    fontSize: 18,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.error,
   },
   errorSubtext: {
-    fontSize: 16,
+    marginTop: 8,
+    fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onBackground,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  header: {
+    paddingTop: 50,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+  },
+  headerBlur: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(154, 107, 255, 0.2)',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(18, 18, 18, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  albumImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    marginRight: 16,
+  },
+  headerInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  albumName: {
+    fontSize: 22,
+    fontFamily: 'Lexend_700Bold',
+    color: theme.colors.onSurface,
+    marginBottom: 4,
+  },
+  albumArtist: {
+    fontSize: 15,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.onSurface,
+    opacity: 0.8,
+    marginBottom: 8,
+  },
+  albumTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  tagChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: 'rgba(154, 107, 255, 0.2)',
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  tagChipText: {
+    fontSize: 11,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.primary,
+  },
+  listContainer: {
+    paddingBottom: 100,
+  },
+  songItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.outline,
+  },
+  trackNumber: {
+    width: 32,
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  trackNumberText: {
+    fontSize: 13,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.onSurface,
+    opacity: 0.6,
+  },
+  songInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  songTitle: {
+    fontSize: 14,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+    marginBottom: 2,
+  },
+  songArtistText: {
+    fontSize: 12,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.7,
+  },
+  songDuration: {
+    fontSize: 13,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.6,
+    marginRight: 8,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onBackground,
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onBackground,
     opacity: 0.7,
     textAlign: 'center',
     marginTop: 8,
+    paddingHorizontal: 32,
   },
   fab: {
     position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
+    right: 16,
+    bottom: 100,
     backgroundColor: theme.colors.primary,
   },
 });

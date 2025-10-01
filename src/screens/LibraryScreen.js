@@ -1022,7 +1022,7 @@ export default function LibraryScreen({ navigation }) {
         expandPlayerOverlay();
         break;
       case 'playlists':
-        // TODO: Navigate to playlist screen when implemented
+        navigation.navigate('Playlist', { playlist: item });
         break;
       default:
         break;
