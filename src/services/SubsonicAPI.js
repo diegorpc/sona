@@ -133,12 +133,33 @@ class SubsonicAPI {
   }
 
   // Get paginated album lists with sorting
-  async getAlbumList(type = 'alphabeticalByName', size = 50, offset = 0) {
+  // Valid types: random, newest, highest, frequent, recent, alphabeticalByName, alphabeticalByArtist, starred, byYear, byGenre
+  async getAlbumList(type = 'alphabeticalByName', size = 500, offset = 0) {
     const params = { type, size };
     if (offset) params.offset = offset;
 
     const response = await this.request('getAlbumList2', params);
     return response.albumList2?.album || [];
+  }
+
+  // Get all albums for a specific sort type (fetches in batches)
+  async getAllAlbums(type = 'alphabeticalByName', maxAlbums = 2000) {
+    const batchSize = 500;
+    let allAlbums = [];
+    let offset = 0;
+    
+    while (allAlbums.length < maxAlbums) {
+      const batch = await this.getAlbumList(type, batchSize, offset);
+      if (!batch || batch.length === 0) break;
+      
+      allAlbums.push(...batch);
+      offset += batchSize;
+      
+      // If we got fewer than batchSize, we've reached the end
+      if (batch.length < batchSize) break;
+    }
+    
+    return allAlbums.slice(0, maxAlbums);
   }
 
   // Search for music

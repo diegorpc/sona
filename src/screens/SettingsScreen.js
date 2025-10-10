@@ -14,11 +14,14 @@ import {
   Dialog,
   Portal,
   TextInput,
+  ProgressBar,
 } from 'react-native-paper';
 import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Slider from '@react-native-community/slider';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import CacheService from '../services/CacheService';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/SettingsScreen.styles';
 
@@ -34,11 +37,26 @@ export default function SettingsScreen({ navigation }) {
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [cacheStats, setCacheStats] = useState(null);
+  const [maxCacheSize, setMaxCacheSize] = useState(500); // MB
+  const [showCacheDialog, setShowCacheDialog] = useState(false);
 
   useEffect(() => {
     loadServerInfo();
     loadSettings();
+    loadCacheStats();
   }, []);
+
+  const loadCacheStats = async () => {
+    try {
+      await CacheService.initialize();
+      const stats = await CacheService.getStats();
+      setCacheStats(stats);
+      setMaxCacheSize(stats.maxSizeMB);
+    } catch (error) {
+      console.error('Error loading cache stats:', error);
+    }
+  };
 
   const loadServerInfo = async () => {
     try {
@@ -132,30 +150,38 @@ export default function SettingsScreen({ navigation }) {
   const clearCache = async () => {
     Alert.alert(
       'Clear Cache',
-      'This will clear all cached music and images. Continue?',
+      `This will clear ${cacheStats?.totalSizeMB || 0} MB of cached data. Continue?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear',
+          style: 'destructive',
           onPress: async () => {
             try {
-              // Clear specific cache keys
-              const keys = await AsyncStorage.getAllKeys();
-              const cacheKeys = keys.filter(key => 
-                key.startsWith('cache_') || 
-                key.startsWith('image_') ||
-                key === 'currentTrack' ||
-                key === 'currentPlaylist'
-              );
-              await AsyncStorage.multiRemove(cacheKeys);
+              await CacheService.clearAll();
+              await loadCacheStats();
               Alert.alert('Success', 'Cache cleared successfully');
             } catch (error) {
               Alert.alert('Error', 'Failed to clear cache');
+              console.error('Error clearing cache:', error);
             }
           },
         },
       ]
     );
+  };
+
+  const handleMaxCacheSizeChange = async (newSize) => {
+    try {
+      await CacheService.setMaxSize(newSize);
+      setMaxCacheSize(newSize);
+      await loadCacheStats();
+      setShowCacheDialog(false);
+      Alert.alert('Success', `Maximum cache size set to ${newSize} MB`);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update cache size');
+      console.error('Error updating cache size:', error);
+    }
   };
 
   return (
@@ -247,10 +273,41 @@ export default function SettingsScreen({ navigation }) {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Storage</Text>
+          <Text style={styles.sectionTitle}>Storage & Cache</Text>
+          
+          {cacheStats && (
+            <>
+              <View style={styles.cacheStatsContainer}>
+                <View style={styles.cacheStatRow}>
+                  <Text style={styles.cacheStatLabel}>Cache Usage</Text>
+                  <Text style={styles.cacheStatValue}>
+                    {cacheStats.totalSizeMB} MB / {cacheStats.maxSizeMB} MB
+                  </Text>
+                </View>
+                <ProgressBar
+                  progress={Math.min(cacheStats.totalSizeBytes / (cacheStats.maxSizeMB * 1024 * 1024), 1)}
+                  color={theme.colors.primary}
+                  style={styles.progressBar}
+                />
+                <View style={styles.cacheStatRow}>
+                  <Text style={styles.cacheStatLabel}>Cached Items</Text>
+                  <Text style={styles.cacheStatValue}>{cacheStats.entryCount}</Text>
+                </View>
+              </View>
+              <Divider style={styles.divider} />
+            </>
+          )}
+
+          <List.Item
+            title="Maximum Cache Size"
+            description={`Currently set to ${maxCacheSize} MB`}
+            left={props => <List.Icon {...props} icon="database" />}
+            onPress={() => setShowCacheDialog(true)}
+          />
+          <Divider />
           <List.Item
             title="Clear Cache"
-            description="Clear cached music and images"
+            description={cacheStats ? `Clear ${cacheStats.totalSizeMB} MB of cached data` : 'Clear all cached data'}
             left={props => <List.Icon {...props} icon="delete-sweep" />}
             onPress={clearCache}
           />
@@ -318,6 +375,37 @@ export default function SettingsScreen({ navigation }) {
           <Dialog.Actions>
             <Button onPress={() => setShowServerDialog(false)}>Cancel</Button>
             <Button onPress={handleServerUpdate}>Update</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={showCacheDialog} onDismiss={() => setShowCacheDialog(false)}>
+          <Dialog.Title>Maximum Cache Size</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.dialogDescription}>
+              Set the maximum amount of storage the app can use for caching library data.
+            </Text>
+            <View style={styles.sliderContainer}>
+              <Text style={styles.sliderLabel}>{maxCacheSize} MB</Text>
+              <Slider
+                style={styles.slider}
+                minimumValue={100}
+                maximumValue={20000}
+                step={50}
+                value={maxCacheSize}
+                onValueChange={setMaxCacheSize}
+                minimumTrackTintColor={theme.colors.primary}
+                maximumTrackTintColor={theme.colors.outline}
+                thumbTintColor={theme.colors.primary}
+              />
+              <View style={styles.sliderLabels}>
+                <Text style={styles.sliderLabelSmall}>100 MB</Text>
+                <Text style={styles.sliderLabelSmall}>20 GB</Text>
+              </View>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowCacheDialog(false)}>Cancel</Button>
+            <Button onPress={() => handleMaxCacheSizeChange(maxCacheSize)}>Apply</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

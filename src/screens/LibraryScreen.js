@@ -37,17 +37,48 @@ const CHIP_DEFINITIONS = [
   { key: 'artists', label: 'Artists' },
 ];
 
-const BASE_SORT_OPTIONS = [
+// Sort options for liked songs
+const LIKED_SORT_OPTIONS = [
   { key: 'recentlyListened', label: 'Recently Listened', icon: 'history' },
   { key: 'recentlyAdded', label: 'Recently Added', icon: 'library-add' },
   { key: 'dateLoved', label: 'Date Loved', icon: 'favorite' },
   { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
 ];
 
-const DEFAULT_SORT_OPTION = 'recentlyListened';
-const LIKED_DEFAULT_SORT_OPTION = 'dateLoved';
+// Sort options for playlists
+const PLAYLIST_SORT_OPTIONS = [
+  { key: 'default', label: 'Default', icon: 'list' },
+  { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
+];
 
-const SORT_OPTION_LABELS = BASE_SORT_OPTIONS.reduce((acc, option) => {
+// Sort options for artists
+const ARTIST_SORT_OPTIONS = [
+  { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
+  { key: 'albumCount', label: 'Album Count', icon: 'album' },
+];
+
+// Sort options for albums
+const ALBUM_SORT_OPTIONS = [
+  { key: 'recent', label: 'Recently Listened', icon: 'history' },
+  { key: 'newest', label: 'Recently Added', icon: 'new-releases' },
+  { key: 'frequent', label: 'Frequently Listened', icon: 'repeat' },
+  { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
+];
+
+const DEFAULT_SORT_OPTION = 'dateLoved';
+const LIKED_DEFAULT_SORT_OPTION = 'dateLoved';
+const PLAYLIST_DEFAULT_SORT_OPTION = 'alphabetical';
+const ARTIST_DEFAULT_SORT_OPTION = 'alphabetical';
+const ALBUM_DEFAULT_SORT_OPTION = 'newest';
+
+const ALL_SORT_OPTIONS = [
+  ...LIKED_SORT_OPTIONS,
+  ...PLAYLIST_SORT_OPTIONS,
+  ...ARTIST_SORT_OPTIONS,
+  ...ALBUM_SORT_OPTIONS,
+];
+
+const SORT_OPTION_LABELS = ALL_SORT_OPTIONS.reduce((acc, option) => {
   acc[option.key] = option.label;
   return acc;
 }, {});
@@ -138,12 +169,14 @@ export default function LibraryScreen({ navigation }) {
   const ITEMS_PER_PAGE = 50;
   const loadMoreTimeoutRef = useRef(null);
   const isScrollingRef = useRef(false);
+  const flatListRef = useRef(null);
   
   const chipScrollRef = useRef(null);
   const sortTriggerRef = useRef(null);
-  const listOpacity = useRef(new Animated.Value(1)).current;
+  const listOpacity = useRef(new Animated.Value(0)).current; // Start at 0 to prevent flash
   const isAnimatingList = useRef(false);
   const hasLoadedInitialData = useRef(false);
+  const currentViewModeData = useRef(null); // Track current view data to prevent race conditions
   const chipAnimations = useRef({}).current;
   const chipHighlightAnimations = useRef({}).current;
   const previousActiveChipRef = useRef('liked');
@@ -155,75 +188,113 @@ export default function LibraryScreen({ navigation }) {
   const [chipSectionHeight, setChipSectionHeight] = useState(CHIP_SECTION_DEFAULT_HEIGHT);
   const sortMenuAnimation = useRef(new Animated.Value(0)).current;
 
-  const sortComparator = useMemo(() => {
+  // Helper function to create sort comparator with explicit parameters
+  const createSortComparator = useCallback((targetSortOption, targetViewMode) => {
     // Base alphabetical comparator shared across all sort modes.
     const alphabeticalCompare = (a, b) => {
-      const aName = getItemDisplayName(a, viewMode).toLowerCase();
-      const bName = getItemDisplayName(b, viewMode).toLowerCase();
+      const aName = getItemDisplayName(a, targetViewMode).toLowerCase();
+      const bName = getItemDisplayName(b, targetViewMode).toLowerCase();
       return aName.localeCompare(bName, undefined, ALPHABETICAL_COMPARE_OPTIONS);
     };
 
-    // When the user explicitly picks "Alphabetical", short-circuit to the base comparator.
-    if (sortOption === 'alphabetical') {
+    // Alphabetical sorting
+    if (targetSortOption === 'alphabetical') {
       return alphabeticalCompare;
     }
 
-    if (sortOption === 'recentlyAdded') {
-      // Prefer items most recently added to the library
+    // Playlist-specific sorting
+    if (targetViewMode === 'playlists') {
+      if (targetSortOption === 'default') {
+        // Keep original order from API
+        return () => 0;
+      }
+      return alphabeticalCompare;
+    }
+
+    // Artist-specific sorting
+    if (targetViewMode === 'artists') {
+      if (targetSortOption === 'albumCount') {
+        return (a, b) => {
+          const aCount = a?.albumCount || 0;
+          const bCount = b?.albumCount || 0;
+          if (aCount !== bCount) {
+            return bCount - aCount; // Descending
+          }
+          return alphabeticalCompare(a, b);
+        };
+      }
+      return alphabeticalCompare;
+    }
+
+    // Album-specific sorting (albums are fetched with correct sort from API)
+    if (targetViewMode === 'albums') {
+      // Albums are already sorted by the API, but we apply alphabetical as fallback
+      if (targetSortOption === 'alphabetical') {
+        return alphabeticalCompare;
+      }
+      // For other album sorts (recent, newest, frequent), maintain API order
+      return () => 0;
+    }
+
+    // Liked songs sorting
+    if (targetSortOption === 'recentlyAdded') {
       const dateFields = ['created', 'dateAdded', 'dateCreated', 'updated', 'starred'];
       return (a, b) => {
         const aValue = getFirstAvailableTimestamp(a, dateFields);
         const bValue = getFirstAvailableTimestamp(b, dateFields);
-
         if (aValue !== bValue) {
           return bValue - aValue;
         }
-
         return alphabeticalCompare(a, b);
       };
     }
 
-    if (sortOption === 'dateLoved') {
-      // Prefer items most recently favorited (starred), fall back to creation timestamp
+    if (targetSortOption === 'dateLoved') {
       const dateFields = ['starred', 'dateLoved', 'dateFavorited', 'created', 'dateAdded'];
       return (a, b) => {
         const aValue = getFirstAvailableTimestamp(a, dateFields);
         const bValue = getFirstAvailableTimestamp(b, dateFields);
-
         if (aValue !== bValue) {
           return bValue - aValue;
         }
-
         return alphabeticalCompare(a, b);
       };
     }
 
-    // Default to recently listened
+    // Default: recently listened
     const dateFields = ['lastPlayed', 'playedDate', 'played', 'recentPlayed', 'created'];
     return (a, b) => {
       const aValue = getFirstAvailableTimestamp(a, dateFields);
       const bValue = getFirstAvailableTimestamp(b, dateFields);
-
       if (aValue !== bValue) {
         return bValue - aValue;
       }
-
       const aCount = typeof a?.playCount === 'number' ? a.playCount : (a?.songCount ?? 0);
       const bCount = typeof b?.playCount === 'number' ? b.playCount : (b?.songCount ?? 0);
-
       if (aCount !== bCount) {
         return bCount - aCount;
       }
-
       return alphabeticalCompare(a, b);
     };
-  }, [sortOption, viewMode]);
+  }, []);
+
+  const sortComparator = useMemo(() => {
+    return createSortComparator(sortOption, viewMode);
+  }, [sortOption, viewMode, createSortComparator]);
 
   const sortOptions = useMemo(() => {
-    if (viewMode === 'liked') {
-      return BASE_SORT_OPTIONS;
+    switch (viewMode) {
+      case 'liked':
+        return LIKED_SORT_OPTIONS;
+      case 'playlists':
+        return PLAYLIST_SORT_OPTIONS;
+      case 'artists':
+        return ARTIST_SORT_OPTIONS;
+      case 'albums':
+        return ALBUM_SORT_OPTIONS;
+      default:
+        return LIKED_SORT_OPTIONS;
     }
-    return BASE_SORT_OPTIONS.filter(option => option.key !== 'dateLoved');
   }, [viewMode]);
 
   useEffect(() => {
@@ -289,14 +360,24 @@ export default function LibraryScreen({ navigation }) {
     previousActiveChipRef.current = activeChip;
   }, [activeChip, chipHighlightAnimations]);
 
-  useEffect(() => {
-    if (viewMode === 'liked') {
-      setSortOption(prev => (prev === LIKED_DEFAULT_SORT_OPTION ? prev : LIKED_DEFAULT_SORT_OPTION));
-      return;
-    }
+  // Track previous view mode to detect actual changes
+  const previousViewModeRef = useRef(viewMode);
+  const pendingViewModeChange = useRef(null);
 
-    if (sortOption === LIKED_DEFAULT_SORT_OPTION) {
-      setSortOption(DEFAULT_SORT_OPTION);
+  useEffect(() => {
+    // Only reset sort when view mode actually changes
+    if (previousViewModeRef.current !== viewMode) {
+      const defaultSortByView = {
+        liked: LIKED_DEFAULT_SORT_OPTION,
+        playlists: PLAYLIST_DEFAULT_SORT_OPTION,
+        artists: ARTIST_DEFAULT_SORT_OPTION,
+        albums: ALBUM_DEFAULT_SORT_OPTION,
+      };
+
+      const defaultSort = defaultSortByView[viewMode] || DEFAULT_SORT_OPTION;
+      setSortOption(defaultSort);
+      
+      previousViewModeRef.current = viewMode;
     }
   }, [viewMode]);
 
@@ -316,6 +397,9 @@ export default function LibraryScreen({ navigation }) {
 
   const loadLibraryData = useCallback(async (shouldAnimate = true, forceRefresh = false) => {
     try {
+      // Initialize cache service
+      await CacheService.initialize();
+      
       // Only set loading state if this is the initial load
       if (!hasLoadedInitialData.current) {
         setIsLoading(true);
@@ -323,11 +407,11 @@ export default function LibraryScreen({ navigation }) {
 
       // Check cache first (unless forcing refresh)
       if (!forceRefresh) {
-        const cachedArtists = CacheService.get('artists');
-        const cachedAlbums = CacheService.get('albums');
-        const cachedLikedSongs = CacheService.get('likedSongs');
-        const cachedPlaylists = CacheService.get('playlists');
-        const cachedPlaylistCollages = CacheService.get('playlistCollages');
+        const cachedArtists = await CacheService.getAsync('artists');
+        const cachedAlbums = await CacheService.getAsync(`albums_${sortOption}`);
+        const cachedLikedSongs = await CacheService.getAsync('likedSongs');
+        const cachedPlaylists = await CacheService.getAsync('playlists');
+        const cachedPlaylistCollages = await CacheService.getAsync('playlistCollages');
 
         if (cachedArtists && cachedAlbums && cachedLikedSongs && cachedPlaylists) {
           setArtists(cachedArtists);
@@ -336,10 +420,13 @@ export default function LibraryScreen({ navigation }) {
           setPlaylists(cachedPlaylists);
           setPlaylistCollages(cachedPlaylistCollages || {});
           
+          const wasInitialLoad = !hasLoadedInitialData.current;
           setIsLoading(false);
           hasLoadedInitialData.current = true;
           
-          if (shouldAnimate) {
+          // Always animate on initial load to fade in from opacity 0
+          if (shouldAnimate || wasInitialLoad) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
             await animateListOpacityTo(1, 400);
           }
           return;
@@ -347,7 +434,7 @@ export default function LibraryScreen({ navigation }) {
       }
 
       // Load artists
-      let allArtists = CacheService.get('artists');
+      let allArtists = await CacheService.getAsync('artists');
       if (!allArtists || forceRefresh) {
         const artistsData = await SubsonicAPI.getArtists();
         allArtists = [];
@@ -358,9 +445,12 @@ export default function LibraryScreen({ navigation }) {
             }
           });
         }
+        await CacheService.set('artists', allArtists);
       }
+      setArtists(allArtists);
 
-      const cachedArtistImages = CacheService.get('artistImages') || {};
+      // Load artist images (cached separately for efficiency)
+      const cachedArtistImages = await CacheService.getAsync('artistImages') || {};
       const updatedArtistImages = { ...cachedArtistImages };
       const shouldUseCachedImages = !forceRefresh;
 
@@ -396,42 +486,43 @@ export default function LibraryScreen({ navigation }) {
         })
       );
 
-      CacheService.set('artistImages', updatedArtistImages);
+      await CacheService.set('artistImages', updatedArtistImages);
       allArtists = enrichedArtists;
-      CacheService.set('artists', allArtists);
+      await CacheService.set('artists', allArtists);
       setArtists(allArtists);
 
-      // Load albums from artists
-      let allAlbums = CacheService.get('albums');
+      // Load albums using proper API with sort type
+      const albumSortTypeMap = {
+        recent: 'recent',
+        newest: 'newest',
+        frequent: 'frequent',
+        alphabetical: 'alphabeticalByName',
+      };
+      
+      const albumCacheKey = `albums_${sortOption}`;
+      let allAlbums = await CacheService.getAsync(albumCacheKey);
+      
       if (!allAlbums || forceRefresh) {
-        allAlbums = [];
-        const artistsToLoad = allArtists.slice(0, 10);
-        for (const artist of artistsToLoad) {
-          try {
-            const artistData = await SubsonicAPI.getArtist(artist.id);
-            if (artistData && artistData.album) {
-              allAlbums.push(...artistData.album);
-            }
-          } catch (error) {
-            console.error(`Error loading albums for artist ${artist.name}:`, error);
-          }
-        }
-        CacheService.set('albums', allAlbums);
+        const apiSortType = albumSortTypeMap[sortOption] || 'recent';
+        console.log(`Loading albums with sort type: ${apiSortType}`);
         
-        // Load more albums in the background
-        if (allArtists.length > 10) {
-          loadMoreAlbumsAsync(allArtists.slice(10, 30), allAlbums);
+        try {
+          allAlbums = await SubsonicAPI.getAllAlbums(apiSortType, 2000);
+          await CacheService.set(albumCacheKey, allAlbums);
+        } catch (error) {
+          console.error('Error loading albums:', error);
+          allAlbums = [];
         }
       }
       setAlbums(allAlbums);
 
       // Load liked/starred songs
-      let likedSongsData = CacheService.get('likedSongs');
+      let likedSongsData = await CacheService.getAsync('likedSongs');
       if (!likedSongsData || forceRefresh) {
         try {
           const starredData = await SubsonicAPI.getStarred();
           likedSongsData = starredData && starredData.song ? starredData.song : [];
-          CacheService.set('likedSongs', likedSongsData);
+          await CacheService.set('likedSongs', likedSongsData);
         } catch (error) {
           console.error('Error loading liked songs:', error);
           likedSongsData = [];
@@ -440,12 +531,12 @@ export default function LibraryScreen({ navigation }) {
       setLikedSongs(likedSongsData);
 
       // Load playlists
-      let playlistsData = CacheService.get('playlists');
+      let playlistsData = await CacheService.getAsync('playlists');
       if (!playlistsData || forceRefresh) {
         try {
           const playlistsResponse = await SubsonicAPI.getPlaylists();
           playlistsData = playlistsResponse && playlistsResponse.playlist ? playlistsResponse.playlist : [];
-          CacheService.set('playlists', playlistsData);
+          await CacheService.set('playlists', playlistsData);
         } catch (error) {
           console.error('Error loading playlists:', error);
           playlistsData = [];
@@ -454,7 +545,7 @@ export default function LibraryScreen({ navigation }) {
       setPlaylists(playlistsData);
 
       // Load cached playlist collages immediately (non-blocking)
-      let cachedCollages = CacheService.get('playlistCollages') || {};
+      let cachedCollages = await CacheService.getAsync('playlistCollages') || {};
       setPlaylistCollages(cachedCollages);
       
       // Asynchronously load missing collages in the background
@@ -473,28 +564,34 @@ export default function LibraryScreen({ navigation }) {
         await animateListOpacityTo(1, 400);
       }
     }
-  }, [animateListOpacityTo]);
+  }, [animateListOpacityTo, sortOption]);
 
-  const loadMoreAlbumsAsync = useCallback(async (additionalArtists, currentAlbums) => {
+  // Load albums with specific sort when needed - returns the albums directly
+  const loadAlbumsWithSort = useCallback(async (albumSortOption) => {
     try {
-      const newAlbums = [...currentAlbums];
+      const albumSortTypeMap = {
+        recent: 'recent',
+        newest: 'newest',
+        frequent: 'frequent',
+        alphabetical: 'alphabeticalByName',
+      };
       
-      for (const artist of additionalArtists) {
-        try {
-          const artistData = await SubsonicAPI.getArtist(artist.id);
-          if (artistData && artistData.album) {
-            newAlbums.push(...artistData.album);
-          }
-        } catch (error) {
-          console.error(`Error loading albums for artist ${artist.name}:`, error);
-        }
+      const albumCacheKey = `albums_${albumSortOption}`;
+      let allAlbums = await CacheService.getAsync(albumCacheKey);
+      
+      if (!allAlbums) {
+        const apiSortType = albumSortTypeMap[albumSortOption] || 'recent';
+        console.log(`Loading albums with sort type: ${apiSortType}`);
+        
+        allAlbums = await SubsonicAPI.getAllAlbums(apiSortType, 2000);
+        await CacheService.set(albumCacheKey, allAlbums);
       }
       
-      // Update cache and state with additional albums
-      CacheService.set('albums', newAlbums);
-      setAlbums(newAlbums);
+      setAlbums(allAlbums);
+      return allAlbums; // Return the albums for immediate use
     } catch (error) {
-      console.error('Error in loadMoreAlbumsAsync:', error);
+      console.error('Error loading albums with sort:', error);
+      return [];
     }
   }, []);
 
@@ -538,7 +635,7 @@ export default function LibraryScreen({ navigation }) {
           // Only update state if user is not actively scrolling
           if (!isScrollingRef.current && Object.keys(batchUpdates).length > 0) {
             setPlaylistCollages(prev => ({ ...prev, ...batchUpdates }));
-            CacheService.set('playlistCollages', updatedCollages);
+            await CacheService.set('playlistCollages', updatedCollages);
           }
           
           batchIndex += batchSize;
@@ -561,7 +658,7 @@ export default function LibraryScreen({ navigation }) {
       // Ensure SubsonicAPI is initialized before loading data
       const isConfigured = await SubsonicAPI.loadConfiguration();
       if (isConfigured) {
-        loadLibraryData(false);
+        loadLibraryData(true); // Animate on initial load to fade in from opacity 0
       } else {
         console.error('SubsonicAPI not configured. Redirecting to login...');
         // Handle case where API is not configured
@@ -624,6 +721,10 @@ export default function LibraryScreen({ navigation }) {
     };
 
     const baseData = dataByView[viewMode] || [];
+    
+    // Store current view data to prevent race conditions
+    currentViewModeData.current = baseData;
+    
     if (baseData.length === 0) {
       return [];
     }
@@ -689,14 +790,22 @@ export default function LibraryScreen({ navigation }) {
 
   // Update displayed data when paginated data changes
   useEffect(() => {
+    // Don't update during view transitions to prevent race conditions
+    if (isAnimatingList.current || pendingViewModeChange.current) {
+      return;
+    }
+    
     // Batch state updates together
     const hasMore = paginatedData.length < fullFilteredData.length;
     
     // Use InteractionManager to defer update if actively scrolling
     if (isScrollingRef.current) {
       InteractionManager.runAfterInteractions(() => {
-        setDisplayedData(paginatedData);
-        setHasMoreData(hasMore);
+        // Double-check animation state before updating
+        if (!isAnimatingList.current && !pendingViewModeChange.current) {
+          setDisplayedData(paginatedData);
+          setHasMoreData(hasMore);
+        }
       });
     } else {
       setDisplayedData(paginatedData);
@@ -762,55 +871,95 @@ export default function LibraryScreen({ navigation }) {
 
   const runViewModeTransition = useCallback(async (mode) => {
     try {
+      // Mark transition as pending
+      pendingViewModeChange.current = mode;
+      
       // Fade out the library content FIRST
       await animateListOpacityTo(0, 300);
       
-      // THEN set view mode while content is hidden to prevent flash
-      setViewMode(mode);
+      // Get default sort for the new mode
+      const defaultSortByView = {
+        liked: LIKED_DEFAULT_SORT_OPTION,
+        playlists: PLAYLIST_DEFAULT_SORT_OPTION,
+        artists: ARTIST_DEFAULT_SORT_OPTION,
+        albums: ALBUM_DEFAULT_SORT_OPTION,
+      };
+      const targetSort = defaultSortByView[mode] || DEFAULT_SORT_OPTION;
       
-      // Check if we need to load data
+      // For albums, load the correct sort data BEFORE switching
+      let albumsForMode = albums;
+      if (mode === 'albums') {
+        albumsForMode = await loadAlbumsWithSort(targetSort);
+      }
+      
+      // Check if we need to load other data
       const dataByView = {
         artists,
-        albums,
+        albums: albumsForMode,
         liked: likedSongs,
         playlists,
       };
       
       const hasDataForMode = (dataByView[mode] || []).length > 0;
       
-      if (!hasDataForMode) {
-        // Only reload data if we don't have it cached
+      if (!hasDataForMode && mode !== 'albums') {
+        // Only reload data if we don't have it cached (albums already loaded above)
         await loadLibraryData(false);
       }
       
-      // Reset pagination and clear old data now that we're hidden
+      // NOW set view mode while content is hidden
+      setViewMode(mode);
+      
+      // Reset pagination
       setCurrentPage(0);
       
-      // Wait for next render frame to ensure view mode and data are processed
+      // Scroll to top
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      
+      // Wait for state updates
+      await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       
-      // Force update displayed data after transition
+      // Get fresh data with correct albums
       const dataByViewAfter = {
         artists,
-        albums,
+        albums: albumsForMode,
         liked: likedSongs,
         playlists,
       };
-      const newData = dataByViewAfter[mode] || [];
-      const endIndex = ITEMS_PER_PAGE;
-      setDisplayedData(newData.slice(0, endIndex));
       
-      // Fade in the library once everything is ready
+      // Apply sorting to the correct data with correct sort option
+      const baseData = dataByViewAfter[mode] || [];
+      const comparator = createSortComparator(targetSort, mode);
+      const sortedData = baseData.slice().sort(comparator);
+      const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
+      
+      // Force update displayed data with correct sorted data
+      setDisplayedData(paginatedNewData);
+      setHasMoreData(sortedData.length > ITEMS_PER_PAGE);
+      
+      // Wait for React to complete render cycle with new data
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Fade in the library once everything is ready and rendered
       await animateListOpacityTo(1, 400);
+      
+      pendingViewModeChange.current = null;
       
     } catch (error) {
       console.error('Error in view mode transition:', error);
       setViewMode(mode);
       await animateListOpacityTo(1, 400);
+      pendingViewModeChange.current = null;
     } finally {
       isAnimatingList.current = false;
     }
-  }, [animateListOpacityTo, loadLibraryData, artists, albums, likedSongs, playlists]);
+  }, [animateListOpacityTo, loadLibraryData, artists, albums, likedSongs, playlists, createSortComparator]);
 
   const handleViewModePress = useCallback((mode) => {
     if (mode === activeChip || isAnimatingList.current) {
@@ -950,10 +1099,47 @@ export default function LibraryScreen({ navigation }) {
     await closeSortMenu();
 
     try {
-      await animateListOpacityTo(0, 400);
+      // Fade out
+      await animateListOpacityTo(0, 300);
+      
+      // Scroll to top
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      
+      // If changing album sort, load albums with new sort and get them directly
+      let albumsForSort = albums;
+      if (viewMode === 'albums') {
+        albumsForSort = await loadAlbumsWithSort(optionKey);
+      }
+      
+      // Get fresh sorted data with the new sort option using the correct albums
+      const dataByView = {
+        artists,
+        albums: albumsForSort,
+        liked: likedSongs,
+        playlists,
+      };
+      const baseData = dataByView[viewMode] || [];
+      const comparator = createSortComparator(optionKey, viewMode);
+      const sortedData = baseData.slice().sort(comparator);
+      const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
+      
+      // Update displayed data FIRST with the correctly sorted data
+      setDisplayedData(paginatedNewData);
+      setHasMoreData(sortedData.length > ITEMS_PER_PAGE);
+      
+      // THEN update sort option state
       setSortOption(optionKey);
       setCurrentPage(0);
+      
+      // Wait for React to complete full render cycle with new data
+      await new Promise(resolve => setTimeout(resolve, 0));
       await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Fade in with correct data already rendered
       await animateListOpacityTo(1, 400);
     } catch (error) {
       console.error('Error applying sort option:', error);
@@ -961,7 +1147,7 @@ export default function LibraryScreen({ navigation }) {
     } finally {
       isAnimatingList.current = false;
     }
-  }, [animateListOpacityTo, sortOption, closeSortMenu]);
+  }, [animateListOpacityTo, sortOption, closeSortMenu, viewMode, loadAlbumsWithSort, artists, albums, likedSongs, playlists, createSortComparator]);
 
   const showSortOptions = useCallback(() => {
     if (isAnimatingList.current) {
@@ -1107,9 +1293,10 @@ export default function LibraryScreen({ navigation }) {
       const imageUrl = typeof imageData === 'string' ? imageData : null;
       return (
         <Image
-          source={imageUrl ? { uri: imageUrl } : require('../../assets/default-album.png')}
+          source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : require('../../assets/default-album.png')}
           style={styles.itemImage}
           defaultSource={require('../../assets/default-album.png')}
+          fadeDuration={200}
         />
       );
     }, [imageData, viewMode]);
@@ -1494,6 +1681,7 @@ export default function LibraryScreen({ navigation }) {
         </Animated.View>
       </AnimatedHeader>
       <AnimatedFlatList
+        ref={flatListRef}
         data={displayedData}
         renderItem={renderItem}
         keyExtractor={keyExtractor}

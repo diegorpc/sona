@@ -34,7 +34,7 @@ const PlaylistCollage = memo(({ collageData, size = 200, style }) => {
         >
           {imageUrl ? (
             <Image
-              source={{ uri: imageUrl }}
+              source={{ uri: imageUrl, cache: 'force-cache' }}
               style={[styles.collageImage, { width: imageSize, height: imageSize }]}
               defaultSource={require('../../assets/default-album.png')}
             />
