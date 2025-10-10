@@ -877,6 +877,9 @@ export default function LibraryScreen({ navigation }) {
       // Fade out the library content FIRST
       await animateListOpacityTo(0, 300);
       
+      // Clear displayed data immediately to prevent flash
+      setDisplayedData([]);
+      
       // Get default sort for the new mode
       const defaultSortByView = {
         liked: LIKED_DEFAULT_SORT_OPTION,
@@ -905,46 +908,41 @@ export default function LibraryScreen({ navigation }) {
       if (!hasDataForMode && mode !== 'albums') {
         // Only reload data if we don't have it cached (albums already loaded above)
         await loadLibraryData(false);
+        
+        // Refresh data after loading
+        if (mode === 'albums') {
+          albumsForMode = albums;
+        }
       }
       
-      // NOW set view mode while content is hidden
-      setViewMode(mode);
-      
-      // Reset pagination
-      setCurrentPage(0);
-      
-      // Scroll to top
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      
-      // Wait for state updates
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      
-      // Get fresh data with correct albums
-      const dataByViewAfter = {
+      // Prepare the correct sorted data BEFORE changing view mode
+      const dataForNewMode = {
         artists,
         albums: albumsForMode,
         liked: likedSongs,
         playlists,
       };
       
-      // Apply sorting to the correct data with correct sort option
-      const baseData = dataByViewAfter[mode] || [];
+      const baseData = dataForNewMode[mode] || [];
       const comparator = createSortComparator(targetSort, mode);
       const sortedData = baseData.slice().sort(comparator);
       const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
       
-      // Force update displayed data with correct sorted data
+      // NOW change view mode and update data atomically
+      setViewMode(mode);
+      setCurrentPage(0);
       setDisplayedData(paginatedNewData);
       setHasMoreData(sortedData.length > ITEMS_PER_PAGE);
       
-      // Wait for React to complete render cycle with new data
+      // Scroll to top
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      
+      // Wait for React to complete full render with correct viewMode + data
       await new Promise(resolve => setTimeout(resolve, 0));
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Fade in the library once everything is ready and rendered
       await animateListOpacityTo(1, 400);
@@ -1102,6 +1100,9 @@ export default function LibraryScreen({ navigation }) {
       // Fade out
       await animateListOpacityTo(0, 300);
       
+      // Clear displayed data to prevent flash
+      setDisplayedData([]);
+      
       // Scroll to top
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       
@@ -1123,21 +1124,18 @@ export default function LibraryScreen({ navigation }) {
       const sortedData = baseData.slice().sort(comparator);
       const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
       
-      // Update displayed data FIRST with the correctly sorted data
-      setDisplayedData(paginatedNewData);
-      setHasMoreData(sortedData.length > ITEMS_PER_PAGE);
-      
-      // THEN update sort option state
+      // Update all state atomically
       setSortOption(optionKey);
       setCurrentPage(0);
+      setDisplayedData(paginatedNewData);
+      setHasMoreData(sortedData.length > ITEMS_PER_PAGE);
       
       // Wait for React to complete full render cycle with new data
       await new Promise(resolve => setTimeout(resolve, 0));
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Fade in with correct data already rendered
       await animateListOpacityTo(1, 400);
