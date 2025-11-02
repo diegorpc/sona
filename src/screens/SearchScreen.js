@@ -4,6 +4,7 @@ import {
   TouchableOpacity,
   Image,
   SectionList,
+  ImageBackground,
 } from 'react-native';
 import {
   Text,
@@ -11,10 +12,12 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
+import { usePlayer } from '../contexts/PlayerContext';
 import { theme } from '../theme/theme';
 import { styles } from '../styles/SearchScreen.styles';
 
@@ -23,6 +26,9 @@ const RECENT_SEARCHES_KEY = 'sona_recent_searches';
 const MAX_RECENT_SEARCHES = 20;
 
 export default function SearchScreen({ navigation }) {
+  const {
+    playerState: { currentTrack },
+  } = usePlayer();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -408,10 +414,32 @@ export default function SearchScreen({ navigation }) {
     return `${index}`;
   }, []);
 
+  const backgroundArt = useMemo(() => {
+    if (currentTrack?.coverArt) {
+      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    }
+    if (currentTrack?.albumId) {
+      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    }
+    return DEFAULT_ART;
+  }, [currentTrack?.albumId, currentTrack?.coverArt]);
+
+  const renderWithBackdrop = useCallback(
+    content => (
+      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
+        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+          {content}
+        </BlurView>
+      </ImageBackground>
+    ),
+    [backgroundArt]
+  );
+
   const hasSearchQuery = searchQuery.trim().length > 0;
   const hasSections = sections.length > 0;
+  const hasRecentSearches = !hasSearchQuery && recentSearches.length > 0;
 
-  return (
+  return renderWithBackdrop(
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Search</Text>
@@ -424,6 +452,13 @@ export default function SearchScreen({ navigation }) {
           autoFocus
         />
       </View>
+
+      {/* Fixed Recently Searched header */}
+      {hasRecentSearches && (
+        <View style={styles.recentSearchHeader}>
+          <Text style={styles.sectionTitle}>Recently Searched</Text>
+        </View>
+      )}
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -456,9 +491,9 @@ export default function SearchScreen({ navigation }) {
         )
       ) : hasSections ? (
         <SectionList
-          sections={sections}
+          sections={hasRecentSearches ? [{ title: '', data: recentSearches.sort((a, b) => b.timestamp - a.timestamp), renderItem: renderRecentItem }] : []}
           renderItem={({ item, index, section }) => section.renderItem({ item, index, section })}
-          renderSectionHeader={renderSectionHeader}
+          renderSectionHeader={null}
           keyExtractor={keyExtractor}
           contentContainerStyle={styles.resultsList}
           showsVerticalScrollIndicator={false}

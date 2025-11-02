@@ -2,16 +2,23 @@ import { StyleSheet } from 'react-native';
 import { theme } from '../theme/theme';
 
 export const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+  },
+  blurOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 8, 8, 0.77)',
+  },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     paddingTop: 40,
   },
   header: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
   },
   headerTitle: {
     fontSize: 28,
@@ -84,7 +91,14 @@ export const styles = StyleSheet.create({
   sectionHeader: {
     paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
+  },
+  recentSearchHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.outline,
   },
   sectionTitle: {
     fontSize: 18,
