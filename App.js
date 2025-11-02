@@ -23,6 +23,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import ArtistScreen from './src/screens/ArtistScreen';
 import AlbumScreen from './src/screens/AlbumScreen';
 import SubsonicAPI from './src/services/SubsonicAPI';
+import PlaylistScreen from './src/screens/PlaylistScreen';
 
 import PlayerOverlay from './src/components/PlayerOverlay';
 import { PlayerProvider } from './src/contexts/PlayerContext';
@@ -152,6 +153,11 @@ export default function App() {
                       name="Album" 
                       component={AlbumScreen}
                       options={{ title: 'Album' }}
+                    />
+                    <Stack.Screen 
+                      name="Playlist" 
+                      component={PlaylistScreen}
+                      options={{ title: 'Playlist' }}
                     />
                   </>
                 )}

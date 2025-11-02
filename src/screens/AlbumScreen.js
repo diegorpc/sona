@@ -204,6 +204,11 @@ export default function AlbumScreen({ route, navigation }) {
   );
 
   const backgroundArt = useMemo(() => {
+    // Use album cover if available
+    if (album?.coverArt) {
+      return { uri: SubsonicAPI.getCoverArtUrl(album.coverArt, 600) };
+    }
+    // Fallback to current track if no album cover
     if (currentTrack?.coverArt) {
       return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
     }
@@ -211,7 +216,7 @@ export default function AlbumScreen({ route, navigation }) {
       return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
     }
     return DEFAULT_ART;
-  }, [currentTrack?.albumId, currentTrack?.coverArt]);
+  }, [album?.coverArt, currentTrack?.albumId, currentTrack?.coverArt]);
 
   if (isLoading) {
     return (

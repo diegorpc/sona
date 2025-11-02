@@ -181,6 +181,14 @@ export default function ArtistScreen({ route, navigation }) {
   );
 
   const backgroundArt = useMemo(() => {
+    // Use artist image if available
+    if (artist?.artistImageUrl) {
+      return { uri: artist.artistImageUrl };
+    }
+    if (artist?.id) {
+      return { uri: SubsonicAPI.getCoverArtUrl(artist.id, 600) };
+    }
+    // Fallback to current track if no artist image
     if (currentTrack?.coverArt) {
       return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
     }
@@ -188,7 +196,7 @@ export default function ArtistScreen({ route, navigation }) {
       return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
     }
     return DEFAULT_ART;
-  }, [currentTrack?.albumId, currentTrack?.coverArt]);
+  }, [artist?.id, artist?.artistImageUrl, currentTrack?.albumId, currentTrack?.coverArt]);
 
   if (isLoading) {
     return (
