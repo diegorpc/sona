@@ -1226,7 +1226,7 @@ export default function LibraryScreen({ navigation }) {
     if (hours > 0) {
       return `${hours}h ${minutes}m`;
     }
-    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+    return `${minutes}m`;
   };
 
   // Optimized list item component with custom comparison function
