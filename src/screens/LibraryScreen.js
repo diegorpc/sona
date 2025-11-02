@@ -1226,7 +1226,7 @@ export default function LibraryScreen({ navigation }) {
     if (hours > 0) {
       return `${hours}h ${minutes}m`;
     }
-    return `${minutes}m`;
+    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
   };
 
   // Optimized list item component with custom comparison function
@@ -1678,13 +1678,19 @@ export default function LibraryScreen({ navigation }) {
           </Animated.View>
         </Animated.View>
       </AnimatedHeader>
+      
+      {/* Fixed Sort Control */}
+      <View style={styles.sortControlFixed}>
+        {sortListHeader}
+      </View>
+      
       <AnimatedFlatList
         ref={flatListRef}
         data={displayedData}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         getItemLayout={getItemLayout}
-        ListHeaderComponent={sortListHeader}
+        ListHeaderComponent={null}
         contentContainerStyle={styles.listContainer}
         refreshControl={
           <RefreshControl

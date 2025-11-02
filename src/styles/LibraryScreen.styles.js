@@ -102,6 +102,11 @@ export const styles = StyleSheet.create({
   sortControlContainer: {
     paddingHorizontal: 8,
   },
+  sortControlFixed: {
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.outline,
+  },
   sortTrigger: {
     flexDirection: 'row',
     alignItems: 'center',

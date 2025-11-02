@@ -173,7 +173,7 @@ export default function SearchScreen({ navigation }) {
     if (!seconds) return '';
     
     const minutes = Math.floor(seconds / 60);
-    return `${minutes}m`;
+    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
   }, []);
 
   // Filter results to strictly match search query
