@@ -7,13 +7,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
-import { theme } from '../theme/theme';
-import { styles } from '../styles/PlayerScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { createStyles } from '../styles/PlayerScreen.styles';
 import TextTicker from 'react-native-text-ticker';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
 export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);

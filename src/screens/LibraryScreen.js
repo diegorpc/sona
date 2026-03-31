@@ -22,8 +22,8 @@ import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import PlaylistCollage from '../components/PlaylistCollage';
 import { usePlayer } from '../contexts/PlayerContext';
-import { theme } from '../theme/theme';
-import { styles } from '../styles/LibraryScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { createStyles } from '../styles/LibraryScreen.styles';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -141,6 +141,9 @@ const buildChipOrder = (selectedKey) => {
 };
 
 export default function LibraryScreen({ navigation }) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+  const { playTrack } = usePlayer();
   const {
     playerState: { currentTrack },
   } = usePlayer();
@@ -1230,7 +1233,7 @@ export default function LibraryScreen({ navigation }) {
   };
 
   // Optimized list item component with custom comparison function
-  const ListItem = memo(({ item, index, viewMode, playlistCollages }) => {
+  const ListItem = memo(({ item, index, viewMode, playlistCollages, theme }) => {
     const handlePress = useCallback(() => {
       handleItemPress(item, index);
     }, [item, index]);
@@ -1357,6 +1360,12 @@ export default function LibraryScreen({ navigation }) {
       return prevProps.playlistCollages[prevProps.item.id] === nextProps.playlistCollages[nextProps.item.id];
     }
     
+    // Always re-render if theme primary color changed (for liked songs heart color)
+    if (prevProps.viewMode === 'liked' && 
+        prevProps.theme.colors.primary !== nextProps.theme.colors.primary) {
+      return false;
+    }
+    
     return true;
   });
 
@@ -1368,9 +1377,10 @@ export default function LibraryScreen({ navigation }) {
         index={index}
         viewMode={viewMode}
         playlistCollages={playlistCollages}
+        theme={theme}
       />
     );
-  }, [viewMode, playlistCollages]);
+  }, [viewMode, playlistCollages, theme]);
 
   // Performance optimization: getItemLayout for FlatList
   const getItemLayout = useCallback((data, index) => ({

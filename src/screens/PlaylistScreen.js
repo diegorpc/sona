@@ -15,13 +15,15 @@ import AudioPlayer from '../services/AudioPlayer';
 import PlaylistCollage from '../components/PlaylistCollage';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
-import { theme } from '../theme/theme';
-import { styles } from '../styles/PlaylistScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { createStyles } from '../styles/PlaylistScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
 export default function PlaylistScreen({ route, navigation }) {
   const { playlist } = route.params;
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const { playerState: { currentTrack } } = usePlayer();
   const [playlistData, setPlaylistData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

@@ -14,13 +14,15 @@ import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
-import { theme } from '../theme/theme';
-import { styles } from '../styles/AlbumScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { createStyles } from '../styles/AlbumScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
 export default function AlbumScreen({ route, navigation }) {
   const { album } = route.params;
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const { playerState: { currentTrack } } = usePlayer();
   const [albumData, setAlbumData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

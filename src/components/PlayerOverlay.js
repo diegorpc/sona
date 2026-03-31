@@ -13,8 +13,9 @@ import MiniPlayer from './MiniPlayer';
 import PlayerScreen from '../screens/PlayerScreen';
 import QueueScreen from '../screens/QueueScreen';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useTheme } from '../contexts/ThemeContext';
 import SubsonicAPI from '../services/SubsonicAPI';
-import { styles } from '../styles/PlayerOverlay.styles';
+import { createStyles } from '../styles/PlayerOverlay.styles';
 import {
   registerPlayerOverlay,
   unregisterPlayerOverlay,
@@ -26,6 +27,8 @@ const COLLAPSE_DURATION = 150;
 const TAB_BAR_OFFSET = 50;
 
 const PlayerOverlay = () => {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const {
     playerState,
     togglePlayPause,

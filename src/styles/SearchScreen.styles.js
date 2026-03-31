@@ -1,7 +1,6 @@
 import { StyleSheet } from 'react-native';
-import { theme } from '../theme/theme';
 
-export const styles = StyleSheet.create({
+export const createStyles = (theme) => StyleSheet.create({
   backgroundImage: {
     flex: 1,
   },
@@ -25,7 +24,7 @@ export const styles = StyleSheet.create({
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
     textShadowOffset: { width: 1, height: 2 },
-    textShadowColor: '#9a6bff',
+    textShadowColor: theme.colors.primary,
     marginBottom: 12
   },
   searchbar: {
@@ -106,7 +105,7 @@ export const styles = StyleSheet.create({
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
     textShadowOffset: { width: 1, height: 1 },
-    textShadowColor: '#9a6bff',
+    textShadowColor: theme.colors.primary,
   },
   loadingContainer: {
     flex: 1,

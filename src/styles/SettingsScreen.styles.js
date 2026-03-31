@@ -1,11 +1,41 @@
 import { StyleSheet } from 'react-native';
-import { theme } from '../theme/theme';
 
-export const styles = StyleSheet.create({
+export const createStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  scrollContainer: {
+    flex: 1,
     paddingVertical: 40,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.outline,
+    paddingTop: 50,
+    paddingHorizontal: 16,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: theme.colors.primary,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.colors.onSurfaceVariant,
+  },
+  activeTabText: {
+    color: theme.colors.primary,
+    fontWeight: '600',
   },
   card: {
     margin: 16,
@@ -17,6 +47,46 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.colors.onSurface,
     marginBottom: 8,
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  accentColorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  accentColorOption: {
+    width: '48%',
+    aspectRatio: 2.5,
+    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: 12,
+    marginBottom: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  accentColorSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceVariant,
+  },
+  accentColorSwatch: {
+    width: 30,
+    height: 15,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  accentColorName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.onSurface,
+    flex: 1,
   },
   button: {
     marginTop: 16,

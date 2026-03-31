@@ -27,13 +27,14 @@ import PlaylistScreen from './src/screens/PlaylistScreen';
 
 import PlayerOverlay from './src/components/PlayerOverlay';
 import { PlayerProvider } from './src/contexts/PlayerContext';
-
-import { theme } from './src/theme/theme';
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs() {
+  const { theme } = useTheme();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -69,15 +70,10 @@ function MainTabs() {
   );
 }
 
-export default function App() {
+function AppContent() {
+  const { theme } = useTheme();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [fontsLoaded] = useFonts({
-    Lexend_400Regular,
-    Lexend_500Medium,
-    Lexend_600SemiBold,
-    Lexend_700Bold,
-  });
 
   useEffect(() => {
     checkLoginStatus();
@@ -87,12 +83,10 @@ export default function App() {
     try {
       const serverConfig = await AsyncStorage.getItem('serverConfig');
       if (serverConfig) {
-        // Load the configuration into SubsonicAPI
         const configLoaded = await SubsonicAPI.loadConfiguration();
         if (configLoaded) {
           setIsLoggedIn(true);
         } else {
-          // If config loading failed, remove the invalid config
           await AsyncStorage.removeItem('serverConfig');
           setIsLoggedIn(false);
         }
@@ -107,12 +101,11 @@ export default function App() {
     }
   };
 
-  if (isLoading || !fontsLoaded) {
-    return null; // TODO: add loading element
+  if (isLoading) {
+    return null;
   }
 
   const handleNavigationStateChange = () => {
-    // Re-check login status when navigation state changes
     checkLoginStatus();
   };
 
@@ -168,5 +161,24 @@ export default function App() {
         </GestureHandlerRootView>
       </PlayerProvider>
     </PaperProvider>
+  );
+}
+
+export default function App() {
+  const [fontsLoaded] = useFonts({
+    Lexend_400Regular,
+    Lexend_500Medium,
+    Lexend_600SemiBold,
+    Lexend_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
   );
 }

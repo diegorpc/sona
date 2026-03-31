@@ -3,6 +3,7 @@ import {
   View,
   ScrollView,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import {
   Text,
@@ -22,10 +23,14 @@ import Slider from '@react-native-community/slider';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
-import { theme } from '../theme/theme';
-import { styles } from '../styles/SettingsScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { accentPalettes } from '../theme/theme';
+import { createStyles } from '../styles/SettingsScreen.styles';
 
 export default function SettingsScreen({ navigation }) {
+  const { theme, accentColor, changeAccentColor } = useTheme();
+  const styles = createStyles(theme);
+  const [activeTab, setActiveTab] = useState('appearance');
   const [serverInfo, setServerInfo] = useState(null);
   const [settings, setSettings] = useState({
     autoPlay: true,
@@ -184,35 +189,78 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
-  return (
-    <ScrollView style={styles.container}>
+  const renderTabBar = () => (
+    <View style={styles.tabBar}>
+      <TouchableOpacity
+        style={[styles.tab, activeTab === 'general' && styles.activeTab]}
+        onPress={() => setActiveTab('general')}
+      >
+        <Text style={[styles.tabText, activeTab === 'general' && styles.activeTabText]}>
+          General
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tab, activeTab === 'appearance' && styles.activeTab]}
+        onPress={() => setActiveTab('appearance')}
+      >
+        <Text style={[styles.tabText, activeTab === 'appearance' && styles.activeTabText]}>
+          Appearance
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tab, activeTab === 'server' && styles.activeTab]}
+        onPress={() => setActiveTab('server')}
+      >
+        <Text style={[styles.tabText, activeTab === 'server' && styles.activeTabText]}>
+          Server
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tab, activeTab === 'storage' && styles.activeTab]}
+        onPress={() => setActiveTab('storage')}
+      >
+        <Text style={[styles.tabText, activeTab === 'storage' && styles.activeTabText]}>
+          Storage
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderAppearanceTab = () => (
+    <>
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Server</Text>
-          {serverInfo && (
-            <>
-              <List.Item
-                title="Server URL"
-                description={serverInfo.serverUrl}
-                left={props => <List.Icon {...props} icon="server" />}
-              />
-              <List.Item
-                title="Username"
-                description={serverInfo.username}
-                left={props => <List.Icon {...props} icon="account" />}
-              />
-            </>
-          )}
-          <Button
-            mode="outlined"
-            onPress={() => setShowServerDialog(true)}
-            style={styles.button}
-          >
-            Update Server Settings
-          </Button>
+          <Text style={styles.sectionTitle}>Accent Color</Text>
+          <Text style={styles.sectionDescription}>
+            Choose your preferred accent color for the app
+          </Text>
+          <View style={styles.accentColorGrid}>
+            {Object.entries(accentPalettes).map(([key, palette]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.accentColorOption,
+                  accentColor === key && styles.accentColorSelected,
+                ]}
+                onPress={() => changeAccentColor(key)}
+              >
+                <View
+                  style={[
+                    styles.accentColorSwatch,
+                    { backgroundColor: palette.primary },
+                  ]}
+                />
+                <Text style={styles.accentColorName}>{palette.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </Card.Content>
       </Card>
+    </>
+  );
 
+  const renderGeneralTab = () => (
+    <>
       <Card style={styles.card}>
         <Card.Content>
           <Text style={styles.sectionTitle}>Playback</Text>
@@ -256,21 +304,64 @@ export default function SettingsScreen({ navigation }) {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>Downloads</Text>
+          <Text style={styles.sectionTitle}>About</Text>
           <List.Item
-            title="Download over Wi-Fi only"
-            description="Only download music when connected to Wi-Fi"
-            left={props => <List.Icon {...props} icon="wifi" />}
-            right={() => (
-              <Switch
-                value={settings.downloadOverWifi}
-                onValueChange={(value) => handleSettingChange('downloadOverWifi', value)}
-              />
-            )}
+            title="Sona Music"
+            description="Version 1.0.0"
+            left={props => <List.Icon {...props} icon="information" />}
+          />
+          <List.Item
+            title="Subsonic API"
+            description="Version 1.16.1"
+            left={props => <List.Icon {...props} icon="api" />}
           />
         </Card.Content>
       </Card>
+    </>
+  );
 
+  const renderServerTab = () => (
+    <>
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text style={styles.sectionTitle}>Server</Text>
+          {serverInfo && (
+            <>
+              <List.Item
+                title="Server URL"
+                description={serverInfo.serverUrl}
+                left={props => <List.Icon {...props} icon="server" />}
+              />
+              <List.Item
+                title="Username"
+                description={serverInfo.username}
+                left={props => <List.Icon {...props} icon="account" />}
+              />
+            </>
+          )}
+          <Button
+            mode="outlined"
+            onPress={() => setShowServerDialog(true)}
+            style={styles.button}
+          >
+            Update Server Settings
+          </Button>
+        </Card.Content>
+      </Card>
+
+      <Button
+        mode="contained"
+        onPress={handleLogout}
+        style={[styles.button, styles.logoutButton]}
+        buttonColor={theme.colors.error}
+      >
+        Logout
+      </Button>
+    </>
+  );
+
+  const renderStorageTab = () => (
+    <>
       <Card style={styles.card}>
         <Card.Content>
           <Text style={styles.sectionTitle}>Storage & Cache</Text>
@@ -316,28 +407,43 @@ export default function SettingsScreen({ navigation }) {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.sectionTitle}>About</Text>
+          <Text style={styles.sectionTitle}>Downloads</Text>
           <List.Item
-            title="Sona Music"
-            description="Version 1.0.0"
-            left={props => <List.Icon {...props} icon="information" />}
-          />
-          <List.Item
-            title="Subsonic API"
-            description="Version 1.16.1"
-            left={props => <List.Icon {...props} icon="api" />}
+            title="Wi-Fi download only"
+            description="Only download music when connected to Wi-Fi"
+            left={props => <List.Icon {...props} icon="wifi" />}
+            right={() => (
+              <Switch
+                value={settings.downloadOverWifi}
+                onValueChange={(value) => handleSettingChange('downloadOverWifi', value)}
+              />
+            )}
           />
         </Card.Content>
       </Card>
+    </>
+  );
 
-      <Button
-        mode="contained"
-        onPress={handleLogout}
-        style={[styles.button, styles.logoutButton]}
-        buttonColor={theme.colors.error}
-      >
-        Logout
-      </Button>
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'appearance':
+        return renderAppearanceTab();
+      case 'general':
+        return renderGeneralTab();
+      case 'server':
+        return renderServerTab();
+      case 'storage':
+        return renderStorageTab();
+      default:
+        return renderAppearanceTab();
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {renderTabBar()}
+      <ScrollView style={styles.scrollContainer}>
+        {renderActiveTab()}
 
       <Portal>
         <Dialog visible={showServerDialog} onDismiss={() => setShowServerDialog(false)}>
@@ -409,7 +515,8 @@ export default function SettingsScreen({ navigation }) {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 

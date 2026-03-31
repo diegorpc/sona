@@ -1,10 +1,8 @@
 import { StyleSheet } from 'react-native';
 
-import { theme } from '../theme/theme';
-
 export const MINI_HEIGHT = 54;
 
-export const styles = StyleSheet.create({
+export const createStyles = (theme) => StyleSheet.create({
   touchable: {
     borderRadius: 12,
     backgroundColor: 'transparent',

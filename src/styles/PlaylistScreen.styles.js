@@ -1,9 +1,8 @@
 import { StyleSheet, Dimensions } from 'react-native';
-import { theme } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
-export const styles = StyleSheet.create({
+export const createStyles = (theme) => StyleSheet.create({
   backgroundImage: {
     flex: 1,
   },

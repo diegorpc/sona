@@ -5,7 +5,8 @@ import { IconButton, Text } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import SubsonicAPI from '../services/SubsonicAPI';
-import { styles } from '../styles/QueueScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { createStyles } from '../styles/QueueScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
@@ -41,6 +42,8 @@ const QueueItem = memo(
     actionIcon,
     actionAccessibilityLabel,
   }) => {
+    const { theme } = useTheme();
+    const styles = createStyles(theme);
     const durationLabel = useMemo(() => formatDuration(item?.duration), [item?.duration]);
     const isFavorited = useMemo(
       () => Boolean(item?.starred || item?.starredOn || item?.isFavorite),
@@ -113,6 +116,9 @@ const QueueScreen = ({
   onReorderContext,
   onMoveContextToPriority,
 }) => {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+
   const handleRemovePriority = useCallback(
     index => {
       if (typeof onRemovePriority === 'function') {
@@ -155,7 +161,7 @@ const QueueScreen = ({
         isActive={isActive}
       />
     ),
-    [handleMoveToPriority]
+    []
   );
 
   return (

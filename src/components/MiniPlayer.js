@@ -2,10 +2,10 @@ import React from 'react';
 import { View, Image, Pressable, Easing } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { IconButton, Text } from 'react-native-paper';
-import { theme } from '../theme/theme';
+import { useTheme } from '../contexts/ThemeContext';
 import TextTicker from 'react-native-text-ticker'
 
-import { MINI_HEIGHT, styles } from '../styles/MiniPlayer.styles';
+import { MINI_HEIGHT, createStyles } from '../styles/MiniPlayer.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
@@ -19,6 +19,9 @@ const MiniPlayer = ({
   onExpand,
   coverArtUrl,
 }) => {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+  
   if (!track) {
     return null;
   }

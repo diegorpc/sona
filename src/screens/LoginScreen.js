@@ -18,10 +18,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
-import { theme } from '../theme/theme';
-import { styles } from '../styles/LoginScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { createStyles } from '../styles/LoginScreen.styles';
 
 export default function LoginScreen({ navigation }) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const [serverUrl, setServerUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

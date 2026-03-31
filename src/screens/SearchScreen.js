@@ -18,17 +18,17 @@ import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
-import { theme } from '../theme/theme';
-import { styles } from '../styles/SearchScreen.styles';
+import { useTheme } from '../contexts/ThemeContext';
+import { createStyles } from '../styles/SearchScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 const RECENT_SEARCHES_KEY = 'sona_recent_searches';
 const MAX_RECENT_SEARCHES = 20;
 
 export default function SearchScreen({ navigation }) {
-  const {
-    playerState: { currentTrack },
-  } = usePlayer();
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+  const { playerState: { currentTrack }, playTrack } = usePlayer();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
