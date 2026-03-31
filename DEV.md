@@ -145,7 +145,7 @@ src/
 │   ├── SearchScreen.styles.js
 │   └── ... (one per screen)
 └── theme/                         # App theming
-    └── theme.js                  # Material Design 3 theme configuration
+    └── theme.js                  
 ```
 
 ## Configuration
@@ -329,18 +329,18 @@ const stats = await CacheService.getStats();
 - ✅ Scrobbling support
 - ✅ Favorite/star management
 - ✅ State persistence across app restarts
+- ✅ Theme customization (accent colors)
 
 ### 🚧 Planned Features
-- 🚧 Home/Dashboard screen with recommendations
+- 🚧 Home/Dashboard screen 
+- 🚧 Rework artist, album, playlist pages
 - 🚧 Offline downloads for tracks/albums
-- 🚧 Theme customization (accent colors)
 - 🚧 Lyrics display
 - 🚧 CarPlay support
 - 🚧 Sleep timer
-- 🚧 Equalizer settings
 - 🚧 Crossfade between tracks
 - 🚧 Advanced queue features (save queue, queue history)
-- 🚧 Social features (share tracks/playlists)
+
 
 ---
 
