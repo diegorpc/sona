@@ -1372,15 +1372,32 @@ export default function LibraryScreen({ navigation }) {
   const handleSortDirectionToggle = useCallback(async () => {
     if (isAnimatingList.current) return;
     isAnimatingList.current = true;
+    const newDirection = sortDirection === 'desc' ? 'asc' : 'desc';
+
     await animateListOpacityTo(0, 180);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+
+    const dataByView = { artists, albums, liked: likedSongs, playlists };
+    const baseData = dataByView[viewMode] || [];
+    const comparator = createSortComparator(sortOption, viewMode, newDirection);
+    let sortedData = baseData.slice().sort(comparator);
+
+    if (viewMode === 'albums' && ['recent', 'newest', 'frequent'].includes(sortOption) && newDirection === 'asc') {
+      sortedData = sortedData.slice().reverse();
+    }
+
+    const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
+
+    setSortDirection(newDirection);
     setCurrentPage(0);
-    setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
+    setDisplayedData(paginatedNewData);
+    setHasMoreData(sortedData.length > ITEMS_PER_PAGE);
+
     await new Promise(resolve => requestAnimationFrame(resolve));
     await new Promise(resolve => requestAnimationFrame(resolve));
     await animateListOpacityTo(1, 280);
     isAnimatingList.current = false;
-  }, [animateListOpacityTo]);
+  }, [sortDirection, sortOption, viewMode, artists, albums, likedSongs, playlists, createSortComparator, animateListOpacityTo]);
 
   // Keep a ref to the latest displayed data so handleItemPress stays referentially
   // stable across pagination updates (otherwise every row would re-render on each batch).

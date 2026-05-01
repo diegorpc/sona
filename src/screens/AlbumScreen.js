@@ -44,9 +44,9 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
       {/* Liked status */}
       <View style={styles.heartWrapper}>
         <MaterialIcons
-          name={item.starred ? 'favorite' : 'favorite-border'}
+          name={item.starred ? 'favorite' : null}
           size={14}
-          style={item.starred ? styles.heartIcon : styles.heartIconUnstarred}
+          style={item.starred ? styles.heartIcon : null}
         />
       </View>
 
