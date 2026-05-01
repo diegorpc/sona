@@ -79,6 +79,8 @@ const MiniPlayer = ({
             icon={isLoading ? 'timer-sand' : isPlaying ? 'pause' : 'play'}
             size={24}
             iconColor={theme.colors.primary}
+            containerColor="transparent"
+            rippleColor="rgba(255, 255, 255, 0.1)"
             onPress={(event) => {
               event.stopPropagation();
               if (!isLoading) {

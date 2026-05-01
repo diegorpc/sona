@@ -332,7 +332,7 @@ const stats = await CacheService.getStats();
 - ✅ Theme customization (accent colors)
 
 ### 🚧 Planned Features
-- 🚧 Home/Dashboard screen 
+- 🚧 Home/Dashboard screen (w/ recently played, frequently played, random, genre tabs)
 - 🚧 Rework artist, album, playlist pages
 - 🚧 Offline downloads for tracks/albums
 - 🚧 Lyrics display

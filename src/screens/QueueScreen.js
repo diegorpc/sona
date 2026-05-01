@@ -1,110 +1,129 @@
-import React, { memo, useCallback, useMemo } from 'react';
-import { Image, View, TouchableOpacity } from 'react-native';
+import React, { memo, useCallback, useMemo, useState } from 'react';
+import { Image, View, TouchableOpacity, ScrollView } from 'react-native';
 import DraggableFlatList from 'react-native-draggable-flatlist';
-import { IconButton, Text } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { ImageBackground } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePlayer } from '../contexts/PlayerContext';
 import { createStyles } from '../styles/QueueScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
 const getCoverArt = (track, size = 80) => {
-  if (track?.coverArt) {
-    return { uri: SubsonicAPI.getCoverArtUrl(track.coverArt, size) };
-  }
-
-  if (track?.albumId) {
-    return { uri: SubsonicAPI.getCoverArtUrl(track.albumId, size) };
-  }
-
+  if (track?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(track.coverArt, size) };
+  if (track?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(track.albumId, size) };
   return DEFAULT_ART;
 };
 
-const formatDuration = durationSeconds => {
-  if (!Number.isFinite(durationSeconds)) {
-    return '';
-  }
-
+const formatDuration = (durationSeconds) => {
+  if (!Number.isFinite(durationSeconds)) return '';
   const totalSeconds = Math.max(0, Math.floor(durationSeconds));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const QueueItem = memo(
-  ({
-    item,
-    drag,
-    isActive,
-    onActionPress,
-    actionIcon,
-    actionAccessibilityLabel,
-  }) => {
-    const { theme } = useTheme();
-    const styles = createStyles(theme);
-    const durationLabel = useMemo(() => formatDuration(item?.duration), [item?.duration]);
-    const isFavorited = useMemo(
-      () => Boolean(item?.starred || item?.starredOn || item?.isFavorite),
-      [item?.starred, item?.starredOn, item?.isFavorite]
-    );
+// ─── Queue item ────────────────────────────────────────────────────
+const QueueItem = memo(({ item, drag, isActive, isNowPlaying, actionIcon, actionLabel, onActionPress }) => {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+  const duration = useMemo(() => formatDuration(item?.duration), [item?.duration]);
 
-    return (
-      <View style={[styles.itemContainer, isActive && styles.itemActive]}>
-        <View style={styles.leadingContainer}>
-          {isFavorited && (
-            <MaterialIcons name="favorite" size={16} style={styles.favoriteIcon} />
-          )}
-          <Image
-            source={getCoverArt(item, 128)}
-            style={styles.coverArt}
-            defaultSource={DEFAULT_ART}
-          />
+  return (
+    <View style={[styles.itemContainer, isActive && styles.itemActive, isNowPlaying && styles.itemActive]}>
+      {/* Drag handle or now-playing indicator */}
+      {isNowPlaying ? (
+        <View style={styles.nowPlayingIndicator}>
+          <MaterialIcons name="play-arrow" size={14} color={theme.colors.primary} />
         </View>
+      ) : (
+        <TouchableOpacity
+          onPressIn={drag}
+          onLongPress={drag}
+          delayLongPress={60}
+          style={styles.dragHandle}
+          accessibilityLabel="Drag to reorder"
+        >
+          <MaterialIcons name="drag-handle" size={22} style={styles.dragHandleIcon} />
+        </TouchableOpacity>
+      )}
 
-        <View style={styles.infoContainer}>
-          <Text numberOfLines={1} style={styles.title}>
-            {item?.title ?? 'Unknown Title'}
-          </Text>
-          <Text numberOfLines={1} style={styles.subtitle}>
-            {item?.artist ?? 'Unknown Artist'}
-            {item?.album ? ` · ${item.album}` : ''}
-          </Text>
-        </View>
+      <Image source={getCoverArt(item, 128)} style={styles.coverArt} defaultSource={DEFAULT_ART} />
 
-        <View style={styles.rightContent}>
-          {durationLabel ? <Text style={styles.duration}>{durationLabel}</Text> : null}
-
-          {typeof onActionPress === 'function' && (
-            <TouchableOpacity
-              onPress={onActionPress}
-              style={styles.actionButton}
-              accessibilityRole="button"
-              accessibilityLabel={actionAccessibilityLabel}
-            >
-              <MaterialIcons name={actionIcon} size={22} style={styles.actionIcon} />
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            onPressIn={drag}
-            onLongPress={drag}
-            delayLongPress={60}
-            style={styles.handleButton}
-            accessibilityRole="button"
-            accessibilityLabel="Drag to reorder"
-          >
-            <MaterialIcons name="drag-handle" size={22} style={styles.dragHandleIcon} />
-          </TouchableOpacity>
-        </View>
+      <View style={styles.infoContainer}>
+        <Text numberOfLines={1} style={[styles.title, isNowPlaying && styles.titleActive]}>
+          {item?.title ?? 'Unknown Title'}
+        </Text>
+        <Text numberOfLines={1} style={[styles.subtitle, isNowPlaying && styles.subtitleActive]}>
+          {item?.artist ?? 'Unknown Artist'}
+          {item?.album ? ` · ${item.album}` : ''}
+        </Text>
       </View>
-    );
-  }
-);
 
+      <View style={styles.rightContent}>
+        {duration ? <Text style={styles.duration}>{duration}</Text> : null}
+
+        {/* Skip (now playing) or Remove (priority queue) */}
+        {isNowPlaying && (
+          <TouchableOpacity style={styles.actionButton} onPress={onActionPress} accessibilityLabel="Skip track">
+            <MaterialIcons name="skip-next" size={22} style={styles.skipIcon} />
+          </TouchableOpacity>
+        )}
+        {!isNowPlaying && typeof onActionPress === 'function' && (
+          <TouchableOpacity style={styles.actionButton} onPress={onActionPress} accessibilityLabel={actionLabel}>
+            <MaterialIcons name={actionIcon} size={20} style={styles.actionIcon} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+});
 QueueItem.displayName = 'QueueItem';
 
+// ─── Context section header ─────────────────────────────────────────
+const ContextHeader = ({ contextLabel, shuffleOn, repeatOn, onToggleShuffle, onToggleRepeat, styles, theme }) => (
+  <View style={styles.contextHeaderRow}>
+    <View style={styles.contextHeaderText}>
+      <Text style={styles.contextHeaderLabel}>Next in:</Text>
+      <Text style={styles.contextHeaderName} numberOfLines={1}>{contextLabel}</Text>
+    </View>
+    <View style={styles.contextToggles}>
+      <TouchableOpacity
+        onPress={onToggleShuffle}
+        style={[styles.toggleButton, shuffleOn && styles.toggleButtonActive]}
+        accessibilityLabel="Toggle shuffle"
+      >
+        <MaterialIcons
+          name="shuffle"
+          size={15}
+          color={shuffleOn ? theme.colors.primary : theme.colors.onSurface}
+          style={{ opacity: shuffleOn ? 1 : 0.4 }}
+        />
+        <Text style={[styles.toggleLabel, shuffleOn && styles.toggleLabelActive]}>Shuffle</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onToggleRepeat}
+        style={[styles.toggleButton, repeatOn && styles.toggleButtonActive]}
+        accessibilityLabel="Toggle repeat"
+      >
+        <MaterialIcons
+          name="repeat"
+          size={15}
+          color={repeatOn ? theme.colors.primary : theme.colors.onSurface}
+          style={{ opacity: repeatOn ? 1 : 0.4 }}
+        />
+        <Text style={[styles.toggleLabel, repeatOn && styles.toggleLabelActive]}>Repeat</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+);
+
+// ─── Main QueueScreen ──────────────────────────────────────────────
 const QueueScreen = ({
   currentTrack,
   priorityQueue,
@@ -118,118 +137,136 @@ const QueueScreen = ({
 }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme);
+  const { playerState } = usePlayer();
+  const [shuffleOn, setShuffleOn] = useState(false);
+  const [repeatOn, setRepeatOn] = useState(false);
 
-  const handleRemovePriority = useCallback(
-    index => {
-      if (typeof onRemovePriority === 'function') {
-        onRemovePriority(index);
-      }
-    },
-    [onRemovePriority]
-  );
+  const backgroundArt = useMemo(() => {
+    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    if (currentTrack?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    return DEFAULT_ART;
+  }, [currentTrack?.coverArt, currentTrack?.albumId]);
 
-  const handleMoveToPriority = useCallback(
-    index => {
-      if (typeof onMoveContextToPriority === 'function') {
-        onMoveContextToPriority(index, priorityQueue.length);
-      }
-    },
-    [onMoveContextToPriority, priorityQueue.length]
-  );
+  const handleRemovePriority = useCallback((index) => {
+    if (typeof onRemovePriority === 'function') onRemovePriority(index);
+  }, [onRemovePriority]);
 
-  const headerTitle = contextLabel ? `Next in ${contextLabel}:` : 'Next in Queue:';
+  const handleSkipNowPlaying = useCallback(() => {
+    // Skip to next track (same as pressing next in player)
+    const AudioPlayer = require('../services/AudioPlayer').default;
+    AudioPlayer.playNext();
+  }, []);
 
-  const renderPriorityItem = useCallback(
-    ({ item, drag, isActive, index }) => (
-      <QueueItem
-        item={item}
-        drag={drag}
-        isActive={isActive}
-        onActionPress={() => handleRemovePriority(index)}
-        actionIcon="delete-outline"
-        actionAccessibilityLabel="Remove from priority queue"
-      />
-    ),
-    [handleRemovePriority]
-  );
+  const renderPriorityItem = useCallback(({ item, drag, isActive, index }) => (
+    <QueueItem
+      item={item}
+      drag={drag}
+      isActive={isActive}
+      onActionPress={() => handleRemovePriority(index)}
+      actionIcon="remove-circle-outline"
+      actionLabel="Remove from queue"
+    />
+  ), [handleRemovePriority]);
 
-  const renderContextItem = useCallback(
-    ({ item, drag, isActive, index }) => (
-      <QueueItem
-        item={item}
-        drag={drag}
-        isActive={isActive}
-      />
-    ),
-    []
-  );
+  const renderContextItem = useCallback(({ item, drag, isActive }) => (
+    <QueueItem item={item} drag={drag} isActive={isActive} />
+  ), []);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <IconButton
-          icon="chevron-left"
-          size={26}
-          onPress={onClose}
-          accessibilityLabel="Back to player"
+    <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
+      <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+        {/* Accent glow */}
+        <LinearGradient
+          colors={[`${theme.colors.primary}38`, 'transparent']}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260 }}
         />
-        <Text style={styles.headerTitle}>Queue</Text>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Next in Queue:</Text>
-        <View style={styles.listContainer}>
-          {priorityQueue.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>Queue is empty</Text>
-            </View>
-          ) : (
-            <DraggableFlatList
-              data={priorityQueue}
-              keyExtractor={(item, index) => `priority-${item?.id ?? 'track'}-${index}`}
-              renderItem={renderPriorityItem}
-              onDragEnd={({ from, to }) => {
-                if (typeof onReorderPriority === 'function' && from !== to) {
-                  onReorderPriority(from, to);
-                }
-              }}
-              activationDistance={6}
-              autoscrollThreshold={32}
-              containerStyle={styles.draggableContainer}
-              scrollEnabled={false}
-            />
-          )}
-        </View>
-      </View>
+        <View style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} style={styles.headerBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <MaterialIcons name="chevron-left" size={28} color={theme.colors.onSurface} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Queue</Text>
+          </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>{headerTitle}</Text>
-        <View style={styles.listContainer}>
-          {contextQueue.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                {`No upcoming tracks`}
-              </Text>
-            </View>
-          ) : (
-            <DraggableFlatList
-              data={contextQueue}
-              keyExtractor={(item, index) => `context-${item?.id ?? 'track'}-${index}`}
-              renderItem={renderContextItem}
-              onDragEnd={({ from, to }) => {
-                if (typeof onReorderContext === 'function' && from !== to) {
-                  onReorderContext(from, to);
-                }
-              }}
-              activationDistance={6}
-              autoscrollThreshold={32}
-              containerStyle={styles.draggableContainer}
-              scrollEnabled={false}
+          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            {/* Now Playing */}
+            <Text style={styles.sectionLabel}>Now Playing</Text>
+            {currentTrack ? (
+              <QueueItem
+                item={currentTrack}
+                drag={() => {}}
+                isActive={false}
+                isNowPlaying
+                onActionPress={handleSkipNowPlaying}
+              />
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>Nothing playing</Text>
+              </View>
+            )}
+
+            <View style={styles.divider} />
+
+            {/* Priority queue */}
+            <Text style={styles.sectionLabelMuted}>Next in Queue</Text>
+            {priorityQueue.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>Queue is empty</Text>
+              </View>
+            ) : (
+              <DraggableFlatList
+                data={priorityQueue}
+                keyExtractor={(item, index) => `priority-${item?.id ?? 'track'}-${index}`}
+                renderItem={renderPriorityItem}
+                onDragEnd={({ from, to }) => {
+                  if (typeof onReorderPriority === 'function' && from !== to) {
+                    onReorderPriority(from, to);
+                  }
+                }}
+                activationDistance={6}
+                autoscrollThreshold={32}
+                scrollEnabled={false}
+              />
+            )}
+
+            <View style={styles.divider} />
+
+            {/* Context queue */}
+            <ContextHeader
+              contextLabel={contextLabel || 'Current Context'}
+              shuffleOn={shuffleOn}
+              repeatOn={repeatOn}
+              onToggleShuffle={() => setShuffleOn(v => !v)}
+              onToggleRepeat={() => setRepeatOn(v => !v)}
+              styles={styles}
+              theme={theme}
             />
-          )}
+            {contextQueue.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No upcoming tracks</Text>
+              </View>
+            ) : (
+              <DraggableFlatList
+                data={contextQueue}
+                keyExtractor={(item, index) => `context-${item?.id ?? 'track'}-${index}`}
+                renderItem={renderContextItem}
+                onDragEnd={({ from, to }) => {
+                  if (typeof onReorderContext === 'function' && from !== to) {
+                    onReorderContext(from, to);
+                  }
+                }}
+                activationDistance={6}
+                autoscrollThreshold={32}
+                scrollEnabled={false}
+              />
+            )}
+            <View style={styles.listFooter} />
+          </ScrollView>
         </View>
-      </View>
-    </View>
+      </BlurView>
+    </ImageBackground>
   );
 };
 

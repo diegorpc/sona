@@ -67,6 +67,49 @@ export const createTheme = (accentKey = 'velvet') => {
       onSurface: '#ffffff',
       onBackground: '#ffffff',
       outline: '#333333',
+      // Low opacity variants for borders and backgrounds
+      borderLowOpacity: `rgba(161, 77, 160, 0.09)`,
+      playingBackground: `rgba(161, 77, 160, 0.18)`,
+      badgeBackground: `rgba(161, 77, 160, 0.2)`,
+      badgeBorder: `rgba(161, 77, 160, 0.3)`,
+    },
+  };
+};
+
+// Helper function to create rgba from hex with opacity
+const hexToRgba = (hex, opacity) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+// Enhanced theme with dynamic opacity variants based on accent color
+export const createThemeWithVariants = (accentKey = 'velvet') => {
+  const accent = accentPalettes[accentKey] || accentPalettes.velvet;
+  
+  return {
+    ...MD3DarkTheme,
+    colors: {
+      ...MD3DarkTheme.colors,
+      primary: accent.primary,
+      primaryContainer: accent.primaryContainer,
+      secondary: accent.secondary,
+      secondaryContainer: accent.secondaryContainer,
+      surface: '#121212',
+      surfaceVariant: '#1e1e1e',
+      background: '#000000',
+      error: '#cf6679',
+      onPrimary: '#000000',
+      onSecondary: '#000000',
+      onSurface: '#ffffff',
+      onBackground: '#ffffff',
+      outline: '#333333',
+      // Dynamic low opacity variants based on primary color
+      borderLowOpacity: hexToRgba(accent.primary, 0.09),
+      playingBackground: hexToRgba(accent.primary, 0.18),
+      badgeBackground: hexToRgba(accent.primary, 0.2),
+      badgeBorder: hexToRgba(accent.primary, 0.3),
     },
   };
 };

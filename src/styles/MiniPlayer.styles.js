@@ -4,36 +4,34 @@ export const MINI_HEIGHT = 54;
 
 export const createStyles = (theme) => StyleSheet.create({
   touchable: {
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: 'transparent',
-    elevation: 6,
-    shadowColor: '#00000040',
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
     overflow: 'hidden',
-    opacity: 0.95,
   },
   blurContainer: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: `${theme.colors.surface}66`,
+    backgroundColor: 'rgba(22, 22, 24, 0.88)',
   },
   touchablePressed: {
-    backgroundColor: `${theme.colors.surface}30`,
+    opacity: 0.85,
   },
   content: {
     height: MINI_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 0,
   },
   coverArt: {
-    height: MINI_HEIGHT-10,
-    width: MINI_HEIGHT-10,
+    height: MINI_HEIGHT - 12,
+    width: MINI_HEIGHT - 12,
+    marginLeft: 8,
     marginRight: 10,
-    marginLeft: 10,
-    borderRadius: 12,
+    borderRadius: 8,
     objectFit: 'contain',
   },
   infoContainer: {
@@ -41,25 +39,26 @@ export const createStyles = (theme) => StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginTop: 4
+    marginTop: 2,
   },
   artist: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
-    opacity: 0.7,
-    marginBottom: 6,
+    opacity: 0.6,
+    marginBottom: 4,
   },
   playPause: {
     marginRight: 4,
+    margin: 0,
   },
   progressTrack: {
     flexDirection: 'row',
     height: 2,
-    backgroundColor: theme.colors.outlineVariant || `${theme.colors.outline}33`,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   progressFill: {
     backgroundColor: theme.colors.primary,

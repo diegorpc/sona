@@ -7,9 +7,10 @@ import {
   ImageBackground,
   RefreshControl,
 } from 'react-native';
-import { Text, ActivityIndicator, FAB } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import PlaylistCollage from '../components/PlaylistCollage';
@@ -20,6 +21,74 @@ import { createStyles } from '../styles/PlaylistScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
+// ─── Song row with art thumbnail ──────────────────────────────────
+const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+
+  const coverArtUrl = useMemo(() =>
+    item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null,
+    [item.coverArt]
+  );
+  const duration = useMemo(() => {
+    if (!item.duration) return '';
+    const m = Math.floor(item.duration / 60);
+    const s = item.duration % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }, [item.duration]);
+
+  return (
+    <TouchableOpacity
+      style={[styles.songItem, isPlaying && styles.songItemPlaying]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {/* Track number or now-playing indicator */}
+      <View style={styles.trackNumberWrapper}>
+        {isPlaying
+          ? <MaterialIcons name="play-arrow" size={14} color={theme.colors.primary} style={styles.nowPlayingIcon} />
+          : <Text style={styles.trackNumber}>{index + 1}</Text>
+        }
+      </View>
+
+      {/* Art thumbnail */}
+      <Image
+        source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+        style={styles.songImage}
+        defaultSource={DEFAULT_ART}
+      />
+
+      {/* Info */}
+      <View style={styles.songInfo}>
+        <Text
+          style={[styles.songTitle, isPlaying && styles.songTitlePlaying]}
+          numberOfLines={1}
+        >
+          {item.title}
+        </Text>
+        {item.artist && (
+          <Text
+            style={[styles.songArtist, isPlaying && styles.songArtistPlaying]}
+            numberOfLines={1}
+          >
+            {item.artist}
+          </Text>
+        )}
+      </View>
+
+      {duration ? <Text style={styles.songDuration}>{duration}</Text> : null}
+
+      <TouchableOpacity style={styles.menuButton} onPress={onMenuPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <MaterialIcons name="more-vert" size={18} color={theme.colors.onSurface} style={{ opacity: 0.4 }} />
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}, (prev, next) =>
+  prev.item.id === next.item.id &&
+  prev.index === next.index &&
+  prev.isPlaying === next.isPlaying
+);
+
 export default function PlaylistScreen({ route, navigation }) {
   const { playlist } = route.params;
   const { theme } = useTheme();
@@ -29,17 +98,15 @@ export default function PlaylistScreen({ route, navigation }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadPlaylistData();
-  }, []);
+  useEffect(() => { loadPlaylistData(); }, []);
 
   const loadPlaylistData = async () => {
     try {
       setIsLoading(true);
       const data = await SubsonicAPI.getPlaylist(playlist.id);
       setPlaylistData(data);
-    } catch (error) {
-      console.error('Error loading playlist data:', error);
+    } catch (e) {
+      console.error('Error loading playlist:', e);
     } finally {
       setIsLoading(false);
     }
@@ -51,9 +118,8 @@ export default function PlaylistScreen({ route, navigation }) {
     setIsRefreshing(false);
   };
 
-  const handleSongPress = async (song, index) => {
-    if (!playlistData || !playlistData.entry) return;
-
+  const handleSongPress = useCallback(async (song, index) => {
+    if (!playlistData?.entry) return;
     try {
       await AudioPlayer.playTrack(song, playlistData.entry, index, {
         contextName: playlist.name,
@@ -61,14 +127,13 @@ export default function PlaylistScreen({ route, navigation }) {
         contextId: playlist.id,
       });
       expandPlayerOverlay();
-    } catch (error) {
-      console.error('Error playing song:', error);
+    } catch (e) {
+      console.error('Error playing song:', e);
     }
-  };
+  }, [playlist, playlistData]);
 
-  const playPlaylist = async () => {
-    if (!playlistData || !playlistData.entry || playlistData.entry.length === 0) return;
-
+  const playPlaylist = useCallback(async () => {
+    if (!playlistData?.entry?.length) return;
     try {
       await AudioPlayer.playTrack(playlistData.entry[0], playlistData.entry, 0, {
         contextName: playlist.name,
@@ -76,145 +141,125 @@ export default function PlaylistScreen({ route, navigation }) {
         contextId: playlist.id,
       });
       expandPlayerOverlay();
-    } catch (error) {
-      console.error('Error playing playlist:', error);
+    } catch (e) {
+      console.error('Error playing playlist:', e);
     }
-  };
+  }, [playlist, playlistData]);
 
-  const formatDuration = (seconds) => {
-    if (!seconds) return '';
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
+  const getTotalDuration = useCallback(() => {
+    if (!playlistData?.entry) return '';
+    const total = playlistData.entry.reduce((s, t) => s + (t.duration || 0), 0);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }, [playlistData]);
 
-  const getTotalDuration = () => {
-    if (!playlistData || !playlistData.entry) return '';
-    const total = playlistData.entry.reduce((sum, song) => sum + (song.duration || 0), 0);
-    const hours = Math.floor(total / 3600);
-    const minutes = Math.floor((total % 3600) / 60);
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
-  };
+  // Cover art — use playlist art
+  const coverArtUrl = useMemo(() => {
+    return SubsonicAPI.getCoverArtUrl(playlist.coverArt, 600);
+  }, [playlist]);
 
-  const getPlaylistImage = () => {
-    // Try to use a collage if we can generate one
-    if (playlistData && playlistData.entry && playlistData.entry.length > 0) {
-      // Use the first song's album art
-      const firstSong = playlistData.entry[0];
-      if (firstSong.coverArt) {
-        return { uri: SubsonicAPI.getCoverArtUrl(firstSong.coverArt, 300) };
-      }
-    }
+  const backgroundArt = useMemo(() => {
+    if (coverArtUrl) return { uri: coverArtUrl };
+    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
     return DEFAULT_ART;
-  };
+  }, [coverArtUrl, currentTrack?.coverArt]);
 
-  const SongItem = memo(({ item, index }) => {
-    const handlePress = useCallback(() => {
-      handleSongPress(item, index);
-    }, [item, index]);
-
-    const duration = useMemo(() => formatDuration(item.duration), [item.duration]);
-    const coverArtUrl = useMemo(() => {
-      return item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
-    }, [item.coverArt]);
-
+  const renderItem = useCallback(({ item, index }) => {
+    const isPlaying = currentTrack?.id === item.id;
     return (
-      <TouchableOpacity style={styles.songItem} onPress={handlePress} activeOpacity={0.7}>
-        <View style={styles.trackNumber}>
-          <Text style={styles.trackNumberText}>{index + 1}</Text>
-        </View>
-        <Image
-          source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-          style={styles.songImage}
-          defaultSource={DEFAULT_ART}
-        />
-        <View style={styles.songInfo}>
-          <Text style={styles.songTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          {item.artist && (
-            <Text style={styles.songArtist} numberOfLines={1}>
-              {item.artist}
-            </Text>
-          )}
-        </View>
-        {duration && <Text style={styles.songDuration}>{duration}</Text>}
-      </TouchableOpacity>
+      <SongItem
+        item={item}
+        index={index}
+        isPlaying={isPlaying}
+        onPress={() => handleSongPress(item, index)}
+        onMenuPress={() => {/* TODO: context menu */}}
+      />
     );
-  }, (prevProps, nextProps) => {
-    return prevProps.item.id === nextProps.item.id && prevProps.index === nextProps.index;
-  });
-
-  const renderSong = useCallback(({ item, index }) => {
-    return <SongItem item={item} index={index} />;
-  }, []);
+  }, [currentTrack?.id, handleSongPress]);
 
   const keyExtractor = useCallback((item, index) => item.id || `song-${index}`, []);
+  const getItemLayout = useCallback((_, index) => ({ length: 64, offset: 64 * index, index }), []);
 
-  const getItemLayout = useCallback((data, index) => ({
-    length: 64,
-    offset: 64 * index,
-    index,
-  }), []);
-
-  const renderHeader = () => (
-    <BlurView intensity={40} tint="dark" style={[styles.header, styles.headerBlur]}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
-      >
-        <MaterialIcons name="arrow-back" size={24} color={theme.colors.onSurface} />
+  const StickyHeader = (
+    <View style={styles.stickyHeader} pointerEvents="box-none">
+      <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <MaterialIcons name="arrow-back" size={26} style={styles.stickyNavIcon} />
       </TouchableOpacity>
-      <View style={styles.headerContent}>
-        <Image source={getPlaylistImage()} style={styles.playlistImage} />
-        <View style={styles.headerInfo}>
-          <Text style={styles.playlistName} numberOfLines={2}>
-            {playlist.name}
-          </Text>
-          {playlistData && (
-            <>
-              <Text style={styles.playlistDetails}>
-                {playlistData.songCount || 0} song{(playlistData.songCount || 0) !== 1 ? 's' : ''}
-              </Text>
-              {getTotalDuration() && (
-                <Text style={styles.playlistDetails}>{getTotalDuration()}</Text>
-              )}
-            </>
-          )}
-        </View>
-      </View>
-    </BlurView>
-  );
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <MaterialIcons name="queue-music" size={64} color={theme.colors.outline} />
-      <Text style={styles.emptyText}>No songs in playlist</Text>
-      <Text style={styles.emptySubtext}>This playlist is empty</Text>
+      <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <MaterialIcons name="more-horiz" size={24} style={styles.stickyNavIcon} />
+      </TouchableOpacity>
     </View>
   );
 
-  const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) {
-      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
-    }
-    if (currentTrack?.albumId) {
-      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
-    }
-    return DEFAULT_ART;
-  }, [currentTrack?.albumId, currentTrack?.coverArt]);
+  const ListHeader = useMemo(() => (
+    <View>
+      {/* Rounded glowing media art */}
+      <View style={styles.artContainer}>
+        <View style={styles.artShadow}>
+          <Image
+            source={backgroundArt}
+            style={styles.artImage}
+            resizeMode="cover"
+            defaultSource={DEFAULT_ART}
+          />
+        </View>
+      </View>
+
+      {/* Title block */}
+      <View style={styles.titleBlock}>
+        <Text style={styles.playlistName} numberOfLines={2}>{playlist.name}</Text>
+        {playlist.comment ? (
+          <Text style={styles.playlistDescription} numberOfLines={2}>{playlist.comment}</Text>
+        ) : null}
+        {/* Neutral badge chips */}
+        <View style={styles.badgeRow}>
+          {playlistData && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{playlistData.songCount || 0} songs</Text>
+            </View>
+          )}
+          {getTotalDuration() ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{getTotalDuration()}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Play area */}
+        <View style={styles.playAreaRow}>
+          {/* Wide Play pill */}
+          <TouchableOpacity style={styles.playPill} onPress={playPlaylist} activeOpacity={0.8}>
+            <MaterialIcons name="play-arrow" size={18} color={theme.colors.onPrimary} />
+            <Text style={styles.playPillText}>Play</Text>
+          </TouchableOpacity>
+          {/* Shuffle circle */}
+          <TouchableOpacity style={styles.iconCircle} activeOpacity={0.7}>
+            <MaterialIcons name="shuffle" size={20} color={theme.colors.onSurface} style={{ opacity: 0.6 }} />
+          </TouchableOpacity>
+          {/* Like circle */}
+          <TouchableOpacity style={styles.iconCircle} activeOpacity={0.7}>
+            <MaterialIcons name="favorite-border" size={19} color={theme.colors.onSurface} style={{ opacity: 0.6 }} />
+          </TouchableOpacity>
+          {/* Add circle */}
+          <TouchableOpacity style={styles.iconCircle} activeOpacity={0.7}>
+            <MaterialIcons name="add" size={20} color={theme.colors.onSurface} style={{ opacity: 0.6 }} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+    </View>
+  ), [playlist, playlistData, backgroundArt, navigation, theme, playPlaylist, getTotalDuration]);
 
   if (isLoading) {
     return (
       <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
         <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+          {StickyHeader}
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.loadingText}>Loading playlist...</Text>
+            <Text style={styles.loadingText}>Loading playlist…</Text>
           </View>
         </BlurView>
       </ImageBackground>
@@ -225,8 +270,9 @@ export default function PlaylistScreen({ route, navigation }) {
     return (
       <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
         <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+          {StickyHeader}
           <View style={styles.errorContainer}>
-            <MaterialIcons name="error" size={64} color={theme.colors.error} />
+            <MaterialIcons name="error-outline" size={64} color={theme.colors.error} />
             <Text style={styles.errorText}>Failed to load playlist</Text>
             <Text style={styles.errorSubtext}>Please try again later</Text>
           </View>
@@ -241,35 +287,27 @@ export default function PlaylistScreen({ route, navigation }) {
         <View style={styles.container}>
           <FlatList
             data={playlistData.entry || []}
-            renderItem={renderSong}
+            renderItem={renderItem}
             keyExtractor={keyExtractor}
             getItemLayout={getItemLayout}
-            ListHeaderComponent={renderHeader}
-            ListEmptyComponent={renderEmptyState}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <MaterialIcons name="queue-music" size={64} color={theme.colors.outline} />
+                <Text style={styles.emptyText}>No songs in playlist</Text>
+              </View>
+            }
             contentContainerStyle={styles.listContainer}
             refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                colors={[theme.colors.primary]}
-              />
+              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[theme.colors.primary]} />
             }
             showsVerticalScrollIndicator={false}
-            removeClippedSubviews={true}
+            removeClippedSubviews
             maxToRenderPerBatch={10}
-            updateCellsBatchingPeriod={50}
             initialNumToRender={20}
             windowSize={10}
           />
-
-          {playlistData.entry && playlistData.entry.length > 0 && (
-            <FAB
-              style={styles.fab}
-              icon="play-arrow"
-              onPress={playPlaylist}
-              label="Play"
-            />
-          )}
+          {StickyHeader}
         </View>
       </BlurView>
     </ImageBackground>

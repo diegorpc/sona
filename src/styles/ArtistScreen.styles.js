@@ -1,6 +1,7 @@
 import { StyleSheet, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
+const ART_SIZE = Math.min(180, width - 180);
 
 export const createStyles = (theme) => StyleSheet.create({
   backgroundImage: {
@@ -18,7 +19,6 @@ export const createStyles = (theme) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
   },
   loadingText: {
     marginTop: 16,
@@ -30,7 +30,6 @@ export const createStyles = (theme) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
     paddingHorizontal: 32,
   },
   errorText: {
@@ -44,112 +43,223 @@ export const createStyles = (theme) => StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onBackground,
-    opacity: 0.7,
+    opacity: 0.6,
     textAlign: 'center',
   },
-  header: {
-    paddingTop: 50,
-    paddingBottom: 16,
+  // Sticky header (back + more icons)
+  stickyHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 52,
     paddingHorizontal: 16,
-  },
-  headerBlur: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(154, 107, 255, 0.2)',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(18, 18, 18, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  headerContent: {
+    paddingBottom: 12,
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    zIndex: 10,
   },
-  artistImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginRight: 16,
+  stickyNavIcon: {
+    color: theme.colors.onBackground,
+    padding: 4,
+    textShadowColor: theme.colors.primary,
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 0,
   },
-  headerInfo: {
-    flex: 1,
+  // Art glow container (circular for artist)
+  artContainer: {
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 100,
+    paddingBottom: 10,
+  },
+  artShadow: {
+    borderRadius: ART_SIZE / 2,
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.5,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 18,
+  },
+  artImage: {
+    width: ART_SIZE,
+    height: ART_SIZE,
+    borderRadius: ART_SIZE / 2,
+  },
+  titleBlock: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
+    alignItems: 'center',
   },
   artistName: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
-    marginBottom: 6,
+    textShadowColor: theme.colors.primary,
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 0,
   },
   artistStats: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
-    opacity: 0.7,
+    opacity: 0.55,
+    marginTop: 5,
   },
-  listContainer: {
-    paddingBottom: 100,
-    paddingHorizontal: 8,
+  // Chip tabs (library-style TouchableOpacity chips)
+  chipTabsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.borderLowOpacity,
   },
-  albumCard: {
-    backgroundColor: 'rgba(30, 30, 30, 0.5)',
-    borderRadius: 12,
-    marginVertical: 6,
-    overflow: 'hidden',
+  chipTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255, 255, 255, 0.07)',
     borderWidth: 1,
-    borderColor: 'rgba(154, 107, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.11)',
   },
-  albumContent: {
+  chipTabActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: 'transparent',
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  chipTabText: {
+    fontSize: 13,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.onSurface,
+    opacity: 0.6,
+  },
+  chipTabTextActive: {
+    color: '#fff',
+    opacity: 1,
+  },
+  // Album rows (library-style, no play button)
+  albumRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.borderLowOpacity,
   },
   albumArt: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 14,
+    width: 52,
+    height: 52,
+    borderRadius: 5,
+    marginRight: 10,
   },
   albumInfo: {
     flex: 1,
     justifyContent: 'center',
+    minWidth: 0,
   },
   albumTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginBottom: 4,
   },
-  albumYear: {
-    fontSize: 13,
-    fontFamily: 'Lexend_500Medium',
-    color: theme.colors.primary,
-    marginBottom: 4,
-  },
-  albumDetails: {
+  albumSubtitle: {
     fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
-    opacity: 0.7,
+    opacity: 0.55,
+    marginTop: 2,
   },
-  albumPlayButton: {
+  albumChevron: {
+    color: theme.colors.onSurface,
+    opacity: 0.35,
+  },
+  // Top songs / Favorite songs rows (same as playlist rows with art)
+  songItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.borderLowOpacity,
+    backgroundColor: 'transparent',
+  },
+  songItemPlaying: {
+    backgroundColor: theme.colors.playingBackground,
+  },
+  trackNumberWrapper: {
+    width: 22,
+    alignItems: 'center',
+    marginRight: 0,
+    flexShrink: 0,
+  },
+  trackNumber: {
+    fontSize: 12,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.onSurface,
+    opacity: 0.4,
+  },
+  nowPlayingIcon: {
+    color: theme.colors.primary,
+  },
+  songImage: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 5,
     marginLeft: 8,
+    marginRight: 10,
   },
-  emptyState: {
+  songInfo: {
     flex: 1,
     justifyContent: 'center',
+    minWidth: 0,
+  },
+  songTitle: {
+    fontSize: 13.5,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+  },
+  songTitlePlaying: {
+    color: theme.colors.primary,
+  },
+  songArtist: {
+    fontSize: 11.5,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.55,
+    marginTop: 1,
+  },
+  songArtistPlaying: {
+    color: theme.colors.primary,
+    opacity: 0.7,
+  },
+  songDuration: {
+    fontSize: 12,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.4,
+    marginRight: 2,
+    flexShrink: 0,
+  },
+  menuButton: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
-    paddingTop: 100,
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  listContainer: {
+    paddingBottom: 120,
+  },
+  emptyState: {
+    paddingTop: 80,
+    alignItems: 'center',
   },
   emptyText: {
     fontSize: 18,
@@ -161,15 +271,9 @@ export const createStyles = (theme) => StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onBackground,
-    opacity: 0.7,
+    opacity: 0.6,
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 32,
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 100,
-    backgroundColor: theme.colors.primary,
   },
 });

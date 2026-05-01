@@ -32,12 +32,13 @@ export const createStyles = (theme) => StyleSheet.create({
     top: 0,
     backgroundColor: 'transparent',
   },
+  // Queue overlay also gets blurred bg now — driven by QueueScreen itself
   queueOverlay: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     top: 0,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
   },
 });

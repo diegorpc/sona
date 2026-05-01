@@ -31,6 +31,32 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+const LibraryStack = createStackNavigator();
+const SearchStack = createStackNavigator();
+
+const detailScreenOptions = { headerShown: false };
+
+function LibraryStackNavigator() {
+  return (
+    <LibraryStack.Navigator screenOptions={{ headerShown: false }}>
+      <LibraryStack.Screen name="LibraryHome" component={LibraryScreen} />
+      <LibraryStack.Screen name="Artist" component={ArtistScreen} options={detailScreenOptions} />
+      <LibraryStack.Screen name="Album" component={AlbumScreen} options={detailScreenOptions} />
+      <LibraryStack.Screen name="Playlist" component={PlaylistScreen} options={detailScreenOptions} />
+    </LibraryStack.Navigator>
+  );
+}
+
+function SearchStackNavigator() {
+  return (
+    <SearchStack.Navigator screenOptions={{ headerShown: false }}>
+      <SearchStack.Screen name="SearchHome" component={SearchScreen} />
+      <SearchStack.Screen name="Artist" component={ArtistScreen} options={detailScreenOptions} />
+      <SearchStack.Screen name="Album" component={AlbumScreen} options={detailScreenOptions} />
+      <SearchStack.Screen name="Playlist" component={PlaylistScreen} options={detailScreenOptions} />
+    </SearchStack.Navigator>
+  );
+}
 
 function MainTabs() {
   const { theme } = useTheme();
@@ -63,8 +89,8 @@ function MainTabs() {
         backgroundColor: 'transparent',
       }}
     >
-      <Tab.Screen name="Library" component={LibraryScreen} />
-      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="Library" component={LibraryStackNavigator} />
+      <Tab.Screen name="Search" component={SearchStackNavigator} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -131,28 +157,11 @@ function AppContent() {
                     options={{ headerShown: false }}
                   />
                 ) : (
-                  <>
-                    <Stack.Screen 
-                      name="Main" 
-                      component={MainTabs}
-                      options={{ headerShown: false }}
-                    />
-                    <Stack.Screen 
-                      name="Artist" 
-                      component={ArtistScreen}
-                      options={{ title: 'Artist' }}
-                    />
-                    <Stack.Screen 
-                      name="Album" 
-                      component={AlbumScreen}
-                      options={{ title: 'Album' }}
-                    />
-                    <Stack.Screen 
-                      name="Playlist" 
-                      component={PlaylistScreen}
-                      options={{ title: 'Playlist' }}
-                    />
-                  </>
+                  <Stack.Screen 
+                    name="Main" 
+                    component={MainTabs}
+                    options={{ headerShown: false }}
+                  />
                 )}
               </Stack.Navigator>
             </NavigationContainer>

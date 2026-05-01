@@ -6,7 +6,7 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   blurOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(8, 8, 8, 0.77)',
+    backgroundColor: 'rgba(8, 8, 8, 0.78)',
   },
   container: {
     flex: 1,
@@ -15,17 +15,18 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 14,
     backgroundColor: 'transparent',
   },
   headerTitle: {
     fontSize: 28,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
-    textShadowOffset: { width: 1, height: 2 },
     textShadowColor: theme.colors.primary,
-    marginBottom: 12
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 0,
+    marginBottom: 12,
   },
   searchbar: {
     borderRadius: 10,
@@ -38,83 +39,95 @@ export const createStyles = (theme) => StyleSheet.create({
     paddingBottom: 10,
   },
   resultsList: {
-    paddingBottom: 80,
+    paddingBottom: 100,
   },
-  // Flat list item container matching LibraryScreen
+  // ─── Section headers ──────────────────────────────────────────
+  sectionHeader: {
+    paddingTop: 10,
+    paddingBottom: 4,
+    paddingHorizontal: 14,
+    backgroundColor: 'transparent',
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+    textShadowColor: theme.colors.primary,
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
+  },
+  recentSearchHeader: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.borderLowOpacity,
+    backgroundColor: 'transparent',
+  },
+  // ─── Unified flat list item (matches LibraryScreen) ───────────
   flatListItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: theme.colors.transparent,
-    borderBottomWidth: 0.5,
-    borderBottomColor: theme.colors.outline,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.borderLowOpacity,
+    backgroundColor: 'transparent',
+  },
+  flatListItemPlaying: {
+    backgroundColor: theme.colors.playingBackground,
+  },
+  itemLeadingIcon: {
+    marginRight: 6,
   },
   itemImage: {
     width: 52,
     height: 52,
-    borderRadius: 2,
+    borderRadius: 5,
     marginRight: 10,
-    paddingVertical: 2,
-    objectFit: 'contain',
-    resizeMode: 'contain',
+  },
+  itemImageRound: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginRight: 10,
   },
   itemInfo: {
     flex: 1,
     justifyContent: 'center',
   },
   itemTitle: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
     marginBottom: 2,
   },
+  itemTitlePlaying: {
+    color: theme.colors.primary,
+  },
   itemSubtitle: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
-    opacity: 0.7,
+    opacity: 0.55,
   },
   itemRightContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 12,
+    marginLeft: 10,
   },
   itemDuration: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
-    opacity: 0.6,
-    marginRight: 6,
+    opacity: 0.45,
+    marginRight: 4,
   },
-  sectionHeader: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: 'transparent',
-  },
-  recentSearchHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'transparent',
-    borderBottomWidth: 0.5,
-    borderBottomColor: theme.colors.outline,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    marginLeft: 4,
-    fontFamily: 'Lexend_600SemiBold',
-    color: theme.colors.onSurface,
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowColor: theme.colors.primary,
-  },
+  // Loading / empty
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
-  },
-  itemLeadingIcon: {
-    marginRight: 6,
   },
   loadingText: {
     marginTop: 16,
@@ -138,7 +151,7 @@ export const createStyles = (theme) => StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onBackground,
-    opacity: 0.7,
+    opacity: 0.6,
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 32,

@@ -1,10 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Image, ImageBackground, Easing } from 'react-native';
-import { Text, IconButton, Card, Surface } from 'react-native-paper';
+import {
+  View,
+  Image,
+  ImageBackground,
+  TouchableOpacity,
+  Easing,
+} from 'react-native';
+import { Text } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
-
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
 import { useTheme } from '../contexts/ThemeContext';
@@ -13,52 +20,37 @@ import TextTicker from 'react-native-text-ticker';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
-export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
+export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isExpanded = true }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
+  const [isStarred, setIsStarred] = useState(false);
   const isSlidingRef = useRef(false);
   const topInset = safeAreaInsets?.top ?? 0;
   const bottomInset = safeAreaInsets?.bottom ?? 0;
 
   useEffect(() => {
-    // Load saved state
     AudioPlayer.loadSavedState();
-
-    // Add listener for player state changes
     const listener = (state) => {
       setPlayerState(state);
       if (!isSlidingRef.current) {
         setSliderValue(state.position);
       }
+      setIsStarred(Boolean(state.currentTrack?.starred));
     };
-
     AudioPlayer.addListener(listener);
-
-    return () => {
-      AudioPlayer.removeListener(listener);
-    };
+    return () => AudioPlayer.removeListener(listener);
   }, []);
 
-  const handlePlayPause = () => {
-    AudioPlayer.togglePlayPause();
-  };
-
-  const handleNext = () => {
-    AudioPlayer.playNext();
-  };
-
-  const handlePrevious = () => {
-    AudioPlayer.playPrevious();
-  };
+  const handlePlayPause = () => AudioPlayer.togglePlayPause();
+  const handleNext = () => AudioPlayer.playNext();
+  const handlePrevious = () => AudioPlayer.playPrevious();
 
   const handleSeek = async (value) => {
     if (duration > 0) {
-      const seekPosition = (value / 100) * duration;
-      console.log('seeking to ' + seekPosition/1000 + 's ' , value);
-      await AudioPlayer.seekTo(seekPosition);
+      await AudioPlayer.seekTo((value / 100) * duration);
     }
   };
 
@@ -79,44 +71,40 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
     }
   };
 
-  const getCoverArtUrl = (track) => {
-    if (track && track.coverArt) {
-      return SubsonicAPI.getCoverArtUrl(track.coverArt, 400);
+  const handleStarToggle = async () => {
+    const { currentTrack } = playerState;
+    if (!currentTrack) return;
+    if (isStarred) {
+      await SubsonicAPI.unstar(currentTrack.id);
+      setIsStarred(false);
+    } else {
+      await SubsonicAPI.star(currentTrack.id);
+      setIsStarred(true);
     }
-    return null;
-  };
-  const formatTime = (milliseconds) => {
-    return AudioPlayer.formatTime(milliseconds);
   };
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <MaterialIcons name="music-note" size={64} color={theme.colors.outline} />
-      <Text style={styles.emptyText}>No track selected</Text>
-      <Text style={styles.emptySubtext}>
-        Choose a song from your library to start playing
-      </Text>
-    </View>
-  );
+  const getCoverArtUrl = (track) => {
+    if (track?.coverArt) return SubsonicAPI.getCoverArtUrl(track.coverArt, 400);
+    return null;
+  };
+
+  const formatTime = (ms) => AudioPlayer.formatTime(ms);
 
   const { currentTrack, isPlaying, position, duration, isLoading } = playerState;
 
-  const shouldShowDuration = !isLoading && Number.isFinite(duration) && duration > 0;
-  const endTimeDisplay = shouldShowDuration ? formatTime(duration) : 'Loading…';
-
-  const isStarred = useRef(currentTrack.starred);
-
-  const handleClose = () => {
-    if (typeof onClose === 'function') {
-      onClose();
-    }
-  };
-
   if (!currentTrack) {
-    return renderEmptyState();
+    return (
+      <View style={styles.emptyContainer}>
+        <MaterialIcons name="music-note" size={64} color={theme.colors.outline} />
+        <Text style={styles.emptyText}>No track selected</Text>
+        <Text style={styles.emptySubtext}>Choose a song from your library to start playing</Text>
+      </View>
+    );
   }
 
   const coverArtUrl = getCoverArtUrl(currentTrack);
+  const shouldShowDuration = !isLoading && Number.isFinite(duration) && duration > 0;
+  const endTimeDisplay = shouldShowDuration ? formatTime(duration) : 'Loading…';
 
   return (
     <ImageBackground
@@ -125,31 +113,74 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
       resizeMode="cover"
     >
       <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
-        <View style={styles.container}>
+        {/* Accent radial glow - only show when expanded */}
+        {isExpanded && (
+          <LinearGradient
+            colors={[`${theme.colors.primary}48`, 'transparent']}
+            style={[
+              styles.accentGlow,
+              { position: 'absolute', top: -100, left: 0, right: 0, height: 300 },
+            ]}
+          />
+        )}
+
+        <View style={[styles.container, { paddingBottom: bottomInset + 16 }]}>
+          {/* Header */}
           <View style={[styles.header, { paddingTop: topInset + 12 }]}>
             <View style={styles.dragIndicator} />
-            <IconButton
-              icon="chevron-down"
-              size={28}
-              onPress={handleClose}
-              iconColor={theme.colors.onBackground}
+            <TouchableOpacity
+              onPress={onClose}
               style={[styles.closeButton, { top: topInset + 4 }]}
-            />
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <MaterialIcons name="keyboard-arrow-down" size={28} color={theme.colors.onBackground} />
+            </TouchableOpacity>
           </View>
 
-          <View style={[styles.content, { paddingBottom: bottomInset + 32 }]}>
-            <View style={styles.albumArtContainer}>
+          {/* Album art */}
+          <View style={styles.albumArtContainer}>
+            <View style={styles.albumArtShadow}>
               <Image
                 source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
                 style={styles.albumArt}
                 defaultSource={DEFAULT_ART}
               />
             </View>
+          </View>
 
-            {/* Track Info */}
-            <View style={styles.trackInfo}>
+          {/* Track info */}
+          <View style={styles.trackInfo}>
+            <TextTicker
+              style={styles.trackTitle}
+              duration={4000}
+              bounce
+              loop
+              easing={Easing.linear}
+              animationType="bounce"
+              repeatSpacer={50}
+              marqueeDelay={1000}
+              bouncePadding={{ left: 0, right: 5 }}
+              bounceDelay={1000}
+            >
+              {currentTrack.title}
+            </TextTicker>
+            <TextTicker
+              style={styles.trackArtist}
+              duration={4000}
+              bounce
+              loop
+              easing={Easing.linear}
+              animationType="bounce"
+              repeatSpacer={50}
+              marqueeDelay={1000}
+              bouncePadding={{ left: 0, right: 5 }}
+              bounceDelay={1000}
+            >
+              {currentTrack.artist}
+            </TextTicker>
+            {currentTrack.album && (
               <TextTicker
-                style={styles.trackTitle}
+                style={styles.trackAlbum}
                 duration={4000}
                 bounce
                 loop
@@ -160,40 +191,13 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
                 bouncePadding={{ left: 0, right: 5 }}
                 bounceDelay={1000}
               >
-                {currentTrack.title}
+                {currentTrack.album}
               </TextTicker>
-              <TextTicker
-                style={styles.trackArtist}
-                duration={4000}
-                bounce
-                loop
-                easing={Easing.linear}
-                animationType="bounce"
-                repeatSpacer={50}
-                marqueeDelay={1000}
-                bouncePadding={{ left: 0, right: 5 }}
-                bounceDelay={1000}
-              >
-                {currentTrack.artist}
-              </TextTicker>
-              {currentTrack.album && (
-                <TextTicker
-                  style={styles.trackAlbum}
-                  duration={4000}
-                  bounce
-                  loop
-                  easing={Easing.linear}
-                  animationType="bounce"
-                  repeatSpacer={50}
-                  marqueeDelay={1000}
-                  bouncePadding={{ left: 0, right: 5 }}
-                  bounceDelay={1000}
-                >
-                  {currentTrack.album}
-                </TextTicker>
-              )}
-            </View>
+            )}
+          </View>
 
+          {/* Glass controls card */}
+          <View style={styles.controlsCard}>
             {/* Progress */}
             <View style={styles.progressContainer}>
               <Slider
@@ -211,10 +215,10 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
                 onSlidingStart={handleSliderStart}
                 onSlidingComplete={handleSliderComplete}
                 minimumTrackTintColor={theme.colors.primary}
-                maximumTrackTintColor={theme.colors.outline}
-                thumbTintColor={theme.colors.primary}
-                thumbSize={16}
-                trackHeight={5}
+                maximumTrackTintColor="rgba(255,255,255,0.12)"
+                thumbTintColor="#fff"
+                thumbSize={13}
+                trackHeight={3.5}
               />
               <View style={styles.timeContainer}>
                 <Text style={styles.timeText}>
@@ -224,74 +228,54 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
               </View>
             </View>
 
-            {/* Controls */}
-            <Surface style={styles.controlsContainer}>
-              <IconButton
-                icon="skip-previous"
-                size={32}
-                onPress={handlePrevious}
-                iconColor={theme.colors.onSurface}
-              />
+            {/* Full-width transport: prev · play/pause · next */}
+            <View style={styles.transportRow}>
+              <TouchableOpacity onPress={handlePrevious} style={styles.skipButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <MaterialIcons name="skip-previous" size={34} color={theme.colors.onBackground} />
+              </TouchableOpacity>
 
-              <IconButton
-                icon={isLoading ? 'timer-sand' : isPlaying ? 'pause' : 'play'}
-                size={48}
-                onPress={handlePlayPause}
-                disabled={isLoading}
-                iconColor={theme.colors.onSurface}
-                style={styles.playButton}
-              />
+              <TouchableOpacity onPress={handlePlayPause} style={styles.playButton} disabled={isLoading}>
+                <MaterialIcons
+                  name={isLoading ? 'hourglass-empty' : isPlaying ? 'pause' : 'play-arrow'}
+                  size={32}
+                  color="#fff"
+                />
+              </TouchableOpacity>
 
-              <IconButton
-                icon="skip-next"
-                size={32}
-                onPress={handleNext}
-                iconColor={theme.colors.onSurface}
-              />
-            </Surface>
+              <TouchableOpacity onPress={handleNext} style={styles.skipButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <MaterialIcons name="skip-next" size={34} color={theme.colors.onBackground} />
+              </TouchableOpacity>
+            </View>
 
-            <View style={[styles.additionalControls, { paddingBottom: bottomInset > 0 ? bottomInset + 16 : 32 }]}>
-              <IconButton
-                icon="shuffle"
-                size={24}
-                onPress={() => {
-                  /* TODO: Implement shuffle */
-                }}
-                iconColor={theme.colors.onSurface}
-              />
+            {/* Secondary controls: heart · queue · dots */}
+            <View style={styles.secondaryRow}>
+              <TouchableOpacity
+                onPress={handleStarToggle}
+                style={styles.secondaryButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons
+                  name={isStarred ? 'favorite' : 'favorite-border'}
+                  size={22}
+                  color={isStarred ? theme.colors.primary : theme.colors.onSurface}
+                  style={{ opacity: isStarred ? 1 : 0.55 }}
+                />
+              </TouchableOpacity>
 
-              <IconButton
-                icon={isStarred.current ? 'heart' : 'heart-outline'}
-                size={24}
-                onPress={() => {
-                  if (isStarred.current) {
-                    SubsonicAPI.unstar(currentTrack.id);
-                    isStarred.current = false;
-                  } else {
-                    SubsonicAPI.star(currentTrack.id);
-                    isStarred.current = true;
-                  }
-                }}
-                iconColor={theme.colors.onSurface}
-              />
+              <TouchableOpacity
+                onPress={onShowQueue}
+                style={styles.secondaryButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="queue-music" size={22} color={theme.colors.onSurface} style={{ opacity: 0.55 }} />
+              </TouchableOpacity>
 
-              <IconButton
-                icon="repeat"
-                size={24}
-                onPress={() => {
-                  /* TODO: Implement repeat */
-                }}
-                iconColor={theme.colors.onSurface}
-              />
-
-              <IconButton
-                icon="playlist-music"
-                size={24}
-                onPress={() => {
-                  onShowQueue();
-                }}
-                iconColor={theme.colors.onSurface}
-              />
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialIcons name="more-horiz" size={22} color={theme.colors.onSurface} style={{ opacity: 0.55 }} />
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -299,4 +283,3 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets }) {
     </ImageBackground>
   );
 }
-

@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createTheme } from '../theme/theme';
+import { createThemeWithVariants as createTheme } from '../theme/theme';
 
 const ThemeContext = createContext();
 

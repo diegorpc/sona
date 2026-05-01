@@ -315,6 +315,7 @@ const PlayerOverlay = () => {
           onClose={handleCollapse}
           onShowQueue={handleShowQueue}
           safeAreaInsets={insets}
+          isExpanded={isExpanded}
         />
       </Animated.View>
 

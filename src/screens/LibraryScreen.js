@@ -140,9 +140,159 @@ const buildChipOrder = (selectedKey) => {
   return [selected, ...CHIP_DEFINITIONS.filter(chip => chip.key !== selectedKey)];
 };
 
+const formatItemDuration = (seconds) => {
+  if (!seconds) return '';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
+const DEFAULT_LIST_IMAGE = require('../../assets/default-album.png');
+
+// Hoisted to module scope so memoization actually works across LibraryScreen renders.
+const ListItem = memo(function ListItem({
+  item,
+  index,
+  viewMode,
+  styles,
+  primaryColor,
+  collageData,
+  isPlaying,
+  onPress,
+  onMenuPress,
+}) {
+  const handlePress = useCallback(() => {
+    onPress(item, index);
+  }, [onPress, item, index]);
+
+  const handleMenuPressCallback = useCallback(() => {
+    onMenuPress(item);
+  }, [onMenuPress, item]);
+
+  const title = viewMode === 'liked' ? item.title : item.name;
+
+  const subtitle = useMemo(() => {
+    switch (viewMode) {
+      case 'artists':
+        return `${item.albumCount} album${item.albumCount !== 1 ? 's' : ''}`;
+      case 'albums':
+      case 'liked':
+        return item.artist || 'Unknown Artist';
+      case 'playlists':
+        return `${item.songCount || 0} song${(item.songCount || 0) !== 1 ? 's' : ''}`;
+      default:
+        return '';
+    }
+  }, [viewMode, item.albumCount, item.artist, item.songCount]);
+
+  // Resolve image: prefer direct coverArt URL; for playlists fall back to a 2x2 collage.
+  const imageData = useMemo(() => {
+    if (viewMode === 'artists') {
+      return item?.artistImageUrl || null;
+    }
+    if (viewMode === 'albums' || viewMode === 'liked') {
+      return (item.coverArt && SubsonicAPI.baseUrl)
+        ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200)
+        : null;
+    }
+    if (viewMode === 'playlists') {
+      // Newer Subsonic servers expose a real playlist cover art id; prefer it over the
+      // generated collage and only fall back to the collage when none exists.
+      if (item.coverArt && SubsonicAPI.baseUrl) {
+        return SubsonicAPI.getCoverArtUrl(item.coverArt, 200);
+      }
+      return collageData || null;
+    }
+    return null;
+  }, [viewMode, item.id, item.coverArt, item.artistImageUrl, collageData]);
+
+  const duration = useMemo(
+    () => (item.duration ? formatItemDuration(item.duration) : ''),
+    [item.duration]
+  );
+
+  const showDuration = viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
+  const showMenu = viewMode === 'liked' || viewMode === 'playlists';
+
+  const imageComponent = useMemo(() => {
+    if (imageData && typeof imageData === 'object' && imageData.type === 'collage') {
+      return (
+        <PlaylistCollage
+          collageData={imageData}
+          size={56}
+          style={styles.itemImage}
+        />
+      );
+    }
+    const imageUrl = typeof imageData === 'string' ? imageData : null;
+    return (
+      <Image
+        source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : DEFAULT_LIST_IMAGE}
+        style={styles.itemImage}
+        defaultSource={DEFAULT_LIST_IMAGE}
+        fadeDuration={200}
+      />
+    );
+  }, [imageData, styles.itemImage]);
+
+  return (
+    <TouchableOpacity
+      style={[styles.flatListItem, isPlaying && styles.flatListItemPlaying]}
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
+      {viewMode === 'liked' && (
+        <MaterialIcons
+          name="favorite"
+          size={16}
+          color={primaryColor}
+          style={styles.itemLeadingIcon}
+        />
+      )}
+      {imageComponent}
+      <View style={styles.itemInfo}>
+        <Text style={[styles.itemTitle, isPlaying && styles.itemTitlePlaying]}>{title}</Text>
+        <Text style={[styles.itemSubtitle, isPlaying && styles.itemSubtitlePlaying]}>{subtitle}</Text>
+      </View>
+
+      {(showDuration || showMenu) && (
+        <View style={styles.itemRightContent}>
+          {showDuration && duration && (
+            <Text style={styles.itemDuration}>{duration}</Text>
+          )}
+          {showMenu && (
+            <TouchableOpacity
+              style={styles.itemMenuButton}
+              onPress={handleMenuPressCallback}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.itemMenuDots}>⋯</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}, (prev, next) => {
+  return (
+    prev.item === next.item &&
+    prev.index === next.index &&
+    prev.viewMode === next.viewMode &&
+    prev.styles === next.styles &&
+    prev.primaryColor === next.primaryColor &&
+    prev.collageData === next.collageData &&
+    prev.isPlaying === next.isPlaying &&
+    prev.onPress === next.onPress &&
+    prev.onMenuPress === next.onMenuPress
+  );
+});
+
 export default function LibraryScreen({ navigation }) {
   const { theme } = useTheme();
-  const styles = createStyles(theme);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { playTrack } = usePlayer();
   const {
     playerState: { currentTrack },
@@ -602,9 +752,11 @@ export default function LibraryScreen({ navigation }) {
     try {
       const updatedCollages = { ...cachedCollages };
       
-      // Find playlists that need collages
-      const playlistsNeedingCollages = playlistsData.filter(playlist => 
-        playlist.id && (!cachedCollages[playlist.id] || forceRefresh)
+      // Find playlists that need collages.
+      // Skip playlists that already expose a real coverArt id from the server,
+      // since that art will be used directly and the collage is only a fallback.
+      const playlistsNeedingCollages = playlistsData.filter(playlist =>
+        playlist.id && !playlist.coverArt && (!cachedCollages[playlist.id] || forceRefresh)
       );
       
       if (playlistsNeedingCollages.length === 0) {
@@ -1192,6 +1344,13 @@ export default function LibraryScreen({ navigation }) {
     }
   }, [closeSortMenu, isSortMenuVisible, sortMenuAnimation]);
 
+  // Keep a ref to the latest displayed data so handleItemPress stays referentially
+  // stable across pagination updates (otherwise every row would re-render on each batch).
+  const displayedDataRef = useRef(displayedData);
+  useEffect(() => {
+    displayedDataRef.current = displayedData;
+  }, [displayedData]);
+
   const handleItemPress = useCallback((item, index) => {
     switch (viewMode) {
       case 'artists':
@@ -1201,7 +1360,7 @@ export default function LibraryScreen({ navigation }) {
         navigation.navigate('Album', { album: item });
         break;
       case 'liked':
-        AudioPlayer.playTrack(item, displayedData, index, {
+        AudioPlayer.playTrack(item, displayedDataRef.current, index, {
           contextName: 'Liked Songs',
           contextType: 'liked',
           contextId: 'liked',
@@ -1214,173 +1373,37 @@ export default function LibraryScreen({ navigation }) {
       default:
         break;
     }
-  }, [viewMode, navigation, displayedData]);
+  }, [viewMode, navigation]);
 
   const handleMenuPress = useCallback((item) => {
     // TODO: Implement menu functionality
   }, []);
 
-  const formatDuration = (seconds) => {
-    if (!seconds) return '';
-    
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-  };
-
-  // Optimized list item component with custom comparison function
-  const ListItem = memo(({ item, index, viewMode, playlistCollages, theme }) => {
-    const handlePress = useCallback(() => {
-      handleItemPress(item, index);
-    }, [item, index]);
-
-    const handleMenuPressCallback = useCallback(() => {
-      handleMenuPress(item);
-    }, [item]);
-
-    // Calculate title and subtitle directly (simpler than switch statement)
-    const title = viewMode === 'liked' ? item.title : item.name;
-    const subtitle = useMemo(() => {
-      switch (viewMode) {
-        case 'artists':
-          return `${item.albumCount} album${item.albumCount !== 1 ? 's' : ''}`;
-        case 'albums':
-        case 'liked':
-          return item.artist || 'Unknown Artist';
-        case 'playlists':
-          return `${item.songCount || 0} song${(item.songCount || 0) !== 1 ? 's' : ''}`;
-        default:
-          return '';
-      }
-    }, [viewMode, item.albumCount, item.artist, item.songCount]);
-    
-    // Optimize image data calculation - avoid recreating objects
-    const imageData = useMemo(() => {
-      if (viewMode === 'artists') {
-        return item?.artistImageUrl || null;
-      }
-      if (viewMode === 'albums' || viewMode === 'liked') {
-        return (item.coverArt && SubsonicAPI.baseUrl) ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null;
-      }
-      if (viewMode === 'playlists') {
-        return playlistCollages[item.id] || null;
-      }
-      return null;
-    }, [viewMode, item.id, item.coverArt, item.artistImageUrl, playlistCollages]);
-
-    const duration = useMemo(() => {
-      return item.duration ? formatDuration(item.duration) : '';
-    }, [item.duration]);
-
-    const showDuration = viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
-    const showMenu = viewMode === 'liked' || viewMode === 'playlists';
-    
-    // Memoized image component - only re-render when imageData changes
-    const imageComponent = useMemo(() => {
-      if (viewMode === 'playlists' && imageData && typeof imageData === 'object' && imageData.type === 'collage') {
-        return (
-          <PlaylistCollage 
-            collageData={imageData} 
-            size={56} 
-            style={styles.itemImage} 
-          />
-        );
-      }
-      
-      const imageUrl = typeof imageData === 'string' ? imageData : null;
-      return (
-        <Image
-          source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : require('../../assets/default-album.png')}
-          style={styles.itemImage}
-          defaultSource={require('../../assets/default-album.png')}
-          fadeDuration={200}
-        />
-      );
-    }, [imageData, viewMode]);
-    
-    return (
-      <TouchableOpacity 
-        style={styles.flatListItem}
-        onPress={handlePress}
-        activeOpacity={0.7}
-      >
-        {viewMode === 'liked' && (
-          <MaterialIcons
-            name="favorite"
-            size={16}
-            color={theme.colors.primary}
-            style={styles.itemLeadingIcon}
-          />
-        )}
-        {imageComponent}
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemTitle}>{title}</Text>
-          <Text style={styles.itemSubtitle}>{subtitle}</Text>
-        </View>
-        
-        {(showDuration || showMenu) && (
-          <View style={styles.itemRightContent}>
-            {showDuration && duration && (
-              <Text style={styles.itemDuration}>{duration}</Text>
-            )}
-            {showMenu && (
-              <TouchableOpacity 
-                style={styles.itemMenuButton}
-                onPress={handleMenuPressCallback}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.itemMenuDots}>⋯</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }, (prevProps, nextProps) => {
-    // Fast path: check if it's the same item
-    if (prevProps.item === nextProps.item && 
-        prevProps.viewMode === nextProps.viewMode &&
-        prevProps.index === nextProps.index) {
-      return true;
-    }
-    
-    // Check item identity and core props
-    if (prevProps.item.id !== nextProps.item.id ||
-        prevProps.viewMode !== nextProps.viewMode ||
-        prevProps.index !== nextProps.index) {
-      return false;
-    }
-    
-    // Only check playlist collages reference for playlist view mode
-    if (prevProps.viewMode === 'playlists') {
-      return prevProps.playlistCollages[prevProps.item.id] === nextProps.playlistCollages[nextProps.item.id];
-    }
-    
-    // Always re-render if theme primary color changed (for liked songs heart color)
-    if (prevProps.viewMode === 'liked' && 
-        prevProps.theme.colors.primary !== nextProps.theme.colors.primary) {
-      return false;
-    }
-    
-    return true;
-  });
-
+  const currentTrackId = currentTrack?.id;
+  const primaryColor = theme.colors.primary;
 
   const renderItem = useCallback(({ item, index }) => {
+    const isPlaying = viewMode === 'liked' && currentTrackId === item.id;
+    // Only pull collage data when the playlist itself has no cover art id; this
+    // keeps collage map churn from forcing every row to re-render.
+    const collageData =
+      viewMode === 'playlists' && !item.coverArt
+        ? playlistCollages[item.id] || null
+        : null;
     return (
       <ListItem
         item={item}
         index={index}
         viewMode={viewMode}
-        playlistCollages={playlistCollages}
-        theme={theme}
+        styles={styles}
+        primaryColor={primaryColor}
+        collageData={collageData}
+        isPlaying={isPlaying}
+        onPress={handleItemPress}
+        onMenuPress={handleMenuPress}
       />
     );
-  }, [viewMode, playlistCollages, theme]);
+  }, [viewMode, playlistCollages, styles, primaryColor, currentTrackId, handleItemPress, handleMenuPress]);
 
   // Performance optimization: getItemLayout for FlatList
   const getItemLayout = useCallback((data, index) => ({
@@ -1725,11 +1748,7 @@ export default function LibraryScreen({ navigation }) {
         onScrollBeginDrag={handleScrollBeginDrag}
         onScrollEndDrag={handleScrollEndDrag}
         onMomentumScrollEnd={handleMomentumScrollEnd}
-        ListFooterComponent={isLoadingMore ? (
-          <View style={styles.listFooter}>
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-          </View>
-        ) : null}
+        ListFooterComponent={null}
       />
       {isSortMenuVisible && (
         <View style={styles.sortMenuPortal} pointerEvents="box-none">
