@@ -79,6 +79,14 @@ export const createStyles = (theme) => StyleSheet.create({
   // Sort control
   sortControlContainer: {
     paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sortDirectionButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sortControlFixed: {
     borderBottomWidth: StyleSheet.hairlineWidth,

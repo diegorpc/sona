@@ -49,6 +49,7 @@ const LIKED_SORT_OPTIONS = [
 const PLAYLIST_SORT_OPTIONS = [
   { key: 'default', label: 'Default', icon: 'list' },
   { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
+  { key: 'dateCreated', label: 'Date Created', icon: 'schedule' },
 ];
 
 // Sort options for artists
@@ -63,6 +64,7 @@ const ALBUM_SORT_OPTIONS = [
   { key: 'newest', label: 'Recently Added', icon: 'new-releases' },
   { key: 'frequent', label: 'Frequently Listened', icon: 'repeat' },
   { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
+  { key: 'dateReleased', label: 'Date Released', icon: 'event' },
 ];
 
 const DEFAULT_SORT_OPTION = 'dateLoved';
@@ -331,6 +333,7 @@ export default function LibraryScreen({ navigation }) {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [headerContentWidth, setHeaderContentWidth] = useState(0);
   const [sortOption, setSortOption] = useState(DEFAULT_SORT_OPTION);
+  const [sortDirection, setSortDirection] = useState('desc');
   const [isSortMenuVisible, setIsSortMenuVisible] = useState(false);
   const [sortMenuAnchor, setSortMenuAnchor] = useState(null);
   
@@ -361,63 +364,63 @@ export default function LibraryScreen({ navigation }) {
   const [chipSectionHeight, setChipSectionHeight] = useState(CHIP_SECTION_DEFAULT_HEIGHT);
   const sortMenuAnimation = useRef(new Animated.Value(0)).current;
 
-  // Helper function to create sort comparator with explicit parameters
-  const createSortComparator = useCallback((targetSortOption, targetViewMode) => {
-    // Base alphabetical comparator shared across all sort modes.
+  const createSortComparator = useCallback((targetSortOption, targetViewMode, direction = 'desc') => {
+    const d = direction === 'asc' ? -1 : 1;
+
     const alphabeticalCompare = (a, b) => {
       const aName = getItemDisplayName(a, targetViewMode).toLowerCase();
       const bName = getItemDisplayName(b, targetViewMode).toLowerCase();
-      return aName.localeCompare(bName, undefined, ALPHABETICAL_COMPARE_OPTIONS);
+      return d * aName.localeCompare(bName, undefined, ALPHABETICAL_COMPARE_OPTIONS);
     };
 
-    // Alphabetical sorting
-    if (targetSortOption === 'alphabetical') {
-      return alphabeticalCompare;
-    }
+    if (targetSortOption === 'alphabetical') return alphabeticalCompare;
 
-    // Playlist-specific sorting
     if (targetViewMode === 'playlists') {
-      if (targetSortOption === 'default') {
-        // Keep original order from API
-        return () => 0;
-      }
-      return alphabeticalCompare;
-    }
-
-    // Artist-specific sorting
-    if (targetViewMode === 'artists') {
-      if (targetSortOption === 'albumCount') {
+      if (targetSortOption === 'default') return () => 0;
+      if (targetSortOption === 'dateCreated') {
+        const dateFields = ['created', 'dateAdded', 'dateCreated'];
         return (a, b) => {
-          const aCount = a?.albumCount || 0;
-          const bCount = b?.albumCount || 0;
-          if (aCount !== bCount) {
-            return bCount - aCount; // Descending
-          }
+          const aValue = getFirstAvailableTimestamp(a, dateFields);
+          const bValue = getFirstAvailableTimestamp(b, dateFields);
+          if (aValue !== bValue) return d * (bValue - aValue);
           return alphabeticalCompare(a, b);
         };
       }
       return alphabeticalCompare;
     }
 
-    // Album-specific sorting (albums are fetched with correct sort from API)
-    if (targetViewMode === 'albums') {
-      // Albums are already sorted by the API, but we apply alphabetical as fallback
-      if (targetSortOption === 'alphabetical') {
-        return alphabeticalCompare;
+    if (targetViewMode === 'artists') {
+      if (targetSortOption === 'albumCount') {
+        return (a, b) => {
+          const aCount = a?.albumCount || 0;
+          const bCount = b?.albumCount || 0;
+          if (aCount !== bCount) return d * (bCount - aCount);
+          return alphabeticalCompare(a, b);
+        };
       }
-      // For other album sorts (recent, newest, frequent), maintain API order
+      return alphabeticalCompare;
+    }
+
+    if (targetViewMode === 'albums') {
+      if (targetSortOption === 'alphabetical') return alphabeticalCompare;
+      if (targetSortOption === 'dateReleased') {
+        return (a, b) => {
+          const aYear = a?.year || 0;
+          const bYear = b?.year || 0;
+          if (aYear !== bYear) return d * (bYear - aYear);
+          return alphabeticalCompare(a, b);
+        };
+      }
+      // recent / newest / frequent: API provides the order; reversal handled in fullFilteredData
       return () => 0;
     }
 
-    // Liked songs sorting
     if (targetSortOption === 'recentlyAdded') {
       const dateFields = ['created', 'dateAdded', 'dateCreated', 'updated', 'starred'];
       return (a, b) => {
         const aValue = getFirstAvailableTimestamp(a, dateFields);
         const bValue = getFirstAvailableTimestamp(b, dateFields);
-        if (aValue !== bValue) {
-          return bValue - aValue;
-        }
+        if (aValue !== bValue) return d * (bValue - aValue);
         return alphabeticalCompare(a, b);
       };
     }
@@ -427,9 +430,7 @@ export default function LibraryScreen({ navigation }) {
       return (a, b) => {
         const aValue = getFirstAvailableTimestamp(a, dateFields);
         const bValue = getFirstAvailableTimestamp(b, dateFields);
-        if (aValue !== bValue) {
-          return bValue - aValue;
-        }
+        if (aValue !== bValue) return d * (bValue - aValue);
         return alphabeticalCompare(a, b);
       };
     }
@@ -439,21 +440,17 @@ export default function LibraryScreen({ navigation }) {
     return (a, b) => {
       const aValue = getFirstAvailableTimestamp(a, dateFields);
       const bValue = getFirstAvailableTimestamp(b, dateFields);
-      if (aValue !== bValue) {
-        return bValue - aValue;
-      }
+      if (aValue !== bValue) return d * (bValue - aValue);
       const aCount = typeof a?.playCount === 'number' ? a.playCount : (a?.songCount ?? 0);
       const bCount = typeof b?.playCount === 'number' ? b.playCount : (b?.songCount ?? 0);
-      if (aCount !== bCount) {
-        return bCount - aCount;
-      }
+      if (aCount !== bCount) return d * (bCount - aCount);
       return alphabeticalCompare(a, b);
     };
   }, []);
 
   const sortComparator = useMemo(() => {
-    return createSortComparator(sortOption, viewMode);
-  }, [sortOption, viewMode, createSortComparator]);
+    return createSortComparator(sortOption, viewMode, sortDirection);
+  }, [sortOption, viewMode, sortDirection, createSortComparator]);
 
   const sortOptions = useMemo(() => {
     switch (viewMode) {
@@ -549,7 +546,8 @@ export default function LibraryScreen({ navigation }) {
 
       const defaultSort = defaultSortByView[viewMode] || DEFAULT_SORT_OPTION;
       setSortOption(defaultSort);
-      
+      setSortDirection('desc');
+
       previousViewModeRef.current = viewMode;
     }
   }, [viewMode]);
@@ -948,10 +946,16 @@ export default function LibraryScreen({ navigation }) {
       });
     }
 
-    const sortedItems = filteredItems.slice().sort(sortComparator);
+    let sortedItems = filteredItems.slice().sort(sortComparator);
+
+    // API-ordered album sorts (recent/newest/frequent) can't be reversed via comparator;
+    // flip the already-ordered array when ascending direction is requested.
+    if (viewMode === 'albums' && ['recent', 'newest', 'frequent'].includes(sortOption) && sortDirection === 'asc') {
+      sortedItems = sortedItems.slice().reverse();
+    }
 
     return sortedItems;
-  }, [albums, artists, viewMode, likedSongs, playlists, searchQuery, sortComparator]);
+  }, [albums, artists, viewMode, likedSongs, playlists, searchQuery, sortComparator, sortOption, sortDirection]);
 
   // Paginated data for display (when not searching)
   const paginatedData = useMemo(() => {
@@ -1099,12 +1103,13 @@ export default function LibraryScreen({ navigation }) {
       };
       
       const baseData = dataForNewMode[mode] || [];
-      const comparator = createSortComparator(targetSort, mode);
+      const comparator = createSortComparator(targetSort, mode, 'desc');
       const sortedData = baseData.slice().sort(comparator);
       const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
       
       // NOW change view mode and update data atomically
       setViewMode(mode);
+      setSortDirection('desc');
       setCurrentPage(0);
       setDisplayedData(paginatedNewData);
       setHasMoreData(sortedData.length > ITEMS_PER_PAGE);
@@ -1295,7 +1300,7 @@ export default function LibraryScreen({ navigation }) {
         playlists,
       };
       const baseData = dataByView[viewMode] || [];
-      const comparator = createSortComparator(optionKey, viewMode);
+      const comparator = createSortComparator(optionKey, viewMode, sortDirection);
       const sortedData = baseData.slice().sort(comparator);
       const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
       
@@ -1320,7 +1325,7 @@ export default function LibraryScreen({ navigation }) {
     } finally {
       isAnimatingList.current = false;
     }
-  }, [animateListOpacityTo, sortOption, closeSortMenu, viewMode, loadAlbumsWithSort, artists, albums, likedSongs, playlists, createSortComparator]);
+  }, [animateListOpacityTo, sortOption, sortDirection, closeSortMenu, viewMode, loadAlbumsWithSort, artists, albums, likedSongs, playlists, createSortComparator]);
 
   const showSortOptions = useCallback(() => {
     if (isAnimatingList.current) {
@@ -1363,6 +1368,19 @@ export default function LibraryScreen({ navigation }) {
       openMenu({ top: 100, left: windowWidth - 220 - 16 });
     }
   }, [closeSortMenu, isSortMenuVisible, sortMenuAnimation]);
+
+  const handleSortDirectionToggle = useCallback(async () => {
+    if (isAnimatingList.current) return;
+    isAnimatingList.current = true;
+    await animateListOpacityTo(0, 180);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setCurrentPage(0);
+    setSortDirection(prev => prev === 'desc' ? 'asc' : 'desc');
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await animateListOpacityTo(1, 280);
+    isAnimatingList.current = false;
+  }, [animateListOpacityTo]);
 
   // Keep a ref to the latest displayed data so handleItemPress stays referentially
   // stable across pagination updates (otherwise every row would re-render on each batch).
@@ -1550,10 +1568,7 @@ export default function LibraryScreen({ navigation }) {
     <View style={styles.sortControlContainer}>
       <TouchableOpacity
         ref={sortTriggerRef}
-        style={[
-          styles.sortTrigger,
-          isSortMenuVisible ? styles.sortTriggerActive : null,
-        ]}
+        style={[styles.sortTrigger, isSortMenuVisible ? styles.sortTriggerActive : null]}
         accessibilityRole="button"
         accessibilityLabel="Change sort order"
         onPress={showSortOptions}
@@ -1566,10 +1581,23 @@ export default function LibraryScreen({ navigation }) {
           style={styles.sortTriggerIcon}
         />
         <Text style={styles.sortTriggerLabel}>{SORT_OPTION_LABELS[sortOption]}</Text>
+      </TouchableOpacity>
 
+      <TouchableOpacity
+        style={styles.sortDirectionButton}
+        onPress={handleSortDirectionToggle}
+        accessibilityRole="button"
+        accessibilityLabel={sortDirection === 'desc' ? 'Sort ascending' : 'Sort descending'}
+        activeOpacity={0.7}
+      >
+        <MaterialIcons
+          name={sortDirection === 'desc' ? 'arrow-downward' : 'arrow-upward'}
+          size={16}
+          color={theme.colors.onSurfaceVariant}
+        />
       </TouchableOpacity>
     </View>
-  ), [sortOption, showSortOptions, isSortMenuVisible]);
+  ), [sortOption, sortDirection, showSortOptions, isSortMenuVisible, handleSortDirectionToggle, theme]);
 
   const backgroundArt = useMemo(() => {
     if (currentTrack?.coverArt) {
