@@ -203,6 +203,14 @@ export const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.primary,
     fontSize: 11,
   },
+  songImageContainer: {
+    width: 44,
+    height: 44,
+    marginLeft: 8,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   songImage: {
     width: 44,
     height: 44,

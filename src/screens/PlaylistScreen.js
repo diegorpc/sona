@@ -41,12 +41,16 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }, [item.duration]);
 
-  const [thumbWidth, setThumbWidth] = useState(THUMB_SIZE);
-  useEffect(() => { setThumbWidth(THUMB_SIZE); }, [coverArtUrl]);
+  const [thumbSize, setThumbSize] = useState({ width: THUMB_SIZE, height: THUMB_SIZE });
+  useEffect(() => { setThumbSize({ width: THUMB_SIZE, height: THUMB_SIZE }); }, [coverArtUrl]);
   const handleThumbLoad = useCallback((e) => {
     const { width: w, height: h } = e.nativeEvent.source;
     if (!w || !h) return;
-    setThumbWidth(Math.round(THUMB_SIZE * (w / h)));
+    const ratio = w / h;
+    setThumbSize(ratio >= 1
+      ? { width: THUMB_SIZE, height: Math.round(THUMB_SIZE / ratio) }
+      : { width: Math.round(THUMB_SIZE * ratio), height: THUMB_SIZE }
+    );
   }, []);
 
   return (
@@ -63,13 +67,15 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
         }
       </View>
 
-      {/* Art thumbnail */}
-      <Image
-        source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-        style={[styles.songImage, { width: thumbWidth }]}
-        defaultSource={DEFAULT_ART}
-        onLoad={handleThumbLoad}
-      />
+      {/* Art thumbnail — fixed container keeps rows aligned */}
+      <View style={styles.songImageContainer}>
+        <Image
+          source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+          style={{ width: thumbSize.width, height: thumbSize.height, borderRadius: 5 }}
+          defaultSource={DEFAULT_ART}
+          onLoad={handleThumbLoad}
+        />
+      </View>
 
       {/* Info */}
       <View style={styles.songInfo}>

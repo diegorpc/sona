@@ -36,12 +36,16 @@ const QueueItem = memo(({ item, drag, isActive, isNowPlaying, actionIcon, action
   const duration = useMemo(() => formatDuration(item?.duration), [item?.duration]);
 
   const coverArtSource = useMemo(() => getCoverArt(item, 128), [item?.coverArt, item?.albumId]);
-  const [thumbWidth, setThumbWidth] = useState(QUEUE_THUMB_SIZE);
-  useEffect(() => { setThumbWidth(QUEUE_THUMB_SIZE); }, [coverArtSource]);
+  const [thumbSize, setThumbSize] = useState({ width: QUEUE_THUMB_SIZE, height: QUEUE_THUMB_SIZE });
+  useEffect(() => { setThumbSize({ width: QUEUE_THUMB_SIZE, height: QUEUE_THUMB_SIZE }); }, [coverArtSource]);
   const handleThumbLoad = useCallback((e) => {
     const { width: w, height: h } = e.nativeEvent.source;
     if (!w || !h) return;
-    setThumbWidth(Math.round(QUEUE_THUMB_SIZE * (w / h)));
+    const ratio = w / h;
+    setThumbSize(ratio >= 1
+      ? { width: QUEUE_THUMB_SIZE, height: Math.round(QUEUE_THUMB_SIZE / ratio) }
+      : { width: Math.round(QUEUE_THUMB_SIZE * ratio), height: QUEUE_THUMB_SIZE }
+    );
   }, []);
 
   return (
@@ -63,12 +67,14 @@ const QueueItem = memo(({ item, drag, isActive, isNowPlaying, actionIcon, action
         </TouchableOpacity>
       )}
 
-      <Image
-        source={coverArtSource}
-        style={[styles.coverArt, { width: thumbWidth }]}
-        defaultSource={DEFAULT_ART}
-        onLoad={handleThumbLoad}
-      />
+      <View style={styles.coverArtContainer}>
+        <Image
+          source={coverArtSource}
+          style={{ width: thumbSize.width, height: thumbSize.height, borderRadius: 6 }}
+          defaultSource={DEFAULT_ART}
+          onLoad={handleThumbLoad}
+        />
+      </View>
 
       <View style={styles.infoContainer}>
         <Text numberOfLines={1} style={[styles.title, isNowPlaying && styles.titleActive]}>

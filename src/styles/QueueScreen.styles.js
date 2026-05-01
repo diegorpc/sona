@@ -143,6 +143,13 @@ export const createStyles = (theme) => StyleSheet.create({
     marginRight: 8,
     alignItems: 'center',
   },
+  coverArtContainer: {
+    width: 44,
+    height: 44,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   coverArt: {
     width: 44,
     height: 44,

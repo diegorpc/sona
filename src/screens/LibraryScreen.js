@@ -220,36 +220,43 @@ const ListItem = memo(function ListItem({
   const showMenu = viewMode === 'liked' || viewMode === 'playlists';
 
   const isRoundImage = viewMode === 'artists';
-  const [thumbWidth, setThumbWidth] = useState(LIBRARY_THUMB_SIZE);
-  useEffect(() => { setThumbWidth(LIBRARY_THUMB_SIZE); }, [imageData]);
+  const [thumbSize, setThumbSize] = useState({ width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE });
+  useEffect(() => { setThumbSize({ width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE }); }, [imageData]);
   const handleThumbLoad = useCallback((e) => {
     if (isRoundImage) return;
     const { width: w, height: h } = e.nativeEvent.source;
     if (!w || !h) return;
-    setThumbWidth(Math.round(LIBRARY_THUMB_SIZE * (w / h)));
+    const ratio = w / h;
+    setThumbSize(ratio >= 1
+      ? { width: LIBRARY_THUMB_SIZE, height: Math.round(LIBRARY_THUMB_SIZE / ratio) }
+      : { width: Math.round(LIBRARY_THUMB_SIZE * ratio), height: LIBRARY_THUMB_SIZE }
+    );
   }, [isRoundImage]);
 
   const imageComponent = useMemo(() => {
     if (imageData && typeof imageData === 'object' && imageData.type === 'collage') {
       return (
-        <PlaylistCollage
-          collageData={imageData}
-          size={56}
-          style={styles.itemImage}
-        />
+        <View style={styles.itemImageContainer}>
+          <PlaylistCollage collageData={imageData} size={LIBRARY_THUMB_SIZE} />
+        </View>
       );
     }
     const imageUrl = typeof imageData === 'string' ? imageData : null;
     return (
-      <Image
-        source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : DEFAULT_LIST_IMAGE}
-        style={[isRoundImage ? styles.itemImageRound : styles.itemImage, !isRoundImage && { width: thumbWidth }]}
-        defaultSource={DEFAULT_LIST_IMAGE}
-        fadeDuration={200}
-        onLoad={handleThumbLoad}
-      />
+      <View style={styles.itemImageContainer}>
+        <Image
+          source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : DEFAULT_LIST_IMAGE}
+          style={isRoundImage
+            ? { width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE, borderRadius: LIBRARY_THUMB_SIZE / 2 }
+            : { width: thumbSize.width, height: thumbSize.height, borderRadius: 5 }
+          }
+          defaultSource={DEFAULT_LIST_IMAGE}
+          fadeDuration={200}
+          onLoad={handleThumbLoad}
+        />
+      </View>
     );
-  }, [imageData, styles.itemImage, styles.itemImageRound, isRoundImage, thumbWidth, handleThumbLoad]);
+  }, [imageData, styles.itemImageContainer, isRoundImage, thumbSize, handleThumbLoad]);
 
   return (
     <TouchableOpacity
