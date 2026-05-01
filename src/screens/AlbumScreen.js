@@ -262,7 +262,18 @@ export default function AlbumScreen({ route, navigation }) {
           {discCount > 1 && (
             <View style={styles.badge}><Text style={styles.badgeText}>{discCount} discs</Text></View>
           )}
-          {album.genre && <View style={styles.badge}><Text style={styles.badgeText}>{album.genre}</Text></View>}
+          {(() => {
+            const raw = albumData?.genres ?? (album.genre ? [{ name: album.genre }] : []);
+            const list = Array.isArray(raw) ? raw : [raw];
+            return list.map((g, i) => {
+              const name = typeof g === 'string' ? g : g?.name;
+              return name ? (
+                <View key={`genre-${i}`} style={styles.badge}>
+                  <Text style={styles.badgeText}>{name}</Text>
+                </View>
+              ) : null;
+            });
+          })()}
         </View>
 
         {/* Play area */}
