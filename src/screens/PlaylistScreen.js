@@ -43,6 +43,15 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
       onPress={onPress}
       activeOpacity={0.7}
     >
+      {/* Liked status */}
+      <View style={styles.heartWrapper}>
+        <MaterialIcons
+          name={item.starred ? 'favorite' : 'favorite-border'}
+          size={14}
+          style={item.starred ? styles.heartIcon : styles.heartIconUnstarred}
+        />
+      </View>
+
       {/* Track number or now-playing indicator */}
       <View style={styles.trackNumberWrapper}>
         {isPlaying
@@ -86,7 +95,8 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
 }, (prev, next) =>
   prev.item.id === next.item.id &&
   prev.index === next.index &&
-  prev.isPlaying === next.isPlaying
+  prev.isPlaying === next.isPlaying &&
+  Boolean(prev.item.starred) === Boolean(next.item.starred)
 );
 
 export default function PlaylistScreen({ route, navigation }) {

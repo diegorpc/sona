@@ -196,6 +196,20 @@ export const createStyles = (theme) => StyleSheet.create({
   songItemPlaying: {
     backgroundColor: theme.colors.playingBackground,
   },
+  heartWrapper: {
+    width: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  heartIcon: {
+    color: theme.colors.primary,
+  },
+  heartIconUnstarred: {
+    color: theme.colors.onSurface,
+    opacity: 0.25,
+  },
   trackNumberWrapper: {
     width: 22,
     alignItems: 'center',
