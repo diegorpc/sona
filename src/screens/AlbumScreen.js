@@ -6,6 +6,7 @@ import {
   Image,
   ImageBackground,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -19,6 +20,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/AlbumScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ART_SIZE = Math.min(220, SCREEN_WIDTH - 140);
 
 // ─── Album track row — no art thumbnail ───────────────────────────
 const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
@@ -168,6 +171,18 @@ export default function AlbumScreen({ route, navigation }) {
     return DEFAULT_ART;
   }, [coverArtUrl, currentTrack?.coverArt]);
 
+  const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
+  const handleArtLoad = useCallback((e) => {
+    const { width: w, height: h } = e.nativeEvent.source;
+    if (!w || !h) return;
+    const ratio = w / h;
+    if (ratio >= 1) {
+      setArtDisplaySize({ width: ART_SIZE, height: Math.round(ART_SIZE / ratio) });
+    } else {
+      setArtDisplaySize({ width: Math.round(ART_SIZE * ratio), height: ART_SIZE });
+    }
+  }, []);
+
   const renderSectionHeader = useCallback(({ section: { title } }) => {
     if (!title) return null;
     return (
@@ -207,8 +222,14 @@ export default function AlbumScreen({ route, navigation }) {
   const ListHeader = useMemo(() => (
     <View>
       <View style={styles.artContainer}>
-        <View style={styles.artShadow}>
-          <Image source={backgroundArt} style={styles.artImage} resizeMode="cover" defaultSource={DEFAULT_ART} />
+        <View style={[styles.artShadow, artDisplaySize]}>
+          <Image
+            source={backgroundArt}
+            style={[styles.artImage, artDisplaySize]}
+            resizeMode="cover"
+            defaultSource={DEFAULT_ART}
+            onLoad={handleArtLoad}
+          />
         </View>
       </View>
 
@@ -254,7 +275,7 @@ export default function AlbumScreen({ route, navigation }) {
 
       <View style={styles.divider} />
     </View>
-  ), [album, albumData, backgroundArt, navigation, theme, playAlbum, getTotalDuration, discCount]);
+  ), [album, albumData, backgroundArt, navigation, theme, playAlbum, getTotalDuration, discCount, artDisplaySize, handleArtLoad]);
 
   if (isLoading) {
     return (

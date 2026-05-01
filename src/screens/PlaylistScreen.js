@@ -6,6 +6,7 @@ import {
   Image,
   ImageBackground,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -20,6 +21,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/PlaylistScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ART_SIZE = Math.min(220, SCREEN_WIDTH - 140);
+const THUMB_SIZE = 44;
 
 // ─── Song row with art thumbnail ──────────────────────────────────
 const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
@@ -36,6 +40,14 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
     const s = item.duration % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   }, [item.duration]);
+
+  const [thumbWidth, setThumbWidth] = useState(THUMB_SIZE);
+  useEffect(() => { setThumbWidth(THUMB_SIZE); }, [coverArtUrl]);
+  const handleThumbLoad = useCallback((e) => {
+    const { width: w, height: h } = e.nativeEvent.source;
+    if (!w || !h) return;
+    setThumbWidth(Math.round(THUMB_SIZE * (w / h)));
+  }, []);
 
   return (
     <TouchableOpacity
@@ -54,8 +66,9 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
       {/* Art thumbnail */}
       <Image
         source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-        style={styles.songImage}
+        style={[styles.songImage, { width: thumbWidth }]}
         defaultSource={DEFAULT_ART}
+        onLoad={handleThumbLoad}
       />
 
       {/* Info */}
@@ -165,6 +178,18 @@ export default function PlaylistScreen({ route, navigation }) {
     return DEFAULT_ART;
   }, [coverArtUrl, currentTrack?.coverArt]);
 
+  const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
+  const handleArtLoad = useCallback((e) => {
+    const { width: w, height: h } = e.nativeEvent.source;
+    if (!w || !h) return;
+    const ratio = w / h;
+    if (ratio >= 1) {
+      setArtDisplaySize({ width: ART_SIZE, height: Math.round(ART_SIZE / ratio) });
+    } else {
+      setArtDisplaySize({ width: Math.round(ART_SIZE * ratio), height: ART_SIZE });
+    }
+  }, []);
+
   const renderItem = useCallback(({ item, index }) => {
     const isPlaying = currentTrack?.id === item.id;
     return (
@@ -196,12 +221,13 @@ export default function PlaylistScreen({ route, navigation }) {
     <View>
       {/* Rounded glowing media art */}
       <View style={styles.artContainer}>
-        <View style={styles.artShadow}>
+        <View style={[styles.artShadow, artDisplaySize]}>
           <Image
             source={backgroundArt}
-            style={styles.artImage}
+            style={[styles.artImage, artDisplaySize]}
             resizeMode="cover"
             defaultSource={DEFAULT_ART}
+            onLoad={handleArtLoad}
           />
         </View>
       </View>
@@ -250,7 +276,7 @@ export default function PlaylistScreen({ route, navigation }) {
 
       <View style={styles.divider} />
     </View>
-  ), [playlist, playlistData, backgroundArt, navigation, theme, playPlaylist, getTotalDuration]);
+  ), [playlist, playlistData, backgroundArt, navigation, theme, playPlaylist, getTotalDuration, artDisplaySize, handleArtLoad]);
 
   if (isLoading) {
     return (
