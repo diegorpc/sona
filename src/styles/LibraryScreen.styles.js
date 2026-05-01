@@ -188,6 +188,13 @@ export const createStyles = (theme) => StyleSheet.create({
   itemLeadingIcon: {
     marginRight: 6,
   },
+  itemImageContainer: {
+    width: 52,
+    height: 52,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   itemImage: {
     width: 52,
     height: 52,
