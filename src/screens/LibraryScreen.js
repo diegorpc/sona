@@ -152,6 +152,8 @@ const formatItemDuration = (seconds) => {
 
 const DEFAULT_LIST_IMAGE = require('../../assets/default-album.png');
 
+const LIBRARY_THUMB_SIZE = 52;
+
 // Hoisted to module scope so memoization actually works across LibraryScreen renders.
 const ListItem = memo(function ListItem({
   item,
@@ -217,6 +219,16 @@ const ListItem = memo(function ListItem({
   const showDuration = viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
   const showMenu = viewMode === 'liked' || viewMode === 'playlists';
 
+  const isRoundImage = viewMode === 'artists';
+  const [thumbWidth, setThumbWidth] = useState(LIBRARY_THUMB_SIZE);
+  useEffect(() => { setThumbWidth(LIBRARY_THUMB_SIZE); }, [imageData]);
+  const handleThumbLoad = useCallback((e) => {
+    if (isRoundImage) return;
+    const { width: w, height: h } = e.nativeEvent.source;
+    if (!w || !h) return;
+    setThumbWidth(Math.round(LIBRARY_THUMB_SIZE * (w / h)));
+  }, [isRoundImage]);
+
   const imageComponent = useMemo(() => {
     if (imageData && typeof imageData === 'object' && imageData.type === 'collage') {
       return (
@@ -231,12 +243,13 @@ const ListItem = memo(function ListItem({
     return (
       <Image
         source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : DEFAULT_LIST_IMAGE}
-        style={styles.itemImage}
+        style={[isRoundImage ? styles.itemImageRound : styles.itemImage, !isRoundImage && { width: thumbWidth }]}
         defaultSource={DEFAULT_LIST_IMAGE}
         fadeDuration={200}
+        onLoad={handleThumbLoad}
       />
     );
-  }, [imageData, styles.itemImage]);
+  }, [imageData, styles.itemImage, styles.itemImageRound, isRoundImage, thumbWidth, handleThumbLoad]);
 
   return (
     <TouchableOpacity

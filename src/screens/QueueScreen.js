@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, View, TouchableOpacity, ScrollView } from 'react-native';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import { Text } from 'react-native-paper';
@@ -13,6 +13,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { createStyles } from '../styles/QueueScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
+const QUEUE_THUMB_SIZE = 44;
 
 const getCoverArt = (track, size = 80) => {
   if (track?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(track.coverArt, size) };
@@ -34,6 +35,15 @@ const QueueItem = memo(({ item, drag, isActive, isNowPlaying, actionIcon, action
   const styles = createStyles(theme);
   const duration = useMemo(() => formatDuration(item?.duration), [item?.duration]);
 
+  const coverArtSource = useMemo(() => getCoverArt(item, 128), [item?.coverArt, item?.albumId]);
+  const [thumbWidth, setThumbWidth] = useState(QUEUE_THUMB_SIZE);
+  useEffect(() => { setThumbWidth(QUEUE_THUMB_SIZE); }, [coverArtSource]);
+  const handleThumbLoad = useCallback((e) => {
+    const { width: w, height: h } = e.nativeEvent.source;
+    if (!w || !h) return;
+    setThumbWidth(Math.round(QUEUE_THUMB_SIZE * (w / h)));
+  }, []);
+
   return (
     <View style={[styles.itemContainer, isActive && styles.itemActive, isNowPlaying && styles.itemActive]}>
       {/* Drag handle or now-playing indicator */}
@@ -53,7 +63,12 @@ const QueueItem = memo(({ item, drag, isActive, isNowPlaying, actionIcon, action
         </TouchableOpacity>
       )}
 
-      <Image source={getCoverArt(item, 128)} style={styles.coverArt} defaultSource={DEFAULT_ART} />
+      <Image
+        source={coverArtSource}
+        style={[styles.coverArt, { width: thumbWidth }]}
+        defaultSource={DEFAULT_ART}
+        onLoad={handleThumbLoad}
+      />
 
       <View style={styles.infoContainer}>
         <Text numberOfLines={1} style={[styles.title, isNowPlaying && styles.titleActive]}>

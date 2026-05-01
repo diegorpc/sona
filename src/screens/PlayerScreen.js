@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Image,
   ImageBackground,
   TouchableOpacity,
   Easing,
+  Dimensions,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
@@ -19,6 +20,8 @@ import { createStyles } from '../styles/PlayerScreen.styles';
 import TextTicker from 'react-native-text-ticker';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const PLAYER_ART_SIZE = SCREEN_WIDTH - 80;
 
 export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isExpanded = true }) {
   const { theme } = useTheme();
@@ -92,6 +95,21 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isE
 
   const { currentTrack, isPlaying, position, duration, isLoading } = playerState;
 
+  const [artDisplaySize, setArtDisplaySize] = useState({ width: PLAYER_ART_SIZE, height: PLAYER_ART_SIZE });
+  useEffect(() => {
+    setArtDisplaySize({ width: PLAYER_ART_SIZE, height: PLAYER_ART_SIZE });
+  }, [currentTrack?.id]);
+  const handleArtLoad = useCallback((e) => {
+    const { width: w, height: h } = e.nativeEvent.source;
+    if (!w || !h) return;
+    const ratio = w / h;
+    if (ratio >= 1) {
+      setArtDisplaySize({ width: PLAYER_ART_SIZE, height: Math.round(PLAYER_ART_SIZE / ratio) });
+    } else {
+      setArtDisplaySize({ width: Math.round(PLAYER_ART_SIZE * ratio), height: PLAYER_ART_SIZE });
+    }
+  }, []);
+
   if (!currentTrack) {
     return (
       <View style={styles.emptyContainer}>
@@ -139,11 +157,12 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isE
 
           {/* Album art */}
           <View style={styles.albumArtContainer}>
-            <View style={styles.albumArtShadow}>
+            <View style={[styles.albumArtShadow, artDisplaySize]}>
               <Image
                 source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-                style={styles.albumArt}
+                style={[styles.albumArt, artDisplaySize]}
                 defaultSource={DEFAULT_ART}
+                onLoad={handleArtLoad}
               />
             </View>
           </View>
