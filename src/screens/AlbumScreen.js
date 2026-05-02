@@ -87,8 +87,6 @@ export default function AlbumScreen({ route, navigation }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => { loadAlbumData(); }, []);
-
   const loadAlbumData = async () => {
     try {
       setIsLoading(true);
@@ -100,6 +98,8 @@ export default function AlbumScreen({ route, navigation }) {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => { loadAlbumData(); }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -263,7 +263,7 @@ export default function AlbumScreen({ route, navigation }) {
           <TouchableOpacity
             onPress={() => {
               const artistId = album.artistId || albumData?.artistId;
-              if (artistId) navigation.navigate('Artist', { artist: { id: artistId, name: album.artist } });
+              if (artistId) navigation.push('Artist', { artist: { id: artistId, name: album.artist } });
             }}
             activeOpacity={0.7}
           >
@@ -346,35 +346,33 @@ export default function AlbumScreen({ route, navigation }) {
   }
 
   return (
-    <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-      <PlatformBlur intensity={65} tint="dark" style={styles.blurOverlay}>
-        <View style={styles.container}>
-          <SectionList
-            sections={discSections}
-            renderItem={renderItem}
-            renderSectionHeader={renderSectionHeader}
-            keyExtractor={keyExtractor}
-            ListHeaderComponent={ListHeader}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <MaterialIcons name="album" size={64} color={theme.colors.outline} />
-                <Text style={styles.emptyText}>No songs in album</Text>
-              </View>
-            }
-            contentContainerStyle={styles.listContainer}
-            refreshControl={
-              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[theme.colors.primary]} />
-            }
-            showsVerticalScrollIndicator={false}
-            stickySectionHeadersEnabled={false}
-            removeClippedSubviews
-            maxToRenderPerBatch={10}
-            initialNumToRender={20}
-            windowSize={10}
-          />
-          {StickyHeader}
-        </View>
-      </PlatformBlur>
-    </ImageBackground>
+    <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
+      <View style={styles.container}>
+        <SectionList
+          sections={discSections}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <MaterialIcons name="album" size={64} color={theme.colors.outline} />
+              <Text style={styles.emptyText}>No songs in album</Text>
+            </View>
+          }
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[theme.colors.primary]} />
+          }
+          showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          initialNumToRender={20}
+          windowSize={10}
+        />
+        {StickyHeader}
+      </View>
+    </ScreenBackground>
   );
 }

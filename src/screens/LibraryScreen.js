@@ -256,7 +256,7 @@ const ListItem = memo(function ListItem({
       {viewMode === 'liked' && (
         <MaterialIcons
           name="favorite"
-          size={16}
+          size={14}
           color={primaryColor}
           style={styles.itemLeadingIcon}
         />
@@ -1396,10 +1396,10 @@ export default function LibraryScreen({ navigation }) {
   const handleItemPress = useCallback((item, index) => {
     switch (viewMode) {
       case 'artists':
-        navigation.navigate('Artist', { artist: item });
+        navigation.push('Artist', { artist: item });
         break;
       case 'albums':
-        navigation.navigate('Album', { album: item });
+        navigation.push('Album', { album: item });
         break;
       case 'liked':
         AudioPlayer.playTrack(item, displayedDataRef.current, index, {
@@ -1410,7 +1410,7 @@ export default function LibraryScreen({ navigation }) {
         expandPlayerOverlay();
         break;
       case 'playlists':
-        navigation.navigate('Playlist', { playlist: item });
+        navigation.push('Playlist', { playlist: item });
         break;
       default:
         break;

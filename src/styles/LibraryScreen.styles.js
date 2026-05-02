@@ -23,7 +23,7 @@ export const createStyles = (theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 3,
   },
   headerTitle: {
     fontSize: 28,
@@ -195,7 +195,7 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.colors.playingBackground,
   },
   itemLeadingIcon: {
-    marginRight: 6,
+    marginRight: 10,
   },
   itemImageContainer: {
     width: 52,

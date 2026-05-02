@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import {
   View,
   FlatList,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   Image,
   RefreshControl,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -20,15 +22,32 @@ import { createStyles } from '../styles/ArtistScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
-const TABS = ['Albums', 'Top Songs', 'Favorite Songs'];
+const TABS = [
+  { key: 'albums', label: 'Albums' },
+  { key: 'topSongs', label: 'Top Songs' },
+  { key: 'favoriteSongs', label: 'Favorite Songs' },
+];
 
-// ─── Library-style album row — no play button ─────────────────────
-const AlbumRow = memo(({ item, onPress, onMenuPress }) => {
+const CHIP_REORDER_DURATION = 620;
+const CHIP_FADE_OUT_DURATION = 200;
+const CHIP_FADE_IN_DURATION = 240;
+
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+const AnimatedText = Animated.createAnimatedComponent(Text);
+
+const buildChipOrder = (selectedKey) => {
+  const selected = TABS.find(t => t.key === selectedKey);
+  if (!selected) return TABS;
+  return [selected, ...TABS.filter(t => t.key !== selectedKey)];
+};
+
+// ─── Album grid card (2x2 grid with large media art) ──────────────
+const AlbumCard = memo(({ item, onPress }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
   const coverArtUrl = useMemo(() =>
-    item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null,
+    item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 400) : null,
     [item.coverArt]
   );
 
@@ -36,17 +55,14 @@ const AlbumRow = memo(({ item, onPress, onMenuPress }) => {
     .filter(Boolean).join(' · ');
 
   return (
-    <TouchableOpacity style={styles.albumRow} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.albumCard} onPress={onPress} activeOpacity={0.7}>
       <Image
         source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-        style={styles.albumArt}
+        style={styles.albumCardArt}
         defaultSource={DEFAULT_ART}
       />
-      <View style={styles.albumInfo}>
-        <Text style={styles.albumTitle} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.albumSubtitle} numberOfLines={1}>{subtitle}</Text>
-      </View>
-      <MaterialIcons name="chevron-right" size={22} style={styles.albumChevron} />
+      <Text style={styles.albumCardTitle} numberOfLines={1}>{item.name}</Text>
+      {subtitle ? <Text style={styles.albumCardSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
     </TouchableOpacity>
   );
 }, (prev, next) => prev.item.id === next.item.id);
@@ -114,32 +130,67 @@ export default function ArtistScreen({ route, navigation }) {
   const [artistData, setArtistData] = useState(null);
   const [topSongs, setTopSongs] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
+  const [appearsInAlbums, setAppearsInAlbums] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [isLoadingTopSongs, setIsLoadingTopSongs] = useState(true);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState(true);
+  const [activeTab, setActiveTab] = useState('albums');
+
+  // ─── Chip animation state ─────────────────────────────────────
+  const chipHighlightAnimations = useRef(
+    TABS.reduce((acc, { key }) => {
+      acc[key] = new Animated.Value(key === 'albums' ? 1 : 0);
+      return acc;
+    }, {})
+  ).current;
+  const previousActiveTabRef = useRef('albums');
+  const [chipDisplayOrder, setChipDisplayOrder] = useState(() => buildChipOrder('albums'));
+  const chipAnimations = useRef(
+    TABS.reduce((acc, { key }) => { acc[key] = new Animated.Value(0); return acc; }, {})
+  ).current;
+  const chipLayoutsRef = useRef({});
+  const pendingChipAnimation = useRef(null);
 
   useEffect(() => { loadArtistData(); }, []);
 
   const loadArtistData = async () => {
+    let data = null;
     try {
       setIsLoading(true);
-      const data = await SubsonicAPI.getArtist(artist.id);
+      setIsLoadingTopSongs(true);
+      setIsLoadingFavorites(true);
+      data = await SubsonicAPI.getArtist(artist.id);
       setArtistData(data);
-
-      // Load top songs and liked songs for those tabs
-      try {
-        const starred = await SubsonicAPI.getStarred();
-        const artistLiked = (starred?.song || []).filter(
-          s => s.artistId === artist.id || s.artist === artist.name
-        );
-        setLikedSongs(artistLiked);
-      } catch (e) {
-        // Non-critical
-      }
     } catch (e) {
       console.error('Error loading artist:', e);
     } finally {
       setIsLoading(false);
+    }
+
+    // Load top songs and starred songs in background — non-blocking
+    SubsonicAPI.getTopSongs(artist.name, 50)
+      .then(songs => setTopSongs(songs))
+      .catch(() => { /* non-critical */ })
+      .finally(() => setIsLoadingTopSongs(false));
+
+    SubsonicAPI.getStarred()
+      .then(starred => {
+        const artistLiked = (starred?.song || []).filter(
+          s => s.artistId === artist.id || s.artist === artist.name
+        );
+        setLikedSongs(artistLiked);
+      })
+      .catch(() => { /* non-critical */ })
+      .finally(() => setIsLoadingFavorites(false));
+
+    // Load "Appears In" albums in background — albums where this artist has
+    // a song but is not the album artist.
+    if (data) {
+      const ownAlbumIds = (data.album || []).map(a => a.id);
+      SubsonicAPI.getArtistAppearsIn(artist, ownAlbumIds)
+        .then(setAppearsInAlbums)
+        .catch(() => { /* non-critical */ });
     }
   };
 
@@ -150,7 +201,7 @@ export default function ArtistScreen({ route, navigation }) {
   };
 
   const handleAlbumPress = useCallback((album) => {
-    navigation.navigate('Album', { album });
+    navigation.push('Album', { album });
   }, [navigation]);
 
   const handleSongPress = useCallback(async (song, songs, index) => {
@@ -178,9 +229,55 @@ export default function ArtistScreen({ route, navigation }) {
     return DEFAULT_ART;
   }, [artistImageUrl, currentTrack?.coverArt]);
 
-  const renderAlbum = useCallback(({ item }) => (
-    <AlbumRow item={item} onPress={() => handleAlbumPress(item)} onMenuPress={() => {/* TODO */}} />
-  ), [handleAlbumPress]);
+  const handleChipLayout = useCallback((key) => (event) => {
+    const { x } = event.nativeEvent.layout;
+    chipLayoutsRef.current[key] = { x };
+    const pending = pendingChipAnimation.current;
+    if (pending && key in pending) {
+      const delta = pending[key] ? pending[key].x - x : 0;
+      chipAnimations[key].setValue(delta);
+      Animated.timing(chipAnimations[key], {
+        toValue: 0,
+        duration: CHIP_REORDER_DURATION,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+      delete pending[key];
+    }
+  }, [chipAnimations]);
+
+  const handleTabPress = useCallback((key) => {
+    if (key === activeTab) return;
+
+    const previousLayouts = { ...chipLayoutsRef.current };
+    pendingChipAnimation.current = previousLayouts;
+
+    const prev = previousActiveTabRef.current;
+    const prevAnim = chipHighlightAnimations[prev];
+    const nextAnim = chipHighlightAnimations[key];
+
+    prevAnim?.stopAnimation();
+    nextAnim?.stopAnimation();
+
+    Animated.parallel([
+      Animated.timing(prevAnim, {
+        toValue: 0,
+        duration: CHIP_FADE_OUT_DURATION,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }),
+      Animated.timing(nextAnim, {
+        toValue: 1,
+        duration: CHIP_FADE_IN_DURATION,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start();
+
+    previousActiveTabRef.current = key;
+    setActiveTab(key);
+    setChipDisplayOrder(buildChipOrder(key));
+  }, [activeTab, chipHighlightAnimations, chipAnimations]);
 
   const renderSong = useCallback((songs) => ({ item, index }) => {
     const isPlaying = currentTrack?.id === item.id;
@@ -195,19 +292,15 @@ export default function ArtistScreen({ route, navigation }) {
     );
   }, [currentTrack?.id, handleSongPress]);
 
-  const albumKeyExtractor = useCallback((item) => item.id, []);
   const songKeyExtractor = useCallback((item, index) => item.id || `song-${index}`, []);
 
   const albumStats = useMemo(() => {
     if (!artistData) return '';
-    const albumCount = artistData.albumCount || artistData.album?.length || 0;
-    // Try to get song count from albums
-    const songCount = artistData.album?.reduce((s, a) => s + (a.songCount || 0), 0) || 0;
+    const albumCount = (artistData.albumCount || artistData.album?.length || 0) + (appearsInAlbums?.length || 0);
     return [
-      `${albumCount} album${albumCount !== 1 ? 's' : ''}`,
-      songCount > 0 ? `${songCount} songs` : null,
+      `In ${albumCount} album${albumCount !== 1 ? 's' : ''}`,
     ].filter(Boolean).join(' · ');
-  }, [artistData]);
+  }, [artistData, appearsInAlbums]);
 
   const StickyHeader = (
     <View style={styles.stickyHeader} pointerEvents="box-none">
@@ -245,85 +338,134 @@ export default function ArtistScreen({ route, navigation }) {
     );
   }
 
-  const activeSongs = activeTab === 1 ? topSongs : likedSongs;
+  const activeSongs = activeTab === 'topSongs' ? topSongs : likedSongs;
+  const isLoadingSongs = activeTab === 'topSongs' ? isLoadingTopSongs : isLoadingFavorites;
 
   return (
-    <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-      <PlatformBlur intensity={65} tint="dark" style={styles.blurOverlay}>
-        <View style={styles.container}>
-          {/* Rounded glowing artist art */}
-          <View style={styles.artContainer}>
-            <View style={styles.artShadow}>
-              <Image
-                source={backgroundArt}
-                style={styles.artImage}
-                resizeMode="cover"
-                defaultSource={DEFAULT_ART}
-              />
-            </View>
-          </View>
-
-          {/* Artist name + stats */}
-          <View style={styles.titleBlock}>
-            <Text style={styles.artistName} numberOfLines={2}>{artist.name}</Text>
-            {albumStats ? <Text style={styles.artistStats}>{albumStats}</Text> : null}
-          </View>
-
-          {/* Chip tabs */}
-          <View style={styles.chipTabsContainer}>
-            {TABS.map((tab, i) => (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.chipTab, activeTab === i && styles.chipTabActive]}
-                onPress={() => setActiveTab(i)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.chipTabText, activeTab === i && styles.chipTabTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Content */}
-          {activeTab === 0 ? (
-            <FlatList
-              data={artistData.album || []}
-              renderItem={renderAlbum}
-              keyExtractor={albumKeyExtractor}
-              contentContainerStyle={styles.listContainer}
-              refreshControl={
-                <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[theme.colors.primary]} />
-              }
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <MaterialIcons name="album" size={64} color={theme.colors.outline} />
-                  <Text style={styles.emptyText}>No albums found</Text>
-                </View>
-              }
+    <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
+      <View style={styles.container}>
+        {/* Rounded glowing artist art */}
+        <View style={styles.artContainer}>
+          <View style={styles.artShadow}>
+            <Image
+              source={backgroundArt}
+              style={styles.artImage}
+              resizeMode="cover"
+              defaultSource={DEFAULT_ART}
             />
-          ) : (
-            <FlatList
-              data={activeSongs}
-              renderItem={renderSong(activeSongs)}
-              keyExtractor={songKeyExtractor}
-              contentContainerStyle={styles.listContainer}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <MaterialIcons name="music-note" size={64} color={theme.colors.outline} />
-                  <Text style={styles.emptyText}>No songs found</Text>
-                  <Text style={styles.emptySubtext}>
-                    {activeTab === 2 ? 'Like songs from this artist to see them here' : 'No top songs available'}
-                  </Text>
-                </View>
-              }
-            />
-          )}
-          {StickyHeader}
+          </View>
         </View>
-      </PlatformBlur>
-    </ImageBackground>
+
+        {/* Artist name + stats */}
+        <View style={styles.titleBlock}>
+          <Text style={styles.artistName} numberOfLines={2}>{artist.name}</Text>
+          {albumStats ? <Text style={styles.artistStats}>{albumStats}</Text> : null}
+        </View>
+
+        {/* Animated chip tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScrollContainer}
+          contentContainerStyle={styles.chipTabsContainer}
+        >
+          {chipDisplayOrder.map(({ key, label }) => {
+            const highlightValue = chipHighlightAnimations[key];
+            const backgroundColor = highlightValue.interpolate({
+              inputRange: [0, 1],
+              outputRange: [theme.colors.surfaceVariant, theme.colors.secondary],
+              extrapolate: 'clamp',
+            });
+            const textColor = highlightValue.interpolate({
+              inputRange: [0, 1],
+              outputRange: [theme.colors.onSurfaceVariant, theme.colors.onSecondary],
+              extrapolate: 'clamp',
+            });
+            return (
+              <Animated.View
+                key={key}
+                onLayout={handleChipLayout(key)}
+                style={{
+                  transform: [{ translateX: chipAnimations[key] }],
+                  zIndex: activeTab === key ? 2 : 1,
+                }}
+              >
+                <AnimatedTouchableOpacity
+                  onPress={() => handleTabPress(key)}
+                  style={[styles.chipTab, { backgroundColor }]}
+                  activeOpacity={0.8}
+                >
+                  <AnimatedText style={[styles.chipTabText, { color: textColor }]}>
+                    {label}
+                  </AnimatedText>
+                </AnimatedTouchableOpacity>
+              </Animated.View>
+            );
+          })}
+        </ScrollView>
+
+        {/* Content */}
+        {activeTab === 'albums' ? (
+          <ScrollView
+            key="albums-sections"
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.albumGridContainer}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[theme.colors.primary]} />
+            }
+          >
+            {(artistData.album || []).length !== 0 && 
+            (<>
+              <Text style={styles.sectionHeader}>Albums</Text>
+              <View style={styles.albumGridWrap}>
+                {(artistData.album || []).map(item => (
+                  <AlbumCard key={item.id} item={item} onPress={() => handleAlbumPress(item)} />
+                ))}
+              </View>
+            </>)
+            }  
+            {appearsInAlbums.length > 0 && (
+              <>
+                <Text style={[styles.sectionHeader, styles.sectionHeaderSpaced]}>Appears In</Text>
+                <View style={styles.albumGridWrap}>
+                  {appearsInAlbums.map(item => (
+                    <AlbumCard key={item.id} item={item} onPress={() => handleAlbumPress(item)} />
+                  ))}
+                </View>
+              </>
+            )}
+          </ScrollView>
+        ) : isLoadingSongs ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </View>
+        ) : (
+          <FlatList
+            key="songs-list"
+            style={{ flex: 1 }}
+            data={activeSongs}
+            renderItem={renderSong(activeSongs)}
+            keyExtractor={songKeyExtractor}
+            contentContainerStyle={styles.listContainer}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <MaterialIcons name="music-note" size={64} color={theme.colors.outline} />
+                <Text style={styles.emptyText}>No songs found</Text>
+                <Text style={styles.emptySubtext}>
+                  {activeTab === 'favoriteSongs' ? 'Like songs from this artist to see them here' : 'No top songs available'}
+                </Text>
+              </View>
+            }
+          />
+        )}
+        {StickyHeader}
+      </View>
+    </ScreenBackground>
   );
 }

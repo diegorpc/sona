@@ -15,15 +15,23 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 14,
+    paddingTop: 17,
+    paddingBottom: 0,
     backgroundColor: 'transparent',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   headerTitle: {
     fontSize: 28,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
-    marginBottom: 12,
+    textShadowColor: theme.colors.primary,
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 0,
   },
   searchbar: {
     borderRadius: 10,
@@ -35,6 +43,7 @@ export const createStyles = (theme) => StyleSheet.create({
     fontSize: 16,
     paddingTop: 0,
     paddingBottom: 10,
+    color: theme.colors.onSurface,
   },
   resultsList: {
     paddingBottom: 100,

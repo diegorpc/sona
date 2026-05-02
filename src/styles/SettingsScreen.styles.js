@@ -1,41 +1,65 @@
 import { StyleSheet } from 'react-native';
 
 export const createStyles = (theme) => StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+  },
+  blurOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(8, 8, 8, 0.78)',
+  },
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: 'transparent',
+    paddingTop: 40,
   },
+  // ─── Header ───────────────────────────────────────────────────
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 14,
+    backgroundColor: 'transparent',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontFamily: 'Lexend_700Bold',
+    color: theme.colors.onSurface,
+    textShadowColor: theme.colors.primary,
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 0,
+    marginBottom: 14,
+  },
+  // ─── Chips ────────────────────────────────────────────────────
+  chipScrollContainer: {
+    marginHorizontal: -16,
+  },
+  chipContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 16,
+    paddingRight: 16,
+    gap: 7,
+  },
+  bubbleChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 99,
+    minWidth: 64,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.11)',
+  },
+  bubbleChipText: {
+    fontSize: 13,
+    fontFamily: 'Lexend_500Medium',
+    textAlign: 'center',
+  },
+  // ─── Content ──────────────────────────────────────────────────
   scrollContainer: {
     flex: 1,
-    paddingVertical: 40,
   },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.outline,
-    paddingTop: 50,
-    paddingHorizontal: 16,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTab: {
-    borderBottomColor: theme.colors.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.onSurfaceVariant,
-  },
-  activeTabText: {
-    color: theme.colors.primary,
-    fontWeight: '600',
+  scrollFooter: {
+    height: 120,
   },
   card: {
     margin: 16,
@@ -43,17 +67,19 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   sectionDescription: {
-    fontSize: 14,
+    fontSize: 13,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurfaceVariant,
     marginBottom: 20,
     lineHeight: 20,
   },
+  // ─── Accent color picker ───────────────────────────────────────
   accentColorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -74,20 +100,20 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   accentColorSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.surfaceVariant,
   },
   accentColorSwatch: {
-    width: 30,
-    height: 15,
+    width: 28,
+    height: 14,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: 10,
   },
   accentColorName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
+    fontFamily: 'Lexend_500Medium',
     color: theme.colors.onSurface,
     flex: 1,
   },
+  // ─── Buttons ──────────────────────────────────────────────────
   button: {
     marginTop: 16,
   },
@@ -95,41 +121,13 @@ export const createStyles = (theme) => StyleSheet.create({
     margin: 16,
     marginTop: 8,
   },
+  // ─── Dialogs ──────────────────────────────────────────────────
   dialogInput: {
     marginBottom: 16,
   },
-  cacheStatsContainer: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: theme.colors.surfaceVariant,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  cacheStatRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  cacheStatLabel: {
-    fontSize: 14,
-    color: theme.colors.onSurfaceVariant,
-  },
-  cacheStatValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.onSurface,
-  },
-  progressBar: {
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  divider: {
-    marginVertical: 8,
-  },
   dialogDescription: {
     fontSize: 14,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurfaceVariant,
     marginBottom: 20,
     lineHeight: 20,
@@ -139,7 +137,7 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   sliderLabel: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.primary,
     textAlign: 'center',
     marginBottom: 8,
@@ -155,6 +153,39 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   sliderLabelSmall: {
     fontSize: 12,
+    fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurfaceVariant,
+  },
+  // ─── Cache stats ───────────────────────────────────────────────
+  cacheStatsContainer: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  cacheStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cacheStatLabel: {
+    fontSize: 13,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurfaceVariant,
+  },
+  cacheStatValue: {
+    fontSize: 13,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  divider: {
+    marginVertical: 8,
   },
 });

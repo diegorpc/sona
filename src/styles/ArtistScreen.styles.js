@@ -2,6 +2,9 @@ import { StyleSheet, Dimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
 const ART_SIZE = Math.min(180, width - 180);
+const GRID_HORIZONTAL_PADDING = 14;
+const GRID_GAP = 12;
+const GRID_CARD_SIZE = (width - GRID_HORIZONTAL_PADDING * 2 - GRID_GAP) / 2;
 
 export const createStyles = (theme) => StyleSheet.create({
   backgroundImage: {
@@ -71,8 +74,8 @@ export const createStyles = (theme) => StyleSheet.create({
   artContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 100,
-    paddingBottom: 10,
+    paddingTop: 80,
+    paddingBottom: 6,
   },
   artShadow: {
     borderRadius: ART_SIZE / 2,
@@ -90,7 +93,7 @@ export const createStyles = (theme) => StyleSheet.create({
   titleBlock: {
     paddingHorizontal: 16,
     paddingTop: 4,
-    paddingBottom: 12,
+    paddingBottom: 8,
     alignItems: 'center',
   },
   artistName: {
@@ -108,77 +111,78 @@ export const createStyles = (theme) => StyleSheet.create({
     opacity: 0.55,
     marginTop: 5,
   },
-  // Chip tabs (library-style TouchableOpacity chips)
+  // Chip tabs (animated library-style chips)
+  chipScrollContainer: {
+    flexGrow: 0,
+    flexShrink: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.borderLowOpacity,
+  },
   chipTabsContainer: {
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.borderLowOpacity,
+    paddingVertical: 8,
   },
   chipTab: {
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 99,
-    backgroundColor: 'rgba(255, 255, 255, 0.07)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.11)',
-  },
-  chipTabActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: 'transparent',
-    shadowColor: theme.colors.primary,
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   chipTabText: {
     fontSize: 13,
     fontFamily: 'Lexend_500Medium',
-    color: theme.colors.onSurface,
-    opacity: 0.6,
+    lineHeight: 18,
   },
-  chipTabTextActive: {
-    color: '#fff',
-    opacity: 1,
+  // Album grid (2x2 with large media art)
+  albumGridContainer: {
+    paddingHorizontal: GRID_HORIZONTAL_PADDING,
+    paddingTop: 12,
+    paddingBottom: 70,
   },
-  // Album rows (library-style, no play button)
-  albumRow: {
+  albumGridRow: {
+    justifyContent: 'space-between',
+    marginBottom: GRID_GAP,
+  },
+  albumGridWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.borderLowOpacity,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: GRID_GAP,
+    paddingBottom: 12,
   },
-  albumArt: {
-    width: 52,
-    height: 52,
-    borderRadius: 5,
-    marginRight: 10,
-  },
-  albumInfo: {
-    flex: 1,
-    justifyContent: 'center',
-    minWidth: 0,
-  },
-  albumTitle: {
+  sectionHeader: {
     fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
+    marginBottom: 10,
+    textShadowColor: theme.colors.primary,
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
   },
-  albumSubtitle: {
+  albumCard: {
+    width: GRID_CARD_SIZE,
+  },
+  albumCardArt: {
+    width: GRID_CARD_SIZE,
+    height: GRID_CARD_SIZE,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surfaceVariant,
+  },
+  albumCardTitle: {
+    fontSize: 14,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+    marginTop: 8,
+  },
+  albumCardSubtitle: {
     fontSize: 12,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.55,
     marginTop: 2,
-  },
-  albumChevron: {
-    color: theme.colors.onSurface,
-    opacity: 0.35,
   },
   // Top songs / Favorite songs rows (same as playlist rows with art)
   songItem: {
@@ -194,7 +198,7 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.colors.playingBackground,
   },
   trackNumberWrapper: {
-    width: 22,
+    width: 0,
     alignItems: 'center',
     marginRight: 0,
     flexShrink: 0,
@@ -245,6 +249,7 @@ export const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.onSurface,
     opacity: 0.4,
     marginRight: 2,
+    marginLeft: 4,
     flexShrink: 0,
   },
   menuButton: {
@@ -255,7 +260,7 @@ export const createStyles = (theme) => StyleSheet.create({
     flexShrink: 0,
   },
   listContainer: {
-    paddingBottom: 120,
+    paddingBottom: 60,
   },
   emptyState: {
     paddingTop: 80,

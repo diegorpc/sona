@@ -82,7 +82,7 @@ function MainTabs() {
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
-          borderTopColor: theme.colors.outline,
+          borderTopColor: theme.colors.borderLowOpacity,
         },
         headerShown: false,
       })}
@@ -90,9 +90,9 @@ function MainTabs() {
         backgroundColor: 'transparent',
       }}
     >
-      <Tab.Screen name="Library" component={LibraryStackNavigator} />
-      <Tab.Screen name="Search" component={SearchStackNavigator} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
+      <Tab.Screen name="Library" component={LibraryStackNavigator} options={{ tabBarLabelStyle: { fontSize: 12, fontWeight: 500, fontFamily: 'Lexend' } }} />
+      <Tab.Screen name="Search" component={SearchStackNavigator} options={{ tabBarLabelStyle: { fontSize: 12, fontWeight: 500, fontFamily: 'Lexend' } }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabelStyle: { fontSize: 12, fontWeight: 500, fontFamily: 'Lexend' } }} />
     </Tab.Navigator>
   );
 }

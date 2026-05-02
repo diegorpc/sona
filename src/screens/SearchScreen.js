@@ -68,12 +68,12 @@ export default function SearchScreen({ navigation }) {
 
   const handleArtistPress = useCallback((artist) => {
     saveRecentSearch(artist, 'artist');
-    navigation.navigate('Artist', { artist });
+    navigation.push('Artist', { artist });
   }, [navigation, saveRecentSearch]);
 
   const handleAlbumPress = useCallback((album) => {
     saveRecentSearch(album, 'album');
-    navigation.navigate('Album', { album });
+    navigation.push('Album', { album });
   }, [navigation, saveRecentSearch]);
 
   const handleSongPress = useCallback(async (song, songs, index) => {
@@ -92,7 +92,7 @@ export default function SearchScreen({ navigation }) {
 
   const handlePlaylistPress = useCallback((playlist) => {
     saveRecentSearch(playlist, 'playlist');
-    navigation.navigate('Playlist', { playlist });
+    navigation.push('Playlist', { playlist });
   }, [navigation, saveRecentSearch]);
 
   useEffect(() => {
@@ -289,16 +289,19 @@ export default function SearchScreen({ navigation }) {
     <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Search</Text>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Search</Text>
+          </View>
+        
           <Searchbar
-            placeholder="Artists, albums, songs..."
+            placeholderTextColor={theme.colors.onSurfaceVariant}
+            placeholder="Artists, albums, songs, playlists..."
             onChangeText={handleSearch}
             value={searchQuery}
             style={styles.searchbar}
             inputStyle={styles.searchbarInput}
           />
         </View>
-
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />

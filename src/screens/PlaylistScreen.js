@@ -22,7 +22,6 @@ import { createStyles } from '../styles/PlaylistScreen.styles';
 const DEFAULT_ART = require('../../assets/default-album.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ART_SIZE = Math.min(220, SCREEN_WIDTH - 140);
-const THUMB_SIZE = 44;
 
 // ─── Song row with art thumbnail ──────────────────────────────────
 const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
@@ -39,18 +38,6 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
     const s = item.duration % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   }, [item.duration]);
-
-  const [thumbSize, setThumbSize] = useState({ width: THUMB_SIZE, height: THUMB_SIZE });
-  useEffect(() => { setThumbSize({ width: THUMB_SIZE, height: THUMB_SIZE }); }, [coverArtUrl]);
-  const handleThumbLoad = useCallback((e) => {
-    const { width: w, height: h } = e.nativeEvent.source;
-    if (!w || !h) return;
-    const ratio = w / h;
-    setThumbSize(ratio >= 1
-      ? { width: THUMB_SIZE, height: Math.round(THUMB_SIZE / ratio) }
-      : { width: Math.round(THUMB_SIZE * ratio), height: THUMB_SIZE }
-    );
-  }, []);
 
   return (
     <TouchableOpacity
@@ -75,13 +62,12 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
         }
       </View>
 
-      {/* Art thumbnail — fixed container keeps rows aligned */}
       <View style={styles.songImageContainer}>
         <Image
           source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-          style={{ width: thumbSize.width, height: thumbSize.height, borderRadius: 5 }}
+          style={styles.songImage}
+          resizeMode="contain"
           defaultSource={DEFAULT_ART}
-          onLoad={handleThumbLoad}
         />
       </View>
 
@@ -334,34 +320,32 @@ export default function PlaylistScreen({ route, navigation }) {
   }
 
   return (
-    <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-      <PlatformBlur intensity={65} tint="dark" style={styles.blurOverlay}>
-        <View style={styles.container}>
-          <FlatList
-            data={playlistData.entry || []}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            getItemLayout={getItemLayout}
-            ListHeaderComponent={ListHeader}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <MaterialIcons name="queue-music" size={64} color={theme.colors.outline} />
-                <Text style={styles.emptyText}>No songs in playlist</Text>
-              </View>
-            }
-            contentContainerStyle={styles.listContainer}
-            refreshControl={
-              <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[theme.colors.primary]} />
-            }
-            showsVerticalScrollIndicator={false}
-            removeClippedSubviews
-            maxToRenderPerBatch={10}
-            initialNumToRender={20}
-            windowSize={10}
-          />
-          {StickyHeader}
-        </View>
-      </PlatformBlur>
-    </ImageBackground>
+    <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
+      <View style={styles.container}>
+        <FlatList
+          data={playlistData.entry || []}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          getItemLayout={getItemLayout}
+          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <MaterialIcons name="queue-music" size={64} color={theme.colors.outline} />
+              <Text style={styles.emptyText}>No songs in playlist</Text>
+            </View>
+          }
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[theme.colors.primary]} />
+          }
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          initialNumToRender={20}
+          windowSize={10}
+        />
+        {StickyHeader}
+      </View>
+    </ScreenBackground>
   );
 }

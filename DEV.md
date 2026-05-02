@@ -1,347 +1,238 @@
-# Sona Music - Subsonic/Navidrome Client
+# Sona – Subsonic/Navidrome Client (React Native / Expo)
 
-A beautiful React Native music streaming client for Subsonic and Navidrome servers, designed for iOS with Windows development support.
+iOS-first music streaming client. Development on Windows, tested via Expo Go on physical iOS device.
 
-## Features
+## Stack
 
-### Core Functionality
-- 🎵 **Stream Music** - Connect to your Subsonic/Navidrome server
-- 🎧 **Background Playback** - Music continues playing when app is minimized using expo-audio
-- 🔍 **Search** - Find artists, albums, and songs quickly across your library
-- 📱 **Lock Screen Controls** - Control playback from iOS lock screen and control center
-- ⭐ **Favorites** - Star your favorite tracks and albums
-- 📊 **Scrobbling** - Track your listening history on your server
-- 🎯 **Queue Management** - View and manage your playback queue with drag-to-reorder
-- 🔀 **Shuffle & Repeat** - Randomize and repeat your music
+- **React Native** 0.81.4 + **React** 19.1.0 + **Expo** ~54
+- **expo-audio** for playback (not expo-av)
+- **react-native-paper** (MD3) for base UI components
+- **@expo/vector-icons** (MaterialIcons throughout)
+- **expo-blur** for `BlurView` (iOS only — see ScreenBackground)
+- **react-native-gesture-handler** + **react-native-reanimated** (gesture layer)
+- **react-native-draggable-flatlist** for queue reordering
+- **@expo-google-fonts/lexend** (Lexend_400Regular, _500Medium, _600SemiBold, _700Bold)
+- **axios** + **crypto-js** for Subsonic API
+- **@react-native-async-storage/async-storage** for persistence
+- `@react-native-assets/slider` for the player seek bar (not the community slider)
 
-### Library Features
-- 📚 **Library Browser** - Browse artists, albums, playlists, and songs with optimized pagination
-- 🎨 **Playlist Collages** - Automatically generated 2x2 album art collages for playlists
-- 🔄 **Smart Caching** - Intelligent caching system with configurable size limits
-- ⚡ **Performance Optimized** - React.memo, useMemo, and useCallback for smooth scrolling
-- 🎭 **Smooth Animations** - Fade transitions and chip animations for library filtering
-
-### Playback Features
-- 🎼 **Full Player** - Beautiful full-screen player with album art and controls
-- 🎚️ **Mini Player** - Persistent mini player overlay for quick access
-- ⏮️ **Previous/Next** - Navigate through your queue
-- ⏸️ **Play/Pause** - Full playback control
-- 🔊 **Seek Control** - Scrub through tracks with progress bar
-- 💾 **State Persistence** - Remembers playback state across app restarts
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v16 or higher)
-- npm or yarn
-- Expo CLI
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm start
-   ```
-
-## Configuration
-
-1. Launch the app
-2. Enter your Subsonic/Navidrome server details:
-   - Server URL (e.g., https://your-server.com)
-   - Username
-   - Password
-
-## Technologies Used
-
-### Core Framework
-- **React Native** 0.81.4 - Mobile app framework
-- **React** 19.1.0 - UI library
-- **Expo** ~54.0.10 - React Native tooling and services
-
-### Navigation
-- **@react-navigation/native** ^6.1.18 - Navigation framework
-- **@react-navigation/stack** ^6.4.1 - Stack navigator
-- **@react-navigation/bottom-tabs** ^6.6.1 - Bottom tab navigation
-
-### UI & Design
-- **react-native-paper** ^5.11.6 - Material Design 3 components
-- **@expo/vector-icons** ^15.0.2 - Icon library
-- **@expo-google-fonts/lexend** ^0.4.1 - Custom font family
-- **expo-linear-gradient** ~15.0.7 - Gradient backgrounds
-- **expo-blur** ~15.0.7 - Blur effects
-- **react-native-text-ticker** ^1.15.0 - Scrolling text for long titles
-
-### Audio & Media
-- **expo-audio** ^1.0.13 - Audio playback engine
-- **expo-av** ~16.0.7 - Legacy audio/video support
-
-### Gestures & Animations
-- **react-native-gesture-handler** ~2.28.0 - Gesture system
-- **react-native-reanimated** ^4.1.2 - Animation library
-- **react-native-worklets** ^0.5.1 - High-performance animations
-- **react-native-draggable-flatlist** ^4.0.3 - Drag-to-reorder lists
-
-### Data & Storage
-- **@react-native-async-storage/async-storage** 2.2.0 - Persistent storage
-- **axios** ^1.7.7 - HTTP client for API requests
-- **crypto-js** ^4.2.0 - MD5 hashing for authentication
-
-### Other Components
-- **@react-native-community/slider** 5.0.1 - Slider component for seek/volume
-- **react-native-safe-area-context** ~5.6.0 - Safe area handling
-
-## Development Workflow
-
-### Windows Development Setup
-
-Since you're developing on Windows for iOS, here's the recommended workflow:
-
-1. **Use Expo Go for testing**
-   - Install Expo Go on your iPhone from the App Store
-   - Make sure your phone and computer are on the same WiFi network
-   - Run `npm start` and scan the QR code
-
-2. **Hot Reload**
-   - Changes to your code will automatically refresh on your device
-   - Shake your device to open the developer menu
-
-3. **Debugging**
-   - Use Chrome DevTools for debugging JavaScript
-   - Enable Remote JS Debugging from the developer menu
-
-### Project Structure
+## Project layout
 
 ```
 src/
-├── components/                    # Reusable UI components
-│   ├── MiniPlayer.js             # Persistent mini player overlay
-│   ├── PlayerOverlay.js          # Full-screen player overlay
-│   └── PlaylistCollage.js        # 2x2 album art collage for playlists
-├── contexts/                      # React contexts
-│   └── PlayerContext.js          # Global player state management
-├── screens/                       # App screens
-│   ├── LoginScreen.js            # Server authentication
-│   ├── LibraryScreen.js          # Main library browser (artists/albums/playlists/songs)
-│   ├── SearchScreen.js           # Global search functionality
-│   ├── SettingsScreen.js         # App settings and configuration
-│   ├── ArtistScreen.js           # Artist detail view
-│   ├── AlbumScreen.js            # Album detail view
-│   ├── PlaylistScreen.js         # Playlist detail view
-│   └── QueueScreen.js            # Playback queue management
-├── services/                      # Core services
-│   ├── SubsonicAPI.js            # Subsonic API client
-│   ├── AudioPlayer.js            # Audio playback engine (expo-audio)
-│   ├── CacheService.js           # Library data caching system
-│   └── PlayerOverlayController.js # Player overlay state controller
-├── styles/                        # StyleSheet definitions
-│   ├── SettingsScreen.styles.js
-│   ├── LibraryScreen.styles.js
-│   ├── SearchScreen.styles.js
-│   └── ... (one per screen)
-└── theme/                         # App theming
-    └── theme.js                  
+├── components/
+│   ├── MiniPlayer.js             # Collapsed player bar (tappable, swipe-up gesture handled by PlayerOverlay)
+│   ├── PlayerOverlay.js          # Full-screen overlay: MiniPlayer + PlayerScreen + QueueScreen stacked
+│   ├── PlaylistCollage.js        # 2×2 cover art grid component used in PlaylistScreen
+│   └── ScreenBackground.js       # Cross-platform background: ImageBackground+BlurView (iOS) or themed View (Android)
+├── contexts/
+│   ├── PlayerContext.js          # Global player state; wraps AudioPlayer, exposes usePlayer()
+│   └── ThemeContext.js           # Accent color state, persists to AsyncStorage, exposes useTheme()
+├── screens/
+│   ├── LoginScreen.js            # Server URL + credentials, calls SubsonicAPI.initialize()
+│   ├── LibraryScreen.js          # Main browser: animated chip tabs + per-tab sort controls + FlatList
+│   ├── SearchScreen.js           # search3 unified search (artists, albums, songs)
+│   ├── SettingsScreen.js         # Animated chip tabs: Appearance, General, Server, Storage
+│   ├── ArtistScreen.js           # Artist detail: album grid, top songs, favorite songs
+│   ├── AlbumScreen.js            # Album detail: SectionList grouped by disc number
+│   ├── PlaylistScreen.js         # Playlist detail: song rows with cover art thumbnails
+│   ├── QueueScreen.js            # Priority queue + context queue with drag reorder
+│   └── PlayerScreen.js           # Full player (rendered inside PlayerOverlay, not a nav screen)
+├── services/
+│   ├── SubsonicAPI.js            # Subsonic v1.16.1 API client, MD5 token auth, singleton
+│   ├── AudioPlayer.js            # expo-audio singleton: playback, queues, persistence, listeners
+│   ├── CacheService.js           # AsyncStorage-backed LRU cache for library data
+│   ├── PlayerOverlayController.js # Singleton: expandPlayerOverlay / collapsePlayerOverlay
+│   └── NavigationService.js      # Navigation ref for imperative navigation outside components
+├── styles/
+│   └── <Screen>.styles.js        # One per screen/component; all export createStyles(theme)
+└── theme/
+    └── theme.js                  # Dark-only theme; accent palettes; createThemeWithVariants()
 ```
 
-## Configuration
+## Navigation
 
-## Building for Production
+```
+Stack Navigator (root)
+├── Login (unauthenticated gate)
+└── Main
+    ├── Bottom Tab Navigator
+    │   ├── Library  → LibraryScreen
+    │   ├── Search   → SearchScreen
+    │   └── Settings → SettingsScreen
+    ├── Artist  (stack push)
+    ├── Album   (stack push)
+    └── Playlist (stack push)
 
-### TestFlight (Recommended for iOS)
+PlayerOverlay — mounted at app root, not in navigator
+  Layers (bottom to top): MiniPlayer → PlayerScreen → QueueScreen
+  Gestures: swipe-down collapses, swipe-up shows queue
+```
 
-1. **Build with Expo**
-   ```bash
-   expo build:ios
-   ```
+## Theme system
 
-2. **Upload to TestFlight**
-   - Download the generated IPA file
-   - Upload to App Store Connect
-   - Distribute via TestFlight
+`theme.js` exports:
+- `accentPalettes` — 10 named palettes (velvet, ruby, olive, caramel, rose, pearl, lemon, cobalt, neon, sand), each with `primary`, `primaryContainer`, `secondary`, `secondaryContainer`
+- `createThemeWithVariants(accentKey)` — produces a full MD3DarkTheme override with dynamic opacity variants: `borderLowOpacity` (9%), `playingBackground` (18%), `badgeBackground` (20%), `badgeBorder` (30%) all derived from `accent.primary` hex
 
-### Ejecting to Native Code (Advanced)
+`ThemeContext` loads `accentColor` from AsyncStorage on mount, calls `createThemeWithVariants`, stores result as `theme`. Components call `const { theme } = useTheme()` then `const styles = createStyles(theme)` inline.
 
-If you need native iOS features:
+Base palette (same across all accents):
+- `background`: `#000000`, `surface`: `#121212`, `surfaceVariant`: `#1e1e1e`
+- `onSurface`/`onBackground`: `#ffffff`, `onSurfaceVariant`: `#a0a0a0`, `outline`: `#333333`
+- `error`: `#cf6679`, `onPrimary`/`onSecondary`: `#000000`
+
+## ScreenBackground component
+
+`ScreenBackground({ source, backgroundStyle, blurStyle, intensity=65, tint='dark', children })`
+
+- iOS: `<ImageBackground source={source}>` → `<BlurView intensity tint>` → children
+- Android: `<View backgroundColor={theme.colors.background}>` → `<View>` → children (no blur)
+
+Used in ArtistScreen, AlbumScreen, PlaylistScreen, SettingsScreen. Background `source` is typically the album/artist cover art at 600px.
+
+## Animated chip tabs
+
+Pattern shared by LibraryScreen, SettingsScreen, ArtistScreen. Constants:
+```
+CHIP_REORDER_DURATION = 620ms   (Easing.out(Easing.cubic))
+CHIP_FADE_OUT_DURATION = 200ms  (Easing.out(Easing.quad))
+CHIP_FADE_IN_DURATION = 240ms   (Easing.in(Easing.cubic))
+```
+
+State per screen:
+- `chipDisplayOrder` — reordered `TABS` array with active tab first
+- `chipHighlightAnimations` ref — `Animated.Value` per key (1 = active, 0 = inactive); interpolated to `backgroundColor` and text `color`
+- `chipAnimations` ref — translateX per key for slide-to-front
+- `chipLayoutsRef` ref — stores `{ x }` from `onLayout` per key
+- `pendingChipAnimation` ref — snapshot of old positions before reorder; resolved in `handleChipLayout` after React re-renders new positions
+
+`AnimatedTouchableOpacity` + `AnimatedText` created via `Animated.createAnimatedComponent`.
+
+Chip `ScrollView` must have `flexShrink: 0` (and `flexGrow: 0`) in styles to prevent Yoga compression when list content is tall.
+
+## SubsonicAPI
+
+Singleton at `src/services/SubsonicAPI.js`. Auth: `token = MD5(password + salt)`, salt regenerated each `initialize()` call. Config persisted to AsyncStorage key `serverConfig`.
+
+Key methods:
+| Method | Endpoint | Notes |
+|---|---|---|
+| `ping()` | `ping` | connectivity check |
+| `getArtists()` | `getArtists` | returns indexed artist list |
+| `getArtist(id)` | `getArtist` | artist + album array |
+| `getArtistImage(id)` | `getArtistInfo` | tries largeImageUrl, mediumImageUrl, smallImageUrl |
+| `getAlbum(id)` | `getAlbum` | album + song array |
+| `getAlbumList(type, size, offset)` | `getAlbumList2` | valid types: random, newest, highest, frequent, recent, alphabeticalByName, alphabeticalByArtist, starred, byYear, byGenre |
+| `getAllAlbums(type, max)` | batched | fetches in 500-item batches up to max |
+| `search(query, ...)` | `search3` | returns `searchResult3` with artist/album/song arrays |
+| `getTopSongs(artistName, count)` | `getTopSongs` | by artist name (not ID); requires API ≥ 1.13.0 |
+| `getStarred()` | `getStarred` | returns `starred` with song/album/artist arrays |
+| `getArtistAppearsIn(artist, excludeIds)` | `search3` | finds albums where artist has songs but isn't album artist |
+| `getStreamUrl(songId, maxBitRate?)` | `stream` | returns URL string (not a request) |
+| `getCoverArtUrl(id, size)` | `getCoverArt` | returns URL string |
+| `scrobble(songId, submission)` | `scrobble` | call on track start |
+| `star(id, albumId?, artistId?)` | `star` | |
+| `unstar(id, albumId?, artistId?)` | `unstar` | |
+| `generatePlaylistCollage(playlistId, size)` | — | returns single URL or `{ type: 'collage', coverArtUrls, albumCount, size }` |
+
+## AudioPlayer
+
+Singleton at `src/services/AudioPlayer.js`. Uses `createAudioPlayer` from `expo-audio`.
+
+State fields: `currentTrack`, `playlist[]`, `currentIndex`, `isPlaying`, `position` (ms), `duration` (ms), `isLoading`, `priorityQueue[]`, `queueContext { name, type, id }`, `currentTrackSource ('context'|'priority')`
+
+Queue model:
+- **playlist** — the context queue (album, artist, playlist)
+- **priorityQueue** — tracks inserted to play next; consumed before advancing playlist
+- `currentTrackSource` distinguishes which queue the current track came from
+
+`playTrack(track, playlist, index, options)` — stops current, sets state, persists to AsyncStorage, creates new `createAudioPlayer` instance. UI updates immediately via `notifyListeners()`.
+
+Persistence keys: `currentTrack`, `currentPlaylist`, `currentIndex`, `currentPosition`, `isPlaying`, `audioPlayerPriorityQueue`, `audioPlayerQueueContext`, `audioPlayerCurrentTrackSource`.
+
+Listener pattern: `addListener(fn)` / `removeListener(fn)` — `fn(state)` called on every state change. `PlayerContext` subscribes and exposes state via `usePlayer()`.
+
+## CacheService
+
+Singleton. In-memory `Map` + AsyncStorage backing. Default max 500 MB. Metadata key `@sona_cache_metadata` stores per-entry sizes and timestamps. LRU eviction when limit exceeded. Used by LibraryScreen for artist/album/playlist lists.
+
+## PlayerOverlay
+
+Mounted outside the navigator at app root. Three vertical layers controlled by `Animated.Value overlayY`:
+- Collapsed: only MiniPlayer visible at bottom
+- Expanded: PlayerScreen fills screen
+- Queue: QueueScreen slides up over PlayerScreen
+
+`PanResponder` handles drag gestures. `PlayerOverlayController` exposes `registerPlayerOverlay` / `expandPlayerOverlay` / `collapsePlayerOverlay` for imperative calls from anywhere (e.g., after `playTrack`).
+
+## Screen-specific details
+
+### LibraryScreen
+Chip tabs: Liked Songs, Playlists, Albums, Artists. Each tab has its own sort options stored in AsyncStorage. Albums fetched via `getAllAlbums(type)` where `type` maps to Subsonic sort keys. Artists fetched once via `getArtists()`. List fades in via `listOpacity` Animated.Value (0→1, 400ms) after data loads — pattern to copy for any background-loaded list.
+
+Sort options per tab:
+- Liked Songs: Recently Listened, Recently Added, Date Loved, Alphabetical
+- Playlists: Default, Alphabetical, Date Created
+- Albums: Recently Listened, Recently Added, Frequently Listened, Alphabetical, Date Released
+- Artists: Alphabetical, Album Count
+
+### ArtistScreen
+- Header: circular artist image (falls back to `getCoverArtUrl(artist.id)`)
+- Chip tabs: Albums, Top Songs, Favorite Songs
+- Albums tab: 2-column grid (`ScrollView` + `flexWrap`), split into "Albums" and "Appears In" sections
+- Top Songs: `getTopSongs(artist.name, 50)` — non-blocking after main `getArtist`; `isLoadingTopSongs` state controls ActivityIndicator
+- Favorite Songs: `getStarred()` filtered by `artistId` or `artist` name; `isLoadingFavorites` state controls ActivityIndicator
+- Appears In: `getArtistAppearsIn(artist, ownAlbumIds)` — non-blocking background fetch
+- All background fetches use `.then().catch().finally(() => setLoading(false))`
+
+### AlbumScreen
+- `SectionList` grouped by `song.discNumber` (default 1); disc headers only shown when >1 disc
+- Song rows: no thumbnail, track number or play arrow, optional guest artist line
+- Art: aspect-ratio adaptive via `onLoad` → `handleArtLoad`
+
+### PlaylistScreen
+- Song rows with 44×44 cover art, `resizeMode="contain"` in fixed container (no JS resize on load)
+- Collage: if `generatePlaylistCollage` returns `{ type: 'collage' }`, `PlaylistCollage` renders a 2×2 grid
+
+### PlayerScreen
+- Rendered inside `PlayerOverlay`, receives `onClose`, `onShowQueue`, `onNavigateToArtist`, `onNavigateToAlbum`, `safeAreaInsets` as props
+- Art: `PLAYER_ART_SIZE = screenWidth - 80`, aspect-ratio adapted via `onLoad`
+- Seek: `@react-native-assets/slider`; value is percentage 0–100
+- Long titles: `react-native-text-ticker` for marquee scroll
+- Star toggle: calls `SubsonicAPI.star/unstar` directly, local `isStarred` state
+
+### SettingsScreen
+Chip tabs: Appearance, General, Server, Storage.
+- Appearance: accent color picker using `accentPalettes` from theme.js
+- Server: re-login flow via `SubsonicAPI.initialize()` then `CommonActions.reset`
+- Storage: cache stats from `CacheService.getStats()`, clear cache button
+
+## Common patterns
+
+**Style factory:** every screen/component has `createStyles(theme)` in its paired `.styles.js`. Call at component render top: `const styles = createStyles(theme)`.
+
+**Memo'd list items:** row components use `React.memo` with custom comparators checking only `item.id`, `isPlaying`, and `starred` boolean.
+
+**Background data loading:** fire after main blocking fetch resolves, never block the loading gate on these:
+```js
+SubsonicAPI.getSomeData()
+  .then(data => setState(data))
+  .catch(() => {})
+  .finally(() => setIsLoading(false));
+```
+
+**FlatList in flex column:** always set `style={{ flex: 1 }}` on `FlatList` when it shares a column with a chip `ScrollView`. The chip container needs `flexShrink: 0` to prevent Yoga compression when list is tall.
+
+**Image flash prevention:** for thumbnail images in list rows, use `resizeMode="contain"` inside a fixed-size container. Do not use `Image.getSize` or `onLoad` resize state for small thumbnails — it causes a visible resize flash.
+
+**Cover art sizing for detail screens:** use `onLoad` → read `e.nativeEvent.source.{width,height}` → compute aspect ratio → update display size state. This is safe because the image is already decoded at that point.
+
+## Running
 
 ```bash
-expo eject
+npm start                        # Expo dev server; scan QR with Expo Go on iPhone
+npm start -- --reset-cache       # Clear Metro cache
 ```
 
-This will create native iOS and Android projects that you can open in Xcode/Android Studio.
-
-## Architecture
-
-### Audio System (AudioPlayer.js)
-
-The audio player uses **expo-audio** for high-quality playback:
-
-- **State Management**: Maintains current track, playlist, queue, and playback position
-- **Persistence**: Saves playback state to AsyncStorage for restoration on app restart
-- **Status Monitoring**: Timer-based status updates (100ms interval) for position tracking
-- **Background Playback**: Configured for iOS background audio and lock screen controls
-- **Auto-play**: Automatically advances to next track when current track ends
-- **Error Recovery**: Automatic reinitialization if audio player becomes corrupted
-
-Key Methods:
-- `playTrack()` - Load and play a new track (updates UI immediately, loads audio in background)
-- `togglePlayPause()` - Toggle between play/pause states
-- `stop()` - Stop playback and cleanup
-- `seekTo()` - Seek to specific position in track
-- `playNext()` / `playPrevious()` - Navigate queue
-
-### Caching System (CacheService.js)
-
-Smart caching for library data to reduce server requests:
-
-- **LRU Cache**: Least Recently Used eviction strategy
-- **Size Management**: Configurable max cache size (100MB - 20GB)
-- **Metadata Tracking**: Tracks entry sizes, access times, and total cache usage
-- **Automatic Pruning**: Removes old entries when cache limit exceeded
-- **Stats API**: Provides cache usage statistics for UI display
-
-### Library Browser (LibraryScreen.js)
-
-Highly optimized virtualized list with:
-
-- **Pagination**: 50 items per page for smooth scrolling
-- **React Performance**: React.memo, useMemo, useCallback throughout
-- **Custom Comparison**: Prevents unnecessary re-renders
-- **FlatList Optimization**: removeClippedSubviews, windowSize, maxToRenderPerBatch tuning
-- **Animation Sequence**: Chip reorder → fade out → data load → fade in
-- **Playlist Collages**: Generates 2x2 album art grids for playlists
-
-### Navigation Structure
-
-```
-Stack Navigator (Root)
-├── Login Screen (unauthenticated)
-└── Main (authenticated)
-    ├── Bottom Tab Navigator
-    │   ├── Library Tab
-    │   ├── Search Tab
-    │   └── Settings Tab
-    ├── Artist Screen (modal)
-    ├── Album Screen (modal)
-    └── Playlist Screen (modal)
-
-+ PlayerOverlay (global component)
-  └── Gestures: Swipe down to dismiss, Swipe up for queue
-```
-
-## API Reference
-
-### Subsonic API Integration
-
-The app uses Subsonic API v1.16.1 with MD5 token authentication:
-
-**Endpoints Used:**
-- `ping` - Server connectivity test
-- `getArtists` - Fetch all artists (indexed)
-- `getArtist` - Get artist details and albums
-- `getAlbum` - Get album details and tracks
-- `getPlaylists` - Get user playlists
-- `getPlaylist` - Get playlist details
-- `search3` - Universal search (artists, albums, songs)
-- `stream` - Audio streaming endpoint
-- `getCoverArt` - Album/artist artwork
-- `scrobble` - Submit listening history
-- `star` / `unstar` - Favorite management
-
-**Authentication:**
-- Uses MD5 token-based auth: `token = MD5(password + salt)`
-- Credentials stored securely in AsyncStorage
-- Auto-reconnect on token expiration
-
-### Services API
-
-**AudioPlayer Service:**
-```javascript
-// Play a track
-await AudioPlayer.playTrack(track, playlist, index);
-
-// Control playback
-AudioPlayer.togglePlayPause();
-AudioPlayer.stop();
-AudioPlayer.playNext();
-AudioPlayer.playPrevious();
-AudioPlayer.seekTo(positionMs);
-
-// Listen to state changes
-AudioPlayer.addListener(callback);
-```
-
-**CacheService:**
-```javascript
-// Get cached data
-const data = await CacheService.get(key);
-
-// Set cache entry
-await CacheService.set(key, data);
-
-// Manage cache
-await CacheService.clearAll();
-await CacheService.setMaxSize(sizeMB);
-const stats = await CacheService.getStats();
-```
-
-## Troubleshooting
-
-### Development Issues
-
-1. **Metro Bundler Issues**
-   ```bash
-   npx react-native start --reset-cache
-   ```
-
-2. **Dependency Issues**
-   ```bash
-   rm -rf node_modules
-   npm install
-   ```
-
-3. **Expo Issues**
-   ```bash
-   expo r -c
-   ```
-
-## Current Implementation Status
-
-### ✅ Completed Features
-- ✅ Login/Authentication screen
-- ✅ Library browser with tabs (Artists, Albums, Playlists, Songs)
-- ✅ Artist detail screen
-- ✅ Album detail screen
-- ✅ Playlist detail screen
-- ✅ Global search functionality
-- ✅ Full-screen player with controls
-- ✅ Mini player overlay
-- ✅ Queue management screen with drag-to-reorder
-- ✅ Background audio playback
-- ✅ Lock screen controls
-- ✅ Smart caching system
-- ✅ Settings screen (Server, Playback, Downloads, Storage)
-- ✅ Playlist collages (2x2 album art)
-- ✅ Scrobbling support
-- ✅ Favorite/star management
-- ✅ State persistence across app restarts
-- ✅ Theme customization (accent colors)
-
-### 🚧 Planned Features
-- 🚧 Home/Dashboard screen (w/ recently played, frequently played, random, genre tabs)
-- 🚧 Rework artist, album, playlist pages
-- 🚧 Offline downloads for tracks/albums
-- 🚧 Lyrics display
-- 🚧 CarPlay support
-- 🚧 Sleep timer
-- 🚧 Crossfade between tracks
-- 🚧 Advanced queue features (save queue, queue history)
-
-
----
-
-**Note**: This app is designed for personal use with your own music server. Ensure you have the rights to stream the music on your server.
+Server credentials are stored in AsyncStorage (`serverConfig`). To reset auth, use Settings → Server tab or clear app storage.

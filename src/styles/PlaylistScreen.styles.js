@@ -172,7 +172,7 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.colors.borderLowOpacity,
   },
   listContainer: {
-    paddingBottom: 120,
+    paddingBottom: 65,
   },
   // Track rows with art
   songItem: {
@@ -188,7 +188,7 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.colors.playingBackground,
   },
   heartWrapper: {
-    width: 22,
+    width: 14,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -225,8 +225,6 @@ export const createStyles = (theme) => StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 5,
-    marginLeft: 8,
-    marginRight: 10,
   },
   songInfo: {
     flex: 1,

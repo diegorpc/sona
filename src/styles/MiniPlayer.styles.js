@@ -42,14 +42,14 @@ export const createStyles = (theme) => StyleSheet.create({
     fontSize: 13.5,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    marginTop: 2,
+    marginTop: 1,
   },
   artist: {
     fontSize: 11.5,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.6,
-    marginBottom: 4,
+    marginTop: 4,
   },
   playPause: {
     marginRight: 4,

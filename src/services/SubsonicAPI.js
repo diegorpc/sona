@@ -246,6 +246,53 @@ class SubsonicAPI {
     return await this.request('unstar', params);
   }
 
+  // Get albums where the given artist appears as a song artist but is not
+  // the album-level artist. Uses search3 to scan songs matching the artist
+  // name, dedupes by albumId, and excludes any albumId in `excludeAlbumIds`.
+  async getArtistAppearsIn(artist, excludeAlbumIds = [], { songCount = 500 } = {}) {
+    if (!artist?.name) return [];
+
+    const exclude = new Set(excludeAlbumIds);
+    const result = await this.request('search3', {
+      query: artist.name,
+      artistCount: 0,
+      albumCount: 0,
+      songCount,
+    });
+    const songs = result?.searchResult3?.song || [];
+
+    const normalized = artist.name.trim().toLowerCase();
+    const albumsById = new Map();
+
+    for (const song of songs) {
+      if (!song.albumId || exclude.has(song.albumId)) continue;
+      if (albumsById.has(song.albumId)) continue;
+
+      // Match either by artistId or by exact artist name (case-insensitive).
+      const matchesArtist =
+        (artist.id && song.artistId === artist.id) ||
+        (typeof song.artist === 'string' && song.artist.trim().toLowerCase() === normalized);
+      if (!matchesArtist) continue;
+
+      albumsById.set(song.albumId, {
+        id: song.albumId,
+        name: song.album,
+        artist: song.albumArtist || song.artist,
+        artistId: song.albumArtistId || null,
+        year: song.year,
+        coverArt: song.coverArt || song.albumId,
+      });
+    }
+
+    return Array.from(albumsById.values());
+  }
+
+  // Get top songs for an artist by name
+  async getTopSongs(artistName, count = 50) {
+    const response = await this.request('getTopSongs', { artist: artistName, count });
+    return response.topSongs?.song || [];
+  }
+
   // Get starred items
   async getStarred() {
     const response = await this.request('getStarred');

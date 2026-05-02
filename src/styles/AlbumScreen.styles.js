@@ -197,7 +197,7 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.colors.playingBackground,
   },
   heartWrapper: {
-    width: 22,
+    width: 14,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -250,6 +250,7 @@ export const createStyles = (theme) => StyleSheet.create({
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.4,
+    marginLeft: 4,
     marginRight: 2,
     flexShrink: 0,
   },

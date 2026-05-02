@@ -65,8 +65,8 @@ export const accentPalettes = {
     secondary: '#1BBF15',
     secondaryContainer: '#169F12',
   },
-  wood: { 
-    name: 'Wood',
+  sand: { 
+    name: 'Sand',
     primary: '#BFA678',
     primaryContainer: '#9A855F',
     secondary: '#BFA678',
@@ -93,6 +93,7 @@ export const createTheme = (accentKey = 'velvet') => {
       onPrimary: '#000000',
       onSecondary: '#000000',
       onSurface: '#ffffff',
+      onSurfaceVariant: '#a0a0a0',
       onBackground: '#ffffff',
       outline: '#333333',
       // Low opacity variants for borders and backgrounds
@@ -132,6 +133,7 @@ export const createThemeWithVariants = (accentKey = 'velvet') => {
       onSecondary: '#000000',
       onSurface: '#ffffff',
       onBackground: '#ffffff',
+      onSurfaceVariant: '#a0a0a0',
       outline: '#333333',
       // Dynamic low opacity variants based on primary color
       borderLowOpacity: hexToRgba(accent.primary, 0.09),
