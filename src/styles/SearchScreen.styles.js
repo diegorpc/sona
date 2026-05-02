@@ -23,14 +23,12 @@ export const createStyles = (theme) => StyleSheet.create({
     fontSize: 28,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
-    textShadowColor: theme.colors.primary,
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 0,
     marginBottom: 12,
   },
   searchbar: {
     borderRadius: 10,
     height: 44,
+    backgroundColor: theme.colors.surfaceVariant,
   },
   searchbarInput: {
     fontFamily: 'Lexend_500Medium',
@@ -43,27 +41,20 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   // ─── Section headers ──────────────────────────────────────────
   sectionHeader: {
-    paddingTop: 10,
+    paddingTop: 12,
     paddingBottom: 4,
     paddingHorizontal: 14,
     backgroundColor: 'transparent',
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 13,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    textShadowColor: theme.colors.primary,
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 0,
+    opacity: 0.5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  recentSearchHeader: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.borderLowOpacity,
-    backgroundColor: 'transparent',
-  },
-  // ─── Unified flat list item (matches LibraryScreen) ───────────
+  // ─── Unified flat list item ────────────────────────────────────
   flatListItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -72,12 +63,6 @@ export const createStyles = (theme) => StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: theme.colors.borderLowOpacity,
     backgroundColor: 'transparent',
-  },
-  flatListItemPlaying: {
-    backgroundColor: theme.colors.playingBackground,
-  },
-  itemLeadingIcon: {
-    marginRight: 6,
   },
   itemImage: {
     width: 52,
@@ -100,9 +85,6 @@ export const createStyles = (theme) => StyleSheet.create({
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
     marginBottom: 2,
-  },
-  itemTitlePlaying: {
-    color: theme.colors.primary,
   },
   itemSubtitle: {
     fontSize: 11.5,

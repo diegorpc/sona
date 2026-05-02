@@ -44,6 +44,34 @@ export const accentPalettes = {
     secondary: '#44a1a0',
     secondaryContainer: '#368483',
   },
+  lemon: {
+    name: 'Lemon',
+    primary: '#F2D335',
+    primaryContainer: '#C5A92B',
+    secondary: '#F2D335',
+    secondaryContainer: '#C5A92B',
+  },
+  cobalt: {
+    name: 'Cobalt',
+    primary: '#056CF2',
+    primaryContainer: '#0459C7',
+    secondary: '#056CF2',
+    secondaryContainer: '#0459C7',
+  },
+  neon: {
+    name: 'Neon',
+    primary: '#1BBF15',
+    primaryContainer: '#169F12',
+    secondary: '#1BBF15',
+    secondaryContainer: '#169F12',
+  },
+  wood: { 
+    name: 'Wood',
+    primary: '#BFA678',
+    primaryContainer: '#9A855F',
+    secondary: '#BFA678',
+    secondaryContainer: '#9A855F',
+  }
 };
 
 // Generate theme with specified accent color (dark mode only)

@@ -5,12 +5,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  ImageBackground,
   RefreshControl,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import ScreenBackground from '../components/ScreenBackground';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
@@ -223,30 +222,26 @@ export default function ArtistScreen({ route, navigation }) {
 
   if (isLoading) {
     return (
-      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+      <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
           {StickyHeader}
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={styles.loadingText}>Loading artist…</Text>
           </View>
-        </BlurView>
-      </ImageBackground>
+      </ScreenBackground>
     );
   }
 
   if (!artistData) {
     return (
-      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+      <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
           {StickyHeader}
           <View style={styles.errorContainer}>
             <MaterialIcons name="error-outline" size={64} color={theme.colors.error} />
             <Text style={styles.errorText}>Failed to load artist</Text>
             <Text style={styles.errorSubtext}>Please try again later</Text>
           </View>
-        </BlurView>
-      </ImageBackground>
+      </ScreenBackground>
     );
   }
 
@@ -254,7 +249,7 @@ export default function ArtistScreen({ route, navigation }) {
 
   return (
     <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-      <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+      <PlatformBlur intensity={65} tint="dark" style={styles.blurOverlay}>
         <View style={styles.container}>
           {/* Rounded glowing artist art */}
           <View style={styles.artContainer}>
@@ -328,7 +323,7 @@ export default function ArtistScreen({ route, navigation }) {
           )}
           {StickyHeader}
         </View>
-      </BlurView>
+      </PlatformBlur>
     </ImageBackground>
   );
 }

@@ -3,9 +3,7 @@ import { Image, View, TouchableOpacity, ScrollView } from 'react-native';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import { Text } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { ImageBackground } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import ScreenBackground from '../components/ScreenBackground';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import { useTheme } from '../contexts/ThemeContext';
@@ -194,14 +192,7 @@ const QueueScreen = ({
   ), []);
 
   return (
-    <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-      <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
-        {/* Accent glow */}
-        <LinearGradient
-          colors={[`${theme.colors.primary}38`, 'transparent']}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260 }}
-        />
-
+      <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
@@ -286,8 +277,7 @@ const QueueScreen = ({
             <View style={styles.listFooter} />
           </ScrollView>
         </View>
-      </BlurView>
-    </ImageBackground>
+      </ScreenBackground>
   );
 };
 

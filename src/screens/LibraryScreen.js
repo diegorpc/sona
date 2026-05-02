@@ -4,7 +4,6 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  ImageBackground,
   RefreshControl,
   ScrollView,
   Animated,
@@ -15,7 +14,7 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import ScreenBackground from '../components/ScreenBackground';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
@@ -222,18 +221,6 @@ const ListItem = memo(function ListItem({
   const showMenu = viewMode === 'liked' || viewMode === 'playlists';
 
   const isRoundImage = viewMode === 'artists';
-  const [thumbSize, setThumbSize] = useState({ width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE });
-  useEffect(() => { setThumbSize({ width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE }); }, [imageData]);
-  const handleThumbLoad = useCallback((e) => {
-    if (isRoundImage) return;
-    const { width: w, height: h } = e.nativeEvent.source;
-    if (!w || !h) return;
-    const ratio = w / h;
-    setThumbSize(ratio >= 1
-      ? { width: LIBRARY_THUMB_SIZE, height: Math.round(LIBRARY_THUMB_SIZE / ratio) }
-      : { width: Math.round(LIBRARY_THUMB_SIZE * ratio), height: LIBRARY_THUMB_SIZE }
-    );
-  }, [isRoundImage]);
 
   const imageComponent = useMemo(() => {
     if (imageData && typeof imageData === 'object' && imageData.type === 'collage') {
@@ -250,15 +237,15 @@ const ListItem = memo(function ListItem({
           source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : DEFAULT_LIST_IMAGE}
           style={isRoundImage
             ? { width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE, borderRadius: LIBRARY_THUMB_SIZE / 2 }
-            : { width: thumbSize.width, height: thumbSize.height, borderRadius: 5 }
+            : { width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE, borderRadius: 5 }
           }
+          resizeMode="contain"
           defaultSource={DEFAULT_LIST_IMAGE}
           fadeDuration={200}
-          onLoad={handleThumbLoad}
         />
       </View>
     );
-  }, [imageData, styles.itemImageContainer, isRoundImage, thumbSize, handleThumbLoad]);
+  }, [imageData, styles.itemImageContainer, isRoundImage]);
 
   return (
     <TouchableOpacity
@@ -1628,11 +1615,9 @@ export default function LibraryScreen({ navigation }) {
 
   const renderWithBackdrop = useCallback(
     content => (
-      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-        <BlurView intensity={65} tint="dark"  style={styles.blurOverlay}>
-          {content}
-        </BlurView>
-      </ImageBackground>
+      <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
+        {content}
+      </ScreenBackground>
     ),
     [backgroundArt]
   );

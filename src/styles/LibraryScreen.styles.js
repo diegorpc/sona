@@ -166,6 +166,7 @@ export const createStyles = (theme) => StyleSheet.create({
     height: 44,
     marginBottom: 0,
     flex: 1,
+    backgroundColor: theme.colors.surfaceVariant,
   },
   searchbarInput: {
     fontFamily: 'Lexend_500Medium',

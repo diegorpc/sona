@@ -4,7 +4,6 @@ import {
   TouchableOpacity,
   Image,
   SectionList,
-  ImageBackground,
 } from 'react-native';
 import {
   Text,
@@ -12,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import ScreenBackground from '../components/ScreenBackground';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
@@ -28,48 +27,33 @@ const MAX_RECENT_SEARCHES = 20;
 export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack }, playTrack } = usePlayer();
+  const { playerState: { currentTrack } } = usePlayer();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [playlists, setPlaylists] = useState([]);
-  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
 
   const saveRecentSearch = useCallback((item, type) => {
-    if (!item) {
-      return;
-    }
-
+    if (!item) return;
     const itemId = item.id || item.name || item.title;
-    if (!itemId) {
-      return;
-    }
+    if (!itemId) return;
 
     setRecentSearches(prev => {
-      const filtered = prev.filter(entry => entry.storageId !== `${type}-${itemId}`);
-      const entry = {
-        storageId: `${type}-${itemId}`,
-        type,
-        item,
-        timestamp: Date.now(),
-      };
+      const filtered = prev.filter(e => e.storageId !== `${type}-${itemId}`);
+      const entry = { storageId: `${type}-${itemId}`, type, item, timestamp: Date.now() };
       const updated = [entry, ...filtered].slice(0, MAX_RECENT_SEARCHES);
-      AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)).catch(error => {
-        console.error('Error saving recent searches:', error);
-      });
+      AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated)).catch(console.error);
       return updated;
     });
   }, []);
 
   const handleSearch = useCallback(async (query) => {
     setSearchQuery(query);
-    
     if (!query.trim()) {
       setSearchResults(null);
       return;
     }
-
     setIsLoading(true);
     try {
       const results = await SubsonicAPI.search(query, 50, 50, 100);
@@ -104,297 +88,179 @@ export default function SearchScreen({ navigation }) {
     } catch (error) {
       console.error('Error playing song:', error);
     }
-  }, []);
-
-  const handlePlaylistPress = useCallback((playlist) => {
-    // TODO: Navigate to playlist screen when implemented
-    console.log('Playlist pressed:', playlist.name);
-    saveRecentSearch(playlist, 'playlist');
   }, [saveRecentSearch]);
 
-  const loadRecentSearches = useCallback(async () => {
-    try {
-      const stored = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setRecentSearches(parsed);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading recent searches:', error);
-    }
-  }, []);
+  const handlePlaylistPress = useCallback((playlist) => {
+    saveRecentSearch(playlist, 'playlist');
+    navigation.navigate('Playlist', { playlist });
+  }, [navigation, saveRecentSearch]);
 
   useEffect(() => {
-    loadRecentSearches();
-  }, [loadRecentSearches]);
+    AsyncStorage.getItem(RECENT_SEARCHES_KEY)
+      .then(stored => {
+        if (!stored) return;
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) setRecentSearches(parsed);
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
-
-    const loadPlaylists = async () => {
-      try {
-        setIsLoadingPlaylists(true);
-        const response = await SubsonicAPI.getPlaylists();
-        const playlistsData = Array.isArray(response?.playlist)
+    SubsonicAPI.getPlaylists()
+      .then(response => {
+        if (!isMounted) return;
+        const data = Array.isArray(response?.playlist)
           ? response.playlist
-          : Array.isArray(response)
-            ? response
-            : [];
-
-        if (isMounted) {
-          setPlaylists(playlistsData);
-        }
-      } catch (error) {
-        console.error('Error loading playlists for search:', error);
-      } finally {
-        if (isMounted) {
-          setIsLoadingPlaylists(false);
-        }
-      }
-    };
-
-    loadPlaylists();
-
-    return () => {
-      isMounted = false;
-    };
+          : Array.isArray(response) ? response : [];
+        setPlaylists(data);
+      })
+      .catch(console.error);
+    return () => { isMounted = false; };
   }, []);
 
   const getCoverArtUrl = useCallback((item) => {
-    if (item.coverArt) {
-      return SubsonicAPI.getCoverArtUrl(item.coverArt, 200);
-    }
+    if (item.coverArt) return SubsonicAPI.getCoverArtUrl(item.coverArt, 200);
+    return null;
+  }, []);
+
+  const getArtistImageUrl = useCallback((item) => {
+    if (item.artistImageUrl) return item.artistImageUrl;
+    if (item.id) return SubsonicAPI.getCoverArtUrl(item.id, 200);
     return null;
   }, []);
 
   const formatDuration = useCallback((seconds) => {
     if (!seconds) return '';
-    
     const minutes = Math.floor(seconds / 60);
     return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
   }, []);
 
-  // Filter results to strictly match search query
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-
-    if (!query) {
-      return {
-        artist: [],
-        album: [],
-        song: [],
-        playlist: [],
-      };
-    }
+    if (!query) return { artist: [], album: [], song: [], playlist: [] };
 
     const filterByName = (items, field) => {
-      if (!items || !Array.isArray(items)) return [];
-      return items.filter(item => {
-        const value = item[field];
-        if (typeof value !== 'string') return false;
-        return value.toLowerCase().includes(query);
-      });
+      if (!Array.isArray(items)) return [];
+      return items.filter(item => typeof item[field] === 'string' && item[field].toLowerCase().includes(query));
     };
 
-    const searchArtistResults = searchResults
-      ? filterByName(searchResults.artist, 'name')
-      : [];
-    const searchAlbumResults = searchResults
-      ? filterByName(searchResults.album, 'name')
-      : [];
-    const searchSongResults = searchResults
-      ? filterByName(searchResults.song, 'title')
-      : [];
-    const playlistResults = filterByName(playlists, 'name');
-
     return {
-      artist: searchArtistResults,
-      album: searchAlbumResults,
-      song: searchSongResults,
-      playlist: playlistResults,
+      artist: searchResults ? filterByName(searchResults.artist, 'name') : [],
+      album: searchResults ? filterByName(searchResults.album, 'name') : [],
+      song: searchResults ? filterByName(searchResults.song, 'title') : [],
+      playlist: filterByName(playlists, 'name'),
     };
   }, [searchResults, searchQuery, playlists]);
 
-  const renderArtist = useCallback(({ item }) => (
-    <TouchableOpacity 
-      style={styles.flatListItem}
-      onPress={() => handleArtistPress(item)}
-      activeOpacity={0.7}
-    >
-      <Image
-        source={DEFAULT_ART}
-        style={styles.itemImage}
-        defaultSource={DEFAULT_ART}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemTitle}>{item.name}</Text>
-        <Text style={styles.itemSubtitle}>
-          {item.albumCount} album{item.albumCount !== 1 ? 's' : ''}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  ), [handleArtistPress]);
-
-  const renderAlbum = useCallback(({ item }) => (
-    <TouchableOpacity 
-      style={styles.flatListItem}
-      onPress={() => handleAlbumPress(item)}
-      activeOpacity={0.7}
-    >
-      <Image
-        source={
-          getCoverArtUrl(item)
-            ? { uri: getCoverArtUrl(item) }
-            : DEFAULT_ART
-        }
-        style={styles.itemImage}
-        defaultSource={DEFAULT_ART}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemTitle}>{item.name}</Text>
-        <Text style={styles.itemSubtitle}>{item.artist}</Text>
-      </View>
-    </TouchableOpacity>
-  ), [handleAlbumPress, getCoverArtUrl]);
-
-  const renderSong = useCallback(({ item, index, section }) => (
-    <TouchableOpacity 
-      style={styles.flatListItem}
-      onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
-      activeOpacity={0.7}
-    >
-      {/* {item.starred ?(
-        <MaterialIcons
-          name="favorite"
-          size={16}
-          color={theme.colors.primary}
-          style={styles.itemLeadingIcon}
+  const renderArtist = useCallback(({ item }) => {
+    const imageUrl = getArtistImageUrl(item);
+    return (
+      <TouchableOpacity style={styles.flatListItem} onPress={() => handleArtistPress(item)} activeOpacity={0.7}>
+        <Image
+          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
+          style={styles.itemImageRound}
+          defaultSource={DEFAULT_ART}
         />
-      ): <MaterialIcons
-          name="favorite-outline"
-          size={16}
-          color={theme.colors.primary}
-          style={styles.itemLeadingIcon}
-        />} */}
-      <Image
-        source={
-          getCoverArtUrl(item)
-            ? { uri: getCoverArtUrl(item) }
-            : DEFAULT_ART
-        }
-        style={styles.itemImage}
-        defaultSource={DEFAULT_ART}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text style={styles.itemSubtitle}>{item.artist}</Text>
-      </View>
-      {item.duration && (
-        <View style={styles.itemRightContent}>
-          <Text style={styles.itemDuration}>{formatDuration(item.duration)}</Text>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemTitle}>{item.name}</Text>
+          <Text style={styles.itemSubtitle}>
+            {item.albumCount} album{item.albumCount !== 1 ? 's' : ''}
+          </Text>
         </View>
-      )}
-    </TouchableOpacity>
-  ), [handleSongPress, getCoverArtUrl, formatDuration]);
+      </TouchableOpacity>
+    );
+  }, [handleArtistPress, getArtistImageUrl, styles]);
 
-  const renderPlaylist = useCallback(({ item }) => (
-    <TouchableOpacity 
-      style={styles.flatListItem}
-      onPress={() => handlePlaylistPress(item)}
-      activeOpacity={0.7}
-    >
-      <Image
-        source={DEFAULT_ART}
-        style={styles.itemImage}
-        defaultSource={DEFAULT_ART}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemTitle}>{item.name}</Text>
-        <Text style={styles.itemSubtitle}>
-          {item.songCount || 0} song{(item.songCount || 0) !== 1 ? 's' : ''}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  ), [handlePlaylistPress]);
+  const renderAlbum = useCallback(({ item }) => {
+    const imageUrl = getCoverArtUrl(item);
+    return (
+      <TouchableOpacity style={styles.flatListItem} onPress={() => handleAlbumPress(item)} activeOpacity={0.7}>
+        <Image
+          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
+          style={styles.itemImage}
+          defaultSource={DEFAULT_ART}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemTitle}>{item.name}</Text>
+          <Text style={styles.itemSubtitle}>{item.artist}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [handleAlbumPress, getCoverArtUrl, styles]);
+
+  const renderSong = useCallback(({ item, index, section }) => {
+    const imageUrl = getCoverArtUrl(item);
+    return (
+      <TouchableOpacity
+        style={styles.flatListItem}
+        onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
+        activeOpacity={0.7}
+      >
+        <Image
+          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
+          style={styles.itemImage}
+          defaultSource={DEFAULT_ART}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemTitle}>{item.title}</Text>
+          <Text style={styles.itemSubtitle}>{item.artist}</Text>
+        </View>
+        {item.duration && (
+          <View style={styles.itemRightContent}>
+            <Text style={styles.itemDuration}>{formatDuration(item.duration)}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  }, [handleSongPress, getCoverArtUrl, formatDuration, styles]);
+
+  const renderPlaylist = useCallback(({ item }) => {
+    const imageUrl = getCoverArtUrl(item);
+    return (
+      <TouchableOpacity style={styles.flatListItem} onPress={() => handlePlaylistPress(item)} activeOpacity={0.7}>
+        <Image
+          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
+          style={styles.itemImage}
+          defaultSource={DEFAULT_ART}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemTitle}>{item.name}</Text>
+          <Text style={styles.itemSubtitle}>
+            {item.songCount || 0} song{(item.songCount || 0) !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [handlePlaylistPress, getCoverArtUrl, styles]);
 
   const renderRecentItem = useCallback(({ item, index }) => {
     const actualItem = item.item;
-    if (!actualItem) {
-      return null;
-    }
-
+    if (!actualItem) return null;
     switch (item.type) {
-      case 'artist':
-        return renderArtist({ item: actualItem });
-      case 'album':
-        return renderAlbum({ item: actualItem });
-      case 'song':
-        return renderSong({ item: actualItem, index, section: { data: [actualItem] } });
-      case 'playlist':
-        return renderPlaylist({ item: actualItem });
-      default:
-        return null;
+      case 'artist': return renderArtist({ item: actualItem });
+      case 'album': return renderAlbum({ item: actualItem });
+      case 'song': return renderSong({ item: actualItem, index, section: { data: [actualItem] } });
+      case 'playlist': return renderPlaylist({ item: actualItem });
+      default: return null;
     }
-  }, [renderAlbum, renderArtist, renderPlaylist, renderSong]);
+  }, [renderArtist, renderAlbum, renderSong, renderPlaylist]);
 
   const sections = useMemo(() => {
     const trimmedQuery = searchQuery.trim();
 
     if (!trimmedQuery) {
-      if (recentSearches.length === 0) {
-        return [];
-      }
-
-      const sortedRecent = [...recentSearches].sort((a, b) => b.timestamp - a.timestamp);
-
-      return [
-        {
-          title: 'Recently Searched',
-          data: sortedRecent,
-          renderItem: renderRecentItem,
-        },
-      ];
+      if (recentSearches.length === 0) return [];
+      const sorted = [...recentSearches].sort((a, b) => b.timestamp - a.timestamp);
+      return [{ title: 'Recently Searched', data: sorted, renderItem: renderRecentItem }];
     }
-
-    if (!filteredResults) return [];
 
     const { artist = [], album = [], song = [], playlist = [] } = filteredResults;
     const result = [];
-
-    if (artist.length > 0) {
-      result.push({
-        title: 'Artists',
-        data: artist,
-        renderItem: renderArtist,
-      });
-    }
-
-    if (album.length > 0) {
-      result.push({
-        title: 'Albums',
-        data: album,
-        renderItem: renderAlbum,
-      });
-    }
-
-    if (song.length > 0) {
-      result.push({
-        title: 'Songs',
-        data: song,
-        renderItem: renderSong,
-      });
-    }
-
-    if (playlist.length > 0) {
-      result.push({
-        title: 'Playlists',
-        data: playlist,
-        renderItem: renderPlaylist,
-      });
-    }
-
+    if (artist.length > 0) result.push({ title: 'Artists', data: artist, renderItem: renderArtist });
+    if (album.length > 0) result.push({ title: 'Albums', data: album, renderItem: renderAlbum });
+    if (song.length > 0) result.push({ title: 'Songs', data: song, renderItem: renderSong });
+    if (playlist.length > 0) result.push({ title: 'Playlists', data: playlist, renderItem: renderPlaylist });
     return result;
   }, [filteredResults, renderArtist, renderAlbum, renderSong, renderPlaylist, recentSearches, renderRecentItem, searchQuery]);
 
@@ -402,71 +268,43 @@ export default function SearchScreen({ navigation }) {
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
     </View>
-  ), []);
+  ), [styles]);
 
   const keyExtractor = useCallback((item, index) => {
-    if (item?.storageId) {
-      return item.storageId;
-    }
-    if (item?.id) {
-      return `${item.id}`;
-    }
+    if (item?.storageId) return item.storageId;
+    if (item?.id) return `${item.id}`;
     return `${index}`;
   }, []);
 
   const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) {
-      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
-    }
-    if (currentTrack?.albumId) {
-      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
-    }
+    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    if (currentTrack?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
     return DEFAULT_ART;
   }, [currentTrack?.albumId, currentTrack?.coverArt]);
 
-  const renderWithBackdrop = useCallback(
-    content => (
-      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
-          {content}
-        </BlurView>
-      </ImageBackground>
-    ),
-    [backgroundArt]
-  );
-
   const hasSearchQuery = searchQuery.trim().length > 0;
   const hasSections = sections.length > 0;
-  const hasRecentSearches = !hasSearchQuery && recentSearches.length > 0;
 
-  return renderWithBackdrop(
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Search</Text>
-        <Searchbar
-          placeholder="Search music..."
-          onChangeText={handleSearch}
-          value={searchQuery}
-          style={styles.searchbar}
-          inputStyle={styles.searchbarInput}
-          autoFocus
-        />
-      </View>
-
-      {/* Fixed Recently Searched header */}
-      {hasRecentSearches && (
-        <View style={styles.recentSearchHeader}>
-          <Text style={styles.sectionTitle}>Recently Searched</Text>
+  return (
+    <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Search</Text>
+          <Searchbar
+            placeholder="Artists, albums, songs..."
+            onChangeText={handleSearch}
+            value={searchQuery}
+            style={styles.searchbar}
+            inputStyle={styles.searchbarInput}
+          />
         </View>
-      )}
 
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Searching...</Text>
-        </View>
-      ) : hasSearchQuery ? (
-        hasSections && !isLoadingPlaylists ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Searching...</Text>
+          </View>
+        ) : hasSections ? (
           <SectionList
             sections={sections}
             renderItem={({ item, index, section }) => section.renderItem({ item, index, section })}
@@ -476,39 +314,20 @@ export default function SearchScreen({ navigation }) {
             showsVerticalScrollIndicator={false}
             stickySectionHeadersEnabled={false}
           />
-        ) : (!isLoadingPlaylists && !hasSections) ? (
+        ) : hasSearchQuery ? (
           <View style={styles.emptyContainer}>
             <MaterialIcons name="search-off" size={64} color={theme.colors.outline} />
             <Text style={styles.emptyText}>No results found</Text>
-            <Text style={styles.emptySubtext}>
-              Try searching with different keywords
-            </Text>
+            <Text style={styles.emptySubtext}>Try searching with different keywords</Text>
           </View>
         ) : (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="search" size={64} color={theme.colors.outline} />
+            <Text style={styles.emptyText}>Search your music</Text>
+            <Text style={styles.emptySubtext}>Find artists, albums, songs, and playlists</Text>
           </View>
-        )
-      ) : hasSections ? (
-        <SectionList
-          sections={hasRecentSearches ? [{ title: '', data: recentSearches.sort((a, b) => b.timestamp - a.timestamp), renderItem: renderRecentItem }] : []}
-          renderItem={({ item, index, section }) => section.renderItem({ item, index, section })}
-          renderSectionHeader={null}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={styles.resultsList}
-          showsVerticalScrollIndicator={false}
-          stickySectionHeadersEnabled={false}
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <MaterialIcons name="search" size={64} color={theme.colors.outline} />
-          <Text style={styles.emptyText}>Search your music</Text>
-          <Text style={styles.emptySubtext}>
-            Find artists, albums, songs, and playlists
-          </Text>
-        </View>
-      )}
-    </View>
+        )}
+      </View>
+    </ScreenBackground>
   );
 }
-

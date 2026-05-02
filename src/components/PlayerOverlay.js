@@ -20,6 +20,7 @@ import {
   registerPlayerOverlay,
   unregisterPlayerOverlay,
 } from '../services/PlayerOverlayController';
+import { navigate } from '../services/NavigationService';
 
 const ANIMATION_DURATION = 280;
 const COLLAPSE_DURATION = 150;
@@ -209,6 +210,26 @@ const PlayerOverlay = () => {
     [collapseFromGesture, dragOffset, isExpanded, isQueueVisible]
   );
 
+  const handleNavigateToArtist = useCallback(() => {
+    if (!currentTrack?.artistId) return;
+    handleCollapse();
+    navigate('Artist', { artist: { id: currentTrack.artistId, name: currentTrack.artist } });
+  }, [currentTrack, handleCollapse]);
+
+  const handleNavigateToAlbum = useCallback(() => {
+    if (!currentTrack?.albumId) return;
+    handleCollapse();
+    navigate('Album', {
+      album: {
+        id: currentTrack.albumId,
+        name: currentTrack.album,
+        coverArt: currentTrack.coverArt,
+        artist: currentTrack.artist,
+        artistId: currentTrack.artistId,
+      },
+    });
+  }, [currentTrack, handleCollapse]);
+
   const handleShowQueue = useCallback(() => {
     if (isQueueVisible) {
       return;
@@ -314,8 +335,9 @@ const PlayerOverlay = () => {
         <PlayerScreen
           onClose={handleCollapse}
           onShowQueue={handleShowQueue}
+          onNavigateToArtist={handleNavigateToArtist}
+          onNavigateToAlbum={handleNavigateToAlbum}
           safeAreaInsets={insets}
-          isExpanded={isExpanded}
         />
       </Animated.View>
 

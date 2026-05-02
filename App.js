@@ -24,6 +24,7 @@ import ArtistScreen from './src/screens/ArtistScreen';
 import AlbumScreen from './src/screens/AlbumScreen';
 import SubsonicAPI from './src/services/SubsonicAPI';
 import PlaylistScreen from './src/screens/PlaylistScreen';
+import { navigationRef } from './src/services/NavigationService';
 
 import PlayerOverlay from './src/components/PlayerOverlay';
 import { PlayerProvider } from './src/contexts/PlayerContext';
@@ -140,7 +141,7 @@ function AppContent() {
       <PlayerProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={{ flex: 1 }}>
-            <NavigationContainer onStateChange={handleNavigationStateChange}>
+            <NavigationContainer ref={navigationRef} onStateChange={handleNavigationStateChange}>
               <StatusBar style="auto" />
               <Stack.Navigator
                 screenOptions={{
@@ -151,17 +152,22 @@ function AppContent() {
                 }}
               >
                 {!isLoggedIn ? (
-                  <Stack.Screen 
-                    name="Login" 
-                    component={LoginScreen}
+                  <Stack.Screen
+                    name="Login"
                     options={{ headerShown: false }}
-                  />
+                  >
+                    {(props) => <LoginScreen {...props} onLoginSuccess={checkLoginStatus} />}
+                  </Stack.Screen>
                 ) : (
-                  <Stack.Screen 
-                    name="Main" 
-                    component={MainTabs}
-                    options={{ headerShown: false }}
-                  />
+                  <>
+                    <Stack.Screen
+                      name="Main"
+                      component={MainTabs}
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen name="Artist" component={ArtistScreen} options={detailScreenOptions} />
+                    <Stack.Screen name="Album" component={AlbumScreen} options={detailScreenOptions} />
+                  </>
                 )}
               </Stack.Navigator>
             </NavigationContainer>

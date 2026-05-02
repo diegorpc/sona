@@ -4,13 +4,12 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  ImageBackground,
   RefreshControl,
   Dimensions,
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import ScreenBackground from '../components/ScreenBackground';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
@@ -194,17 +193,33 @@ export default function PlaylistScreen({ route, navigation }) {
     return DEFAULT_ART;
   }, [coverArtUrl, currentTrack?.coverArt]);
 
+  const [artSizeReady, setArtSizeReady] = useState(false);
   const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
-  const handleArtLoad = useCallback((e) => {
-    const { width: w, height: h } = e.nativeEvent.source;
-    if (!w || !h) return;
-    const ratio = w / h;
-    if (ratio >= 1) {
-      setArtDisplaySize({ width: ART_SIZE, height: Math.round(ART_SIZE / ratio) });
-    } else {
-      setArtDisplaySize({ width: Math.round(ART_SIZE * ratio), height: ART_SIZE });
+  useEffect(() => {
+    if (!coverArtUrl) {
+      setArtSizeReady(true);
+      return;
     }
-  }, []);
+    setArtSizeReady(false);
+    setArtDisplaySize({ width: ART_SIZE, height: ART_SIZE });
+    let cancelled = false;
+    Image.getSize(
+      coverArtUrl,
+      (w, h) => {
+        if (cancelled) return;
+        if (w && h) {
+          const ratio = w / h;
+          setArtDisplaySize(ratio >= 1
+            ? { width: ART_SIZE, height: Math.round(ART_SIZE / ratio) }
+            : { width: Math.round(ART_SIZE * ratio), height: ART_SIZE }
+          );
+        }
+        setArtSizeReady(true);
+      },
+      () => { if (!cancelled) setArtSizeReady(true); }
+    );
+    return () => { cancelled = true; };
+  }, [coverArtUrl]);
 
   const renderItem = useCallback(({ item, index }) => {
     const isPlaying = currentTrack?.id === item.id;
@@ -243,7 +258,6 @@ export default function PlaylistScreen({ route, navigation }) {
             style={[styles.artImage, artDisplaySize]}
             resizeMode="cover"
             defaultSource={DEFAULT_ART}
-            onLoad={handleArtLoad}
           />
         </View>
       </View>
@@ -292,40 +306,36 @@ export default function PlaylistScreen({ route, navigation }) {
 
       <View style={styles.divider} />
     </View>
-  ), [playlist, playlistData, backgroundArt, navigation, theme, playPlaylist, getTotalDuration, artDisplaySize, handleArtLoad]);
+  ), [playlist, playlistData, backgroundArt, navigation, theme, playPlaylist, getTotalDuration, artDisplaySize]);
 
-  if (isLoading) {
+  if (isLoading || !artSizeReady) {
     return (
-      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+      <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
           {StickyHeader}
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={styles.loadingText}>Loading playlist…</Text>
           </View>
-        </BlurView>
-      </ImageBackground>
+      </ScreenBackground>
     );
   }
 
   if (!playlistData) {
     return (
-      <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-        <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+      <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
           {StickyHeader}
           <View style={styles.errorContainer}>
             <MaterialIcons name="error-outline" size={64} color={theme.colors.error} />
             <Text style={styles.errorText}>Failed to load playlist</Text>
             <Text style={styles.errorSubtext}>Please try again later</Text>
           </View>
-        </BlurView>
-      </ImageBackground>
+      </ScreenBackground>
     );
   }
 
   return (
     <ImageBackground source={backgroundArt} style={styles.backgroundImage} resizeMode="cover">
-      <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
+      <PlatformBlur intensity={65} tint="dark" style={styles.blurOverlay}>
         <View style={styles.container}>
           <FlatList
             data={playlistData.entry || []}
@@ -351,7 +361,7 @@ export default function PlaylistScreen({ route, navigation }) {
           />
           {StickyHeader}
         </View>
-      </BlurView>
+      </PlatformBlur>
     </ImageBackground>
   );
 }

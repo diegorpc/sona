@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Image,
-  ImageBackground,
   TouchableOpacity,
   Easing,
   Dimensions,
@@ -10,8 +9,7 @@ import {
 import { Text } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import ScreenBackground from '../components/ScreenBackground';
 
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
@@ -23,7 +21,7 @@ const DEFAULT_ART = require('../../assets/default-album.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PLAYER_ART_SIZE = SCREEN_WIDTH - 80;
 
-export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isExpanded = true }) {
+export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist, onNavigateToAlbum, safeAreaInsets }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
@@ -125,23 +123,11 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isE
   const endTimeDisplay = shouldShowDuration ? formatTime(duration) : 'Loading…';
 
   return (
-    <ImageBackground
+    <ScreenBackground
       source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
-      style={styles.backgroundImage}
-      resizeMode="cover"
+      backgroundStyle={styles.backgroundImage}
+      blurStyle={styles.blurOverlay}
     >
-      <BlurView intensity={65} tint="dark" style={styles.blurOverlay}>
-        {/* Accent radial glow - only show when expanded */}
-        {isExpanded && (
-          <LinearGradient
-            colors={[`${theme.colors.primary}48`, 'transparent']}
-            style={[
-              styles.accentGlow,
-              { position: 'absolute', top: -100, left: 0, right: 0, height: 300 },
-            ]}
-          />
-        )}
-
         <View style={[styles.container, { paddingBottom: bottomInset + 16 }]}>
           {/* Header */}
           <View style={[styles.header, { paddingTop: topInset + 12 }]}>
@@ -183,23 +169,9 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isE
             >
               {currentTrack.title}
             </TextTicker>
-            <TextTicker
-              style={styles.trackArtist}
-              duration={4000}
-              bounce
-              loop
-              easing={Easing.linear}
-              animationType="bounce"
-              repeatSpacer={50}
-              marqueeDelay={1000}
-              bouncePadding={{ left: 0, right: 5 }}
-              bounceDelay={1000}
-            >
-              {currentTrack.artist}
-            </TextTicker>
-            {currentTrack.album && (
+            <TouchableOpacity onPress={onNavigateToArtist} activeOpacity={0.7} disabled={!onNavigateToArtist}>
               <TextTicker
-                style={styles.trackAlbum}
+                style={styles.trackArtist}
                 duration={4000}
                 bounce
                 loop
@@ -210,8 +182,26 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isE
                 bouncePadding={{ left: 0, right: 5 }}
                 bounceDelay={1000}
               >
-                {currentTrack.album}
+                {currentTrack.artist}
               </TextTicker>
+            </TouchableOpacity>
+            {currentTrack.album && (
+              <TouchableOpacity onPress={onNavigateToAlbum} activeOpacity={0.7} disabled={!onNavigateToAlbum}>
+                <TextTicker
+                  style={styles.trackAlbum}
+                  duration={4000}
+                  bounce
+                  loop
+                  easing={Easing.linear}
+                  animationType="bounce"
+                  repeatSpacer={50}
+                  marqueeDelay={1000}
+                  bouncePadding={{ left: 0, right: 5 }}
+                  bounceDelay={1000}
+                >
+                  {currentTrack.album}
+                </TextTicker>
+              </TouchableOpacity>
             )}
           </View>
 
@@ -298,7 +288,6 @@ export default function PlayerScreen({ onClose, onShowQueue, safeAreaInsets, isE
             </View>
           </View>
         </View>
-      </BlurView>
-    </ImageBackground>
+    </ScreenBackground>
   );
 }

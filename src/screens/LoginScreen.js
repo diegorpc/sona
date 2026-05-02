@@ -15,13 +15,12 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/LoginScreen.styles';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation, onLoginSuccess }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const [serverUrl, setServerUrl] = useState('');
@@ -57,10 +56,8 @@ export default function LoginScreen({ navigation }) {
 
     try {
       await SubsonicAPI.initialize(serverUrl, username, password);
-      
-      // Test connection
       await SubsonicAPI.ping();
-      
+      onLoginSuccess?.();
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert(

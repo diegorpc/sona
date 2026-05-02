@@ -232,7 +232,7 @@ export default function SettingsScreen({ navigation }) {
         <Card.Content>
           <Text style={styles.sectionTitle}>Accent Color</Text>
           <Text style={styles.sectionDescription}>
-            Choose your preferred accent color for the app
+            Select from a variety of curated palettes
           </Text>
           <View style={styles.accentColorGrid}>
             {Object.entries(accentPalettes).map(([key, palette]) => (
