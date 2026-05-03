@@ -130,7 +130,9 @@ export default function SongMenu({ song, visible, onClose, options }) {
           ]}
           {...panResponder.panHandlers}
         >
-          <View style={styles.handleBar} />
+          <TouchableOpacity style={styles.handleBar} onPress={closeWithAnimation} activeOpacity={0.6}>
+            <MaterialIcons name="expand-more" size={30} color="rgba(255,255,255,0.35)" />
+          </TouchableOpacity>
 
           {/* Song header */}
           {song && (

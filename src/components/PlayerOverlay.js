@@ -119,10 +119,19 @@ const PlayerOverlay = () => {
     }
 
     if (isExpanded) {
-      dragOffset.setValue(0); // Reset drag offset when collapsing
+      dragOffset.setValue(0);
       setIsExpanded(false);
     }
   }, [handleHideQueue, isExpanded, isQueueVisible, dragOffset]);
+
+  // Unconditionally closes queue + player — used when navigating to another screen.
+  const handleCollapseAll = useCallback(() => {
+    queueAnimation.stopAnimation();
+    queueAnimation.setValue(0);
+    setIsQueueVisible(false);
+    dragOffset.setValue(0);
+    setIsExpanded(false);
+  }, [queueAnimation, dragOffset]);
 
   const collapseFromGesture = useCallback(() => {
     if (!isExpanded || isQueueVisible || isCollapsingRef.current) {
@@ -156,12 +165,13 @@ const PlayerOverlay = () => {
     registerPlayerOverlay({
       expand: handleExpand,
       collapse: handleCollapse,
+      collapseAll: handleCollapseAll,
     });
 
     return () => {
       unregisterPlayerOverlay();
     };
-  }, [handleCollapse, handleExpand]);
+  }, [handleCollapse, handleCollapseAll, handleExpand]);
 
   const panResponder = useMemo(
     () =>
@@ -274,8 +284,8 @@ const PlayerOverlay = () => {
   }, [playerState.playlist, playerState.currentIndex]);
 
   const contextLabel = useMemo(() => {
-    if (playerState.queueContext?.name) {
-      return playerState.queueContext.name;
+    if (playerState.contextQueue?.name) {
+      return playerState.contextQueue.name;
     }
 
     if (currentTrack?.album) {
@@ -287,7 +297,7 @@ const PlayerOverlay = () => {
     }
 
     return 'Current Context';
-  }, [currentTrack?.album, currentTrack?.artist, playerState.queueContext?.name]);
+  }, [currentTrack?.album, currentTrack?.artist, playerState.contextQueue?.name]);
 
   if (!currentTrack) {
     return null;

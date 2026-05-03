@@ -29,15 +29,10 @@ export const createStyles = (theme) => StyleSheet.create({
     paddingTop: 12,
   },
   dragIndicator: {
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.30)',
-    marginBottom: 8,
-  },
-  closeButton: {
-    position: 'absolute',
-    right: 12,
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 64,
+    marginBottom: 4,
   },
   albumArtContainer: {
     alignItems: 'center',

@@ -21,15 +21,11 @@ export const createStyles = (theme) => StyleSheet.create({
     shadowOffset: { width: 0, height: -8 },
     elevation: 24,
   },
-  // Drag handle bar at top
   handleBar: {
     alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    marginTop: 10,
-    marginBottom: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 32,
+    marginTop: 2,
   },
   // Song header (art + title + artist)
   songHeader: {

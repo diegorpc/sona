@@ -23,8 +23,9 @@ src/
 ├── components/
 │   ├── MiniPlayer.js             # Collapsed player bar (tappable, swipe-up gesture handled by PlayerOverlay)
 │   ├── PlayerOverlay.js          # Full-screen overlay: MiniPlayer + PlayerScreen + QueueScreen stacked
-│   ├── PlaylistCollage.js        # 2×2 cover art grid component used in PlaylistScreen
-│   └── ScreenBackground.js       # Cross-platform background: ImageBackground+BlurView (iOS) or themed View (Android)
+│   ├── PlaylistCollage.js        # 2×2 cover art grid component used as a fallback in PlaylistScreen
+│   ├── ScreenBackground.js       # Cross-platform background: ImageBackground+BlurView (iOS) or themed View (Android)
+|   └── SongMenu.js               # Menu component used for song listings and in PlayerScreen
 ├── contexts/
 │   ├── PlayerContext.js          # Global player state; wraps AudioPlayer, exposes usePlayer()
 │   └── ThemeContext.js           # Accent color state, persists to AsyncStorage, exposes useTheme()

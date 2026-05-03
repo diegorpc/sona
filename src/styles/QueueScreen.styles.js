@@ -11,32 +11,27 @@ export const createStyles = (theme) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
+    paddingBottom: 180,
   },
   handleBarContainer: {
     alignItems: 'center',
-    paddingBottom: 8,
+    paddingBottom: 0,
   },
   handleBar: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.colors.onSurface,
-    opacity: 0.3,
+    alignItems: 'center',
+    paddingVertical: 1,
+    paddingHorizontal: 64,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLowOpacity,
   },
-  headerBack: {
-    marginRight: 8,
-    padding: 4,
-  },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 28,
     fontFamily: 'Lexend_700Bold',
     color: theme.colors.onSurface,
     textShadowColor: theme.colors.primary,
@@ -111,7 +106,7 @@ export const createStyles = (theme) => StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: theme.colors.borderLowOpacity,
   },
   toggleButtonActive: {
     backgroundColor: theme.colors.badgeBackground,
@@ -132,6 +127,59 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.colors.borderLowOpacity,
     marginVertical: 4,
   },
+  // ─── Context queue row (PlaylistScreen-matching spacing) ───────────
+  contextItemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.borderLowOpacity,
+    backgroundColor: 'transparent',
+  },
+  // Leading heart icon (when starred)
+  favoriteIcon: {
+    marginLeft: 4,
+  },
+  // Spacer occupying the same width as the heart icon (when not starred)
+  itemLeadingIcon: {
+    width: 14,
+    marginLeft: 4,
+  },
+  contextCoverArtContainer: {
+    width: 44,
+    height: 44,
+    marginLeft: 8,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contextCoverArt: {
+    width: 44,
+    height: 44,
+    borderRadius: 5,
+  },
+  contextTitle: {
+    fontSize: 13.5,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+  },
+  contextSubtitle: {
+    fontSize: 11.5,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.55,
+    marginTop: 1,
+  },
+  contextDuration: {
+    fontSize: 12,
+    fontFamily: 'Lexend_400Regular',
+    color: theme.colors.onSurface,
+    opacity: 0.4,
+    marginRight: 2,
+    flexShrink: 0,
+  },
+  // ─── Priority queue / Now Playing row ──────────────────────────────
   // Track row
   itemContainer: {
     flexDirection: 'row',
@@ -154,7 +202,7 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   nowPlayingIndicator: {
     width: 14,
-    marginRight: 8,
+    marginRight: 12,
     alignItems: 'center',
   },
   coverArtContainer: {

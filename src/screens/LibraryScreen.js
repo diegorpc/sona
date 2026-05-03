@@ -1448,12 +1448,12 @@ export default function LibraryScreen({ navigation }) {
     isAnimatingList.current = false;
   }, [sortDirection, sortOption, viewMode, artists, albums, likedSongs, playlists, createSortComparator, animateListOpacityTo]);
 
-  // Keep a ref to the latest displayed data so handleItemPress stays referentially
-  // stable across pagination updates (otherwise every row would re-render on each batch).
-  const displayedDataRef = useRef(displayedData);
+  // Ref to the full sorted+filtered list so handleItemPress can enqueue all liked songs,
+  // not just the currently-displayed page.
+  const fullFilteredDataRef = useRef(fullFilteredData);
   useEffect(() => {
-    displayedDataRef.current = displayedData;
-  }, [displayedData]);
+    fullFilteredDataRef.current = fullFilteredData;
+  }, [fullFilteredData]);
 
   const handleItemPress = useCallback((item, index) => {
     switch (viewMode) {
@@ -1463,14 +1463,17 @@ export default function LibraryScreen({ navigation }) {
       case 'albums':
         navigation.push('Album', { album: item });
         break;
-      case 'liked':
-        AudioPlayer.playTrack(item, displayedDataRef.current, index, {
+      case 'liked': {
+        const fullData = fullFilteredDataRef.current;
+        const fullIndex = fullData.findIndex(t => t?.id === item.id);
+        AudioPlayer.playTrack(item, fullData, fullIndex >= 0 ? fullIndex : index, {
           contextName: 'Liked Songs',
           contextType: 'liked',
           contextId: 'liked',
         });
         expandPlayerOverlay();
         break;
+      }
       case 'playlists':
         navigation.push('Playlist', { playlist: item });
         break;

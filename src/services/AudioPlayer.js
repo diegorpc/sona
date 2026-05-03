@@ -4,8 +4,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from './SubsonicAPI';
 
 const PRIORITY_QUEUE_KEY = 'audioPlayerPriorityQueue';
-const QUEUE_CONTEXT_KEY = 'audioPlayerQueueContext';
+const CONTEXT_QUEUE_KEY = 'audioPlayerQueueContext';
 const CURRENT_TRACK_SOURCE_KEY = 'audioPlayerCurrentTrackSource';
+const SHUFFLE_KEY = 'audioPlayerShuffle';
+const REPEAT_MODE_KEY = 'audioPlayerRepeatMode';
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
 
 class AudioPlayerService {
   constructor() {
@@ -19,7 +29,7 @@ class AudioPlayerService {
     this.isLoading = false;
     this.listeners = [];
     this.priorityQueue = [];
-    this.queueContext = {
+    this.contextQueue = {
       name: null,
       type: null,
       id: null,
@@ -28,6 +38,9 @@ class AudioPlayerService {
     this.statusTimer = null;
     this.statusUpdateCount = 0;
     this.trackEndedFlag = false;
+    this.shuffle = false;
+    this.repeatMode = 'none'; // 'none' | 'all' | 'one'
+    this.originalUpcoming = [];
 
     this.initializeAudio();
   }
@@ -64,8 +77,10 @@ class AudioPlayerService {
       playlist: this.playlist,
       currentIndex: this.currentIndex,
       priorityQueue: this.priorityQueue,
-      queueContext: this.queueContext,
+      contextQueue: this.contextQueue,
       currentTrackSource: this.currentTrackSource,
+      shuffle: this.shuffle,
+      repeatMode: this.repeatMode,
     };
 
     this.listeners.forEach(listener => listener(state));
@@ -103,21 +118,26 @@ class AudioPlayerService {
           this.playlist = [...playlist];
           const clampedIndex = Math.max(0, Math.min(index, this.playlist.length - 1));
           this.currentIndex = clampedIndex;
-          this.queueContext = {
+          this.contextQueue = {
             name: contextName,
             type: contextType,
             id: contextId,
           };
           this.currentTrackSource = contextSource || 'context';
+          // Reset shuffle state when a new context is loaded
+          this.shuffle = false;
+          this.originalUpcoming = [];
         } else if (!Array.isArray(this.playlist) || this.playlist.length === 0) {
           this.playlist = [track];
           this.currentIndex = 0;
-          this.queueContext = {
+          this.contextQueue = {
             name: contextName,
             type: contextType,
             id: contextId,
           };
           this.currentTrackSource = contextSource || 'context';
+          this.shuffle = false;
+          this.originalUpcoming = [];
         } else {
           this.currentIndex = Math.max(0, Math.min(index, this.playlist.length - 1));
           this.currentTrackSource = contextSource || 'context';
@@ -352,7 +372,20 @@ class AudioPlayerService {
       priorityQueueLength: this.priorityQueue.length,
       playlistLength: this.playlist.length,
       currentIndex: this.currentIndex,
+      repeatMode: this.repeatMode,
     });
+
+    // Repeat-one: replay the current track (priority queue still takes precedence)
+    if (this.repeatMode === 'one' && this.priorityQueue.length === 0 && this.currentTrack) {
+      console.log('[AudioPlayer] Repeat-one: replaying current track');
+      await this.playTrack(this.currentTrack, this.playlist, this.currentIndex, {
+        contextName: this.contextQueue?.name,
+        contextType: this.contextQueue?.type,
+        contextId: this.contextQueue?.id,
+        contextSource: 'context',
+      });
+      return;
+    }
 
     if (this.priorityQueue.length > 0) {
       const nextPriorityTrack = this.priorityQueue.shift();
@@ -376,8 +409,19 @@ class AudioPlayerService {
 
     const nextIndex = this.currentIndex + 1;
     if (nextIndex >= this.playlist.length) {
-      console.log('[AudioPlayer] playNext: reached end of playlist, stopping');
-      await this.stop();
+      if (this.repeatMode === 'all' && this.playlist.length > 0) {
+        console.log('[AudioPlayer] Repeat-all: wrapping to start of context queue');
+        const firstTrack = this.playlist[0];
+        await this.playTrack(firstTrack, this.playlist, 0, {
+          contextName: this.contextQueue?.name,
+          contextType: this.contextQueue?.type,
+          contextId: this.contextQueue?.id,
+          contextSource: 'context',
+        });
+      } else {
+        console.log('[AudioPlayer] playNext: reached end of playlist, stopping');
+        await this.stop();
+      }
       return;
     }
 
@@ -388,9 +432,9 @@ class AudioPlayerService {
         title: nextTrack.title,
       });
       await this.playTrack(nextTrack, this.playlist, nextIndex, {
-        contextName: this.queueContext?.name,
-        contextType: this.queueContext?.type,
-        contextId: this.queueContext?.id,
+        contextName: this.contextQueue?.name,
+        contextType: this.contextQueue?.type,
+        contextId: this.contextQueue?.id,
         contextSource: 'context',
       });
     }
@@ -417,9 +461,9 @@ class AudioPlayerService {
         title: previousTrack.title,
       });
       await this.playTrack(previousTrack, this.playlist, previousIndex, {
-        contextName: this.queueContext?.name,
-        contextType: this.queueContext?.type,
-        contextId: this.queueContext?.id,
+        contextName: this.contextQueue?.name,
+        contextType: this.contextQueue?.type,
+        contextId: this.contextQueue?.id,
         contextSource: 'context',
       });
     }
@@ -527,8 +571,10 @@ class AudioPlayerService {
         'currentPosition',
         'isPlaying',
         PRIORITY_QUEUE_KEY,
-        QUEUE_CONTEXT_KEY,
+        CONTEXT_QUEUE_KEY,
         CURRENT_TRACK_SOURCE_KEY,
+        SHUFFLE_KEY,
+        REPEAT_MODE_KEY,
       ]);
 
       const store = Object.fromEntries(entries);
@@ -542,23 +588,34 @@ class AudioPlayerService {
         }
       }
 
-      if (store[QUEUE_CONTEXT_KEY]) {
+      if (store[CONTEXT_QUEUE_KEY]) {
         try {
-          const parsedContext = JSON.parse(store[QUEUE_CONTEXT_KEY]);
+          const parsedContext = JSON.parse(store[CONTEXT_QUEUE_KEY]);
           if (parsedContext && typeof parsedContext === 'object') {
-            this.queueContext = {
+            this.contextQueue = {
               name: parsedContext.name ?? null,
               type: parsedContext.type ?? null,
               id: parsedContext.id ?? null,
             };
           }
         } catch (error) {
-          console.warn('Failed to parse saved queue context:', error);
+          console.warn('Failed to parse saved context queue metadata:', error);
         }
       }
 
       if (typeof store[CURRENT_TRACK_SOURCE_KEY] === 'string') {
         this.currentTrackSource = store[CURRENT_TRACK_SOURCE_KEY] || 'context';
+      }
+
+      if (store[SHUFFLE_KEY] === 'true') {
+        this.shuffle = true;
+      }
+
+      if (store[REPEAT_MODE_KEY]) {
+        const mode = store[REPEAT_MODE_KEY];
+        if (mode === 'all' || mode === 'one') {
+          this.repeatMode = mode;
+        }
       }
 
       const savedTrack = store.currentTrack;
@@ -677,6 +734,53 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  toggleShuffle() {
+    const upcoming = this.playlist.slice(this.currentIndex + 1);
+
+    if (!this.shuffle) {
+      this.originalUpcoming = [...upcoming];
+      this.playlist = [
+        ...this.playlist.slice(0, this.currentIndex + 1),
+        ...shuffleArray([...upcoming]),
+      ];
+      this.shuffle = true;
+    } else {
+      if (this.originalUpcoming.length > 0) {
+        const upcomingIds = new Set(upcoming.map(t => t?.id).filter(Boolean));
+        const restored = this.originalUpcoming.filter(t => t?.id && upcomingIds.has(t.id));
+        this.playlist = [
+          ...this.playlist.slice(0, this.currentIndex + 1),
+          ...restored,
+        ];
+      }
+      this.shuffle = false;
+      this.originalUpcoming = [];
+    }
+
+    this.persistQueueState();
+    this.notifyListeners();
+  }
+
+  toggleRepeatAll() {
+    this.repeatMode = this.repeatMode === 'all' ? 'none' : 'all';
+    this.persistQueueState();
+    this.notifyListeners();
+  }
+
+  toggleRepeatOne() {
+    this.repeatMode = this.repeatMode === 'one' ? 'none' : 'one';
+    this.persistQueueState();
+    this.notifyListeners();
+  }
+
+  // Cycles: none → all → one → none
+  cycleRepeatMode() {
+    const next = { none: 'all', all: 'one', one: 'none' };
+    this.repeatMode = next[this.repeatMode] ?? 'none';
+    this.persistQueueState();
+    this.notifyListeners();
+  }
+
   getUpcomingContextTracks() {
     if (!Array.isArray(this.playlist) || this.playlist.length === 0) {
       return [];
@@ -695,8 +799,10 @@ class AudioPlayerService {
       playlist: this.playlist,
       currentIndex: this.currentIndex,
       priorityQueue: this.priorityQueue,
-      queueContext: this.queueContext,
+      contextQueue: this.contextQueue,
       currentTrackSource: this.currentTrackSource,
+      shuffle: this.shuffle,
+      repeatMode: this.repeatMode,
     };
   }
 
@@ -704,8 +810,10 @@ class AudioPlayerService {
     try {
       const entries = [
         [PRIORITY_QUEUE_KEY, JSON.stringify(this.priorityQueue)],
-        [QUEUE_CONTEXT_KEY, JSON.stringify(this.queueContext)],
+        [CONTEXT_QUEUE_KEY, JSON.stringify(this.contextQueue)],
         [CURRENT_TRACK_SOURCE_KEY, this.currentTrackSource || 'context'],
+        [SHUFFLE_KEY, this.shuffle ? 'true' : 'false'],
+        [REPEAT_MODE_KEY, this.repeatMode],
       ];
 
       AsyncStorage.multiSet(entries).catch(error => {

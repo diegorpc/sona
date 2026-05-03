@@ -181,7 +181,7 @@ export const createStyles = (theme) => StyleSheet.create({
     letterSpacing: 1.2,
   },
   listContainer: {
-    paddingBottom: 120,
+    paddingBottom: 60,
   },
   // Album track rows — no art
   songItem: {

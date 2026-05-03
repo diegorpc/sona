@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Image, Pressable, Easing } from 'react-native';
-import PlatformBlur from './PlatformBlur';
+import { BlurView } from 'expo-blur';
 import { IconButton, Text } from 'react-native-paper';
 import { useTheme } from '../contexts/ThemeContext';
 import TextTicker from 'react-native-text-ticker'
@@ -36,7 +36,7 @@ const MiniPlayer = ({
         pressed && styles.touchablePressed,
       ]}
     >
-      <PlatformBlur intensity={45} tint="light" style={styles.blurContainer}>
+      <BlurView intensity={45} tint="light" style={styles.blurContainer}>
         <View style={styles.content}>
           <Image
             source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
@@ -95,7 +95,7 @@ const MiniPlayer = ({
           <View style={[styles.progressFill, { flex: progress }]} />
           <View style={{ flex: Math.max(1 - progress, 0) }} />
         </View>
-      </PlatformBlur>
+      </BlurView>
     </Pressable>
   );
 };

@@ -179,13 +179,13 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
         <View style={[styles.container, { paddingBottom: bottomInset + 16 }]}>
           {/* Header */}
           <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-            <View style={styles.dragIndicator} />
             <TouchableOpacity
               onPress={onClose}
-              style={[styles.closeButton, { top: topInset + 4 }]}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={styles.dragIndicator}
+              hitSlop={{ top: 10, bottom: 10, left: 40, right: 40 }}
+              activeOpacity={0.6}
             >
-              <MaterialIcons name="keyboard-arrow-down" size={28} color={theme.colors.onBackground} />
+              <MaterialIcons name="expand-more" size={32} color={theme.colors.onBackground} style={{ opacity: 0.45 }} />
             </TouchableOpacity>
           </View>
 

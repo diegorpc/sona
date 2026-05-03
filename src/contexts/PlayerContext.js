@@ -42,6 +42,10 @@ export const PlayerProvider = ({ children }) => {
       appendToContextQueue: AudioPlayer.appendToContextQueue.bind(AudioPlayer),
       reorderContextQueue: AudioPlayer.reorderContextQueue.bind(AudioPlayer),
       moveContextTrackToPriority: AudioPlayer.moveContextTrackToPriority.bind(AudioPlayer),
+      toggleShuffle: AudioPlayer.toggleShuffle.bind(AudioPlayer),
+      toggleRepeatAll: AudioPlayer.toggleRepeatAll.bind(AudioPlayer),
+      toggleRepeatOne: AudioPlayer.toggleRepeatOne.bind(AudioPlayer),
+      cycleRepeatMode: AudioPlayer.cycleRepeatMode.bind(AudioPlayer),
     }),
     [playerState]
   );

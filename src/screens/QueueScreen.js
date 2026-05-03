@@ -1,5 +1,6 @@
-import React, { memo, useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { Image, View, TouchableOpacity, Animated, PanResponder, LayoutAnimation, Platform, UIManager } from 'react-native';
+import React, { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { Image, View, TouchableOpacity, Animated, PanResponder } from 'react-native';
+import Reanimated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import { Text } from 'react-native-paper';
@@ -12,29 +13,17 @@ import { useTheme } from '../contexts/ThemeContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { createStyles } from '../styles/QueueScreen.styles';
 import { createStyles as createMenuStyles } from '../styles/SongMenu.styles';
+import { collapseAllPlayerOverlay } from '../services/PlayerOverlayController';
+import { navigate } from '../services/NavigationService';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-const QUEUE_LAYOUT_ANIMATION = {
-  duration: 220,
-  create: {
-    type: LayoutAnimation.Types.easeInEaseOut,
-    property: LayoutAnimation.Properties.opacity,
-  },
-  update: {
-    type: LayoutAnimation.Types.easeInEaseOut,
-  },
-  delete: {
-    type: LayoutAnimation.Types.easeInEaseOut,
-    property: LayoutAnimation.Properties.opacity,
-  },
-};
+const ITEM_LAYOUT = LinearTransition.duration(260);
+const ITEM_ENTERING = FadeIn.duration(200);
+const ITEM_EXITING = FadeOut.duration(160);
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 const QUEUE_THUMB_SIZE = 44;
 const SWIPE_ACTION_WIDTH = 80;
+const CONTEXT_PAGE_SIZE = 50;
 
 // Swipe action shown when sliding a context queue row left
 const SwipeAddNext = memo(({ progress, theme }) => {
@@ -55,29 +44,22 @@ const SwipeAddNext = memo(({ progress, theme }) => {
 });
 SwipeAddNext.displayName = 'SwipeAddNext';
 
-// Swipe delete action for priority queue (red background with trash icon)
+// Swipe delete action for priority queue — same overflow-hidden structure as SwipeAddNext
 const SwipeDelete = memo(({ progress, theme }) => {
+  const menuStyles = createMenuStyles(theme);
   const translateX = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [SWIPE_ACTION_WIDTH, 0],
     extrapolate: 'clamp',
   });
   return (
-    <View style={{
-      backgroundColor: theme.colors.error || '#ef4444',
-      width: SWIPE_ACTION_WIDTH,
-      height: '100%',
-      justifyContent: 'center',
-      alignItems: 'center',
-    }}>
-      <Animated.View style={{ transform: [{ translateX }], alignItems: 'center' }}>
+    <View style={menuStyles.swipeAction}>
+      <Animated.View style={[
+        menuStyles.swipeActionContent,
+        { transform: [{ translateX }], backgroundColor: theme.colors.error || '#ef4444' },
+      ]}>
         <MaterialIcons name="delete" size={22} color="#fff" />
-        <Text style={{
-          color: '#fff',
-          fontSize: 11,
-          fontFamily: 'Lexend_500Medium',
-          marginTop: 2,
-        }}>Remove</Text>
+        <Text style={[menuStyles.swipeActionLabel, { color: '#fff' }]}>Remove</Text>
       </Animated.View>
     </View>
   );
@@ -111,47 +93,52 @@ const ContextQueueRow = memo(({ item, index, theme, styles, onPress, onLongPress
   }, [item, index, onSwipeAddNext]);
 
   return (
-    <Swipeable
-      ref={swipeRef}
-      renderRightActions={renderRightActions}
-      onSwipeableOpen={handleSwipeOpen}
-      rightThreshold={60}
-      overshootRight={false}
-      friction={2}
+    <Reanimated.View
+      layout={ITEM_LAYOUT}
+      entering={ITEM_ENTERING}
+      exiting={ITEM_EXITING}
+      style={{ overflow: 'hidden' }}
     >
-      <TouchableOpacity
-        style={styles.itemContainer}
-        onPress={handlePress}
-        onLongPress={handleLongPress}
-        delayLongPress={350}
-        activeOpacity={0.7}
+      <Swipeable
+        ref={swipeRef}
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={handleSwipeOpen}
+        rightThreshold={60}
+        overshootRight={false}
+        friction={2}
       >
-        {isStarred ? (
-          <MaterialIcons
-            name="favorite"
-            size={14}
-            color={theme.colors.primary}
-            style={{ marginRight: 8 }}
-          />
-        ) : (
-          <View style={{ width: 14, marginRight: 8 }} />
-        )}
-        <View style={styles.coverArtContainer}>
-          <Image source={coverArtSource} style={styles.coverArt} resizeMode="contain" defaultSource={DEFAULT_ART} />
-        </View>
-        <View style={styles.infoContainer}>
-          <Text numberOfLines={1} style={styles.title}>{item?.title ?? 'Unknown Title'}</Text>
-          <Text numberOfLines={1} style={styles.subtitle}>
-            {item?.artist ?? 'Unknown Artist'}{item?.album ? ` · ${item.album}` : ''}
-          </Text>
-        </View>
-        <View style={styles.rightContent}>
+        <TouchableOpacity
+          style={styles.contextItemContainer}
+          onPress={handlePress}
+          onLongPress={handleLongPress}
+          delayLongPress={350}
+          activeOpacity={0.7}
+        >
+          {isStarred ? (
+            <MaterialIcons
+              name="favorite"
+              size={14}
+              color={theme.colors.primary}
+              style={styles.favoriteIcon}
+            />
+          ) : (
+            <View style={styles.itemLeadingIcon} />
+          )}
+          <View style={styles.contextCoverArtContainer}>
+            <Image source={coverArtSource} style={styles.contextCoverArt} resizeMode="contain" defaultSource={DEFAULT_ART} />
+          </View>
+          <View style={styles.infoContainer}>
+            <Text numberOfLines={1} style={styles.contextTitle}>{item?.title ?? 'Unknown Title'}</Text>
+            <Text numberOfLines={1} style={styles.contextSubtitle}>
+              {item?.artist ?? 'Unknown Artist'}{item?.album ? ` · ${item.album}` : ''}
+            </Text>
+          </View>
           {Number.isFinite(item?.duration) ? (
-            <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
+            <Text style={styles.contextDuration}>{formatDuration(item.duration)}</Text>
           ) : null}
-        </View>
-      </TouchableOpacity>
-    </Swipeable>
+        </TouchableOpacity>
+      </Swipeable>
+    </Reanimated.View>
   );
 });
 ContextQueueRow.displayName = 'ContextQueueRow';
@@ -245,61 +232,75 @@ const PriorityQueueRow = memo(({ entry, drag, isActive, theme, styles, onSwipeRe
   }, [entry.originalIndex, onSwipeRemove]);
 
   return (
-    <Swipeable
-      ref={swipeRef}
-      renderRightActions={renderRightActions}
-      onSwipeableOpen={handleSwipeOpen}
-      rightThreshold={60}
-      overshootRight={false}
-      friction={2}
+    <Reanimated.View
+      layout={ITEM_LAYOUT}
+      entering={ITEM_ENTERING}
+      exiting={ITEM_EXITING}
+      style={{ overflow: 'hidden' }}
     >
-      <QueueItem
-        item={entry.item}
-        drag={drag}
-        isActive={isActive}
-      />
-    </Swipeable>
+      <Swipeable
+        ref={swipeRef}
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={handleSwipeOpen}
+        rightThreshold={60}
+        overshootRight={false}
+        friction={2}
+      >
+        <QueueItem
+          item={entry.item}
+          drag={drag}
+          isActive={isActive}
+        />
+      </Swipeable>
+    </Reanimated.View>
   );
 });
 PriorityQueueRow.displayName = 'PriorityQueueRow';
 
 // ─── Context section header ─────────────────────────────────────────
-const ContextHeader = ({ contextLabel, shuffleOn, repeatOn, onToggleShuffle, onToggleRepeat, styles, theme }) => (
-  <View style={styles.contextHeaderRow}>
-    <View style={styles.contextHeaderText}>
-      <Text style={styles.contextHeaderLabel}>Next in:</Text>
-      <Text style={styles.contextHeaderName} numberOfLines={1}>{contextLabel}</Text>
+const REPEAT_ICON = { none: 'repeat', all: 'repeat', one: 'repeat-one' };
+
+const ContextHeader = ({ contextLabel, shuffleOn, repeatMode, onToggleShuffle, onCycleRepeat, styles, theme }) => {
+  const repeatActive = repeatMode !== 'none';
+  return (
+    <View style={styles.contextHeaderRow}>
+      <View style={styles.contextHeaderText}>
+        <Text style={styles.contextHeaderLabel}>Next in:</Text>
+        <Text style={styles.contextHeaderName} numberOfLines={1}>{contextLabel}</Text>
+      </View>
+      <View style={styles.contextToggles}>
+        <TouchableOpacity
+          onPress={onToggleShuffle}
+          style={[styles.toggleButton, shuffleOn && styles.toggleButtonActive]}
+          accessibilityLabel="Toggle shuffle"
+        >
+          <MaterialIcons
+            name="shuffle"
+            size={15}
+            color={shuffleOn ? theme.colors.primary : theme.colors.onSurface}
+            style={{ opacity: shuffleOn ? 1 : 0.4 }}
+          />
+          <Text style={[styles.toggleLabel, shuffleOn && styles.toggleLabelActive]}>Shuffle</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onCycleRepeat}
+          style={[styles.toggleButton, repeatActive && styles.toggleButtonActive]}
+          accessibilityLabel={`Repeat: ${repeatMode}`}
+        >
+          <MaterialIcons
+            name={REPEAT_ICON[repeatMode] ?? 'repeat'}
+            size={15}
+            color={repeatActive ? theme.colors.primary : theme.colors.onSurface}
+            style={{ opacity: repeatActive ? 1 : 0.4 }}
+          />
+          <Text style={[styles.toggleLabel, repeatActive && styles.toggleLabelActive]}>
+            Repeat
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
-    <View style={styles.contextToggles}>
-      <TouchableOpacity
-        onPress={onToggleShuffle}
-        style={[styles.toggleButton, shuffleOn && styles.toggleButtonActive]}
-        accessibilityLabel="Toggle shuffle"
-      >
-        <MaterialIcons
-          name="shuffle"
-          size={15}
-          color={shuffleOn ? theme.colors.primary : theme.colors.onSurface}
-          style={{ opacity: shuffleOn ? 1 : 0.4 }}
-        />
-        <Text style={[styles.toggleLabel, shuffleOn && styles.toggleLabelActive]}>Shuffle</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={onToggleRepeat}
-        style={[styles.toggleButton, repeatOn && styles.toggleButtonActive]}
-        accessibilityLabel="Toggle repeat"
-      >
-        <MaterialIcons
-          name="repeat"
-          size={15}
-          color={repeatOn ? theme.colors.primary : theme.colors.onSurface}
-          style={{ opacity: repeatOn ? 1 : 0.4 }}
-        />
-        <Text style={[styles.toggleLabel, repeatOn && styles.toggleLabelActive]}>Repeat</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-);
+  );
+};
 
 // ─── Main QueueScreen ──────────────────────────────────────────────
 const QueueScreen = ({
@@ -314,19 +315,28 @@ const QueueScreen = ({
 }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { insertIntoPriorityQueue, appendToContextQueue, moveContextTrackToPriority } = usePlayer();
-  const [shuffleOn, setShuffleOn] = useState(false);
-  const [repeatOn, setRepeatOn] = useState(false);
+  const {
+    playerState,
+    insertIntoPriorityQueue,
+    appendToContextQueue,
+    moveContextTrackToPriority,
+    toggleShuffle,
+    cycleRepeatMode,
+  } = usePlayer();
   const [menuSong, setMenuSong] = useState(null);
-  
+  const [contextPage, setContextPage] = useState(0);
+
+  // Reset pagination when context queue changes (track change / new context)
+  useEffect(() => {
+    setContextPage(0);
+  }, [contextQueue]);
+
+  const shuffleOn = playerState.shuffle ?? false;
+  const repeatMode = playerState.repeatMode ?? 'none';
+
   // Track scroll position to know when we're at the top for drag-to-dismiss
   const scrollYRef = useRef(0);
   const isAtTopRef = useRef(true);
-
-  // Animate list changes (add/remove) smoothly
-  useEffect(() => {
-    LayoutAnimation.configureNext(QUEUE_LAYOUT_ANIMATION);
-  }, [priorityQueue.length, contextQueue.length]);
 
   const backgroundArt = useMemo(() => {
     if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
@@ -339,12 +349,11 @@ const QueueScreen = ({
   }, [onRemovePriority]);
 
   const handleSkipNowPlaying = useCallback(() => {
-    // Skip to next track (same as pressing next in player)
     const AudioPlayer = require('../services/AudioPlayer').default;
     AudioPlayer.playNext();
   }, []);
 
-  // Priority queue is the only draggable list. Items only contain track entries.
+  // Priority queue is the only draggable list.
   const priorityItems = useMemo(
     () => priorityQueue.map((track, index) => ({
       item: track,
@@ -372,6 +381,19 @@ const QueueScreen = ({
     }
   }, [onReorderPriority]);
 
+  // Paginated context queue items
+  const displayedContextItems = useMemo(
+    () => contextQueue.slice(0, (contextPage + 1) * CONTEXT_PAGE_SIZE),
+    [contextQueue, contextPage]
+  );
+  const hasMoreContextItems = displayedContextItems.length < contextQueue.length;
+
+  const handleLoadMore = useCallback(() => {
+    if (hasMoreContextItems) {
+      setContextPage(prev => prev + 1);
+    }
+  }, [hasMoreContextItems]);
+
   // Context queue handlers (static rows: tap, long-press menu, swipe to add)
   const handleContextRowPress = useCallback((track) => {
     setMenuSong(track);
@@ -380,7 +402,6 @@ const QueueScreen = ({
     setMenuSong(track);
   }, []);
   const handleContextSwipeAddNext = useCallback((_track, index) => {
-    // Move from context queue into the priority queue (removes from context, appends to priority).
     if (typeof moveContextTrackToPriority === 'function') {
       moveContextTrackToPriority(index, priorityQueue.length);
     }
@@ -389,6 +410,41 @@ const QueueScreen = ({
   const menuOptions = useMemo(() => {
     if (!menuSong) return [];
     return [
+      {
+        key: 'goToAlbum',
+        label: 'Go to album',
+        icon: 'album',
+        disabled: !menuSong.albumId,
+        onPress: () => {
+          collapseAllPlayerOverlay();
+          navigate('Album', {
+            album: {
+              id: menuSong.albumId,
+              name: menuSong.album,
+              coverArt: menuSong.coverArt,
+              artist: menuSong.artist,
+              artistId: menuSong.artistId,
+            },
+          });
+        },
+      },
+      {
+        key: 'goToArtist',
+        label: 'Go to artist',
+        icon: 'person',
+        disabled: !menuSong.artistId,
+        onPress: () => {
+          collapseAllPlayerOverlay();
+          navigate('Artist', { artist: { id: menuSong.artistId, name: menuSong.artist } });
+        },
+      },
+      {
+        key: 'addToPlaylist',
+        label: 'Add to playlist',
+        icon: 'playlist-add',
+        disabled: true,
+        onPress: () => {},
+      },
       {
         key: 'addNext',
         label: 'Add next in queue',
@@ -401,29 +457,30 @@ const QueueScreen = ({
         icon: 'add-to-queue',
         onPress: () => appendToContextQueue(menuSong),
       },
+      {
+        key: 'download',
+        label: 'Download',
+        icon: 'download',
+        disabled: true,
+        onPress: () => {},
+      },
     ];
   }, [menuSong, insertIntoPriorityQueue, appendToContextQueue]);
 
   const dragOffset = useRef(new Animated.Value(0)).current;
   const isDraggingRef = useRef(false);
 
-  // Handle scroll events from DraggableFlatList
   const handleScroll = useCallback(({ nativeEvent }) => {
     scrollYRef.current = nativeEvent.contentOffset.y;
     isAtTopRef.current = scrollYRef.current <= 0;
   }, []);
 
   // PanResponder for drag-down-to-dismiss
-  // Works from handle bar (always) and Now Playing section (when at top of scroll)
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // Capture immediately on touch start for handle bar
         onStartShouldSetPanResponder: () => true,
-        // For moves, only capture if we're dragging down and at top of list
         onMoveShouldSetPanResponder: (_, gestureState) => {
-          // Always allow drag from handle bar (negative y or small dy)
-          // For Now Playing area, only allow if at top and dragging down
           const isDraggingDown = gestureState.dy > 2;
           const isFastDrag = Math.abs(gestureState.vy) > 0.5;
           return (isDraggingDown && isAtTopRef.current) || isFastDrag;
@@ -434,38 +491,27 @@ const QueueScreen = ({
         },
         onPanResponderMove: (_, gestureState) => {
           if (gestureState.dy > 0) {
-            const resistance = 0.6;
-            dragOffset.setValue(gestureState.dy * resistance);
+            dragOffset.setValue(gestureState.dy * 0.6);
           }
         },
         onPanResponderRelease: (_, gestureState) => {
           isDraggingRef.current = false;
           const shouldClose = gestureState.dy > 80 || gestureState.vy > 0.5;
-          
           if (shouldClose) {
             if (typeof onClose === 'function') onClose();
           } else {
-            Animated.spring(dragOffset, {
-              toValue: 0,
-              useNativeDriver: true,
-              friction: 8,
-            }).start();
+            Animated.spring(dragOffset, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
           }
         },
         onPanResponderTerminate: () => {
           isDraggingRef.current = false;
-          Animated.spring(dragOffset, {
-            toValue: 0,
-            useNativeDriver: true,
-            friction: 8,
-          }).start();
+          Animated.spring(dragOffset, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
         },
         onPanResponderTerminationRequest: () => !isDraggingRef.current,
       }),
     [dragOffset, onClose]
   );
-  
-  // Separate pan responder for handle bar (always draggable)
+
   const handleBarPanResponder = useMemo(
     () =>
       PanResponder.create({
@@ -478,31 +524,21 @@ const QueueScreen = ({
         },
         onPanResponderMove: (_, gestureState) => {
           if (gestureState.dy > 0) {
-            const resistance = 0.6;
-            dragOffset.setValue(gestureState.dy * resistance);
+            dragOffset.setValue(gestureState.dy * 0.6);
           }
         },
         onPanResponderRelease: (_, gestureState) => {
           isDraggingRef.current = false;
           const shouldClose = gestureState.dy > 80 || gestureState.vy > 0.5;
-          
           if (shouldClose) {
             if (typeof onClose === 'function') onClose();
           } else {
-            Animated.spring(dragOffset, {
-              toValue: 0,
-              useNativeDriver: true,
-              friction: 8,
-            }).start();
+            Animated.spring(dragOffset, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
           }
         },
         onPanResponderTerminate: () => {
           isDraggingRef.current = false;
-          Animated.spring(dragOffset, {
-            toValue: 0,
-            useNativeDriver: true,
-            friction: 8,
-          }).start();
+          Animated.spring(dragOffset, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
         },
       }),
     [dragOffset, onClose]
@@ -513,15 +549,14 @@ const QueueScreen = ({
         <Animated.View style={[styles.container, { transform: [{ translateY: dragOffset }] }]}>
           {/* Drag handle bar - always draggable for dismiss */}
           <View style={[styles.handleBarContainer, { paddingTop: safeAreaInsets.top + 8 }]} {...handleBarPanResponder.panHandlers}>
-            <View style={styles.handleBar} />
+            <TouchableOpacity onPress={onClose} style={styles.handleBar} hitSlop={{ top: 8, bottom: 8, left: 40, right: 40 }} activeOpacity={0.6}>
+              <MaterialIcons name="expand-more" size={28} color={theme.colors.onSurface} style={{ opacity: 0.35 }} />
+            </TouchableOpacity>
           </View>
 
           {/* Header + Now Playing - wrapped for drag-down gesture */}
           <View {...handleBarPanResponder.panHandlers}>
             <View style={styles.header}>
-              <TouchableOpacity onPress={onClose} style={styles.headerBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <MaterialIcons name="chevron-left" size={28} color={theme.colors.onSurface} />
-              </TouchableOpacity>
               <Text style={styles.headerTitle}>Queue</Text>
             </View>
             {/* Now Playing */}
@@ -542,7 +577,8 @@ const QueueScreen = ({
               )}
             </View>
           </View>
-          {/* Priority-only DraggableFlatList. Now Playing is static (header), context queue is static (footer). */}
+
+          {/* Priority-only DraggableFlatList. Context queue is rendered in the footer with pagination. */}
           <DraggableFlatList
             data={priorityItems}
             renderItem={renderPriorityItem}
@@ -553,6 +589,9 @@ const QueueScreen = ({
             showsVerticalScrollIndicator={false}
             onScroll={handleScroll}
             scrollEventThrottle={16}
+            itemLayoutAnimation={ITEM_LAYOUT}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
             ListHeaderComponent={(
               <View>
                 {priorityQueue.length > 0 && (
@@ -566,18 +605,18 @@ const QueueScreen = ({
                 <ContextHeader
                   contextLabel={contextLabel || 'Current Context'}
                   shuffleOn={shuffleOn}
-                  repeatOn={repeatOn}
-                  onToggleShuffle={() => setShuffleOn(v => !v)}
-                  onToggleRepeat={() => setRepeatOn(v => !v)}
+                  repeatMode={repeatMode}
+                  onToggleShuffle={toggleShuffle}
+                  onCycleRepeat={cycleRepeatMode}
                   styles={styles}
                   theme={theme}
                 />
-                {contextQueue.length === 0 ? (
+                {displayedContextItems.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyText}>No upcoming tracks</Text>
                   </View>
                 ) : (
-                  contextQueue.map((track, index) => (
+                  displayedContextItems.map((track, index) => (
                     <ContextQueueRow
                       key={`context-${track?.id ?? 'track'}-${index}`}
                       item={track}
@@ -589,6 +628,13 @@ const QueueScreen = ({
                       onSwipeAddNext={handleContextSwipeAddNext}
                     />
                   ))
+                )}
+                {hasMoreContextItems && (
+                  <View style={styles.emptyState}>
+                    <Text style={[styles.emptyText, { opacity: 0.25 }]}>
+                      {contextQueue.length - displayedContextItems.length} more tracks…
+                    </Text>
+                  </View>
                 )}
                 <View style={[styles.listFooter, { height: safeAreaInsets.bottom + 20 }]} />
               </View>
