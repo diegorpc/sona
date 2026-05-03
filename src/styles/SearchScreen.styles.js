@@ -56,12 +56,14 @@ export const createStyles = (theme) => StyleSheet.create({
     backgroundColor: 'transparent',
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.onSurface,
-    opacity: 0.5,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+    textShadowColor: theme.colors.primary,
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 0,
   },
   // ─── Unified flat list item ────────────────────────────────────
   flatListItem: {

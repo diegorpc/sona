@@ -88,7 +88,7 @@ export default function LoginScreen({ navigation, onLoginSuccess }) {
       >
         <ScrollView contentContainerStyle={styles.scrollContainer}>
           <View style={styles.content}>
-            <Title style={styles.title}>Welcome to Sona</Title>
+            <Title style={styles.title}>Welcome to sona</Title>
             <Paragraph style={styles.subtitle}>
               Connect to your Subsonic or Navidrome server
             </Paragraph>

@@ -1,4 +1,4 @@
-# Sona – Subsonic/Navidrome Client (React Native / Expo)
+# sona – Subsonic/Navidrome Client (React Native / Expo)
 
 iOS-first music streaming client. Development on Windows, tested via Expo Go on physical iOS device.
 

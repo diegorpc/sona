@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   View,
+  Animated,
   SectionList,
   TouchableOpacity,
   Image,
@@ -9,7 +10,9 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import ScreenBackground from '../components/ScreenBackground';
+import SongMenu from '../components/SongMenu';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
@@ -17,14 +20,33 @@ import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/AlbumScreen.styles';
+import { createStyles as createMenuStyles } from '../styles/SongMenu.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ART_SIZE = Math.min(220, SCREEN_WIDTH - 140);
+const SWIPE_ACTION_WIDTH = 80;
+
+// ─── Swipe-left "Add last" action ─────────────────────────────────
+const SwipeAddLast = memo(({ progress, theme }) => {
+  const menuStyles = createMenuStyles(theme);
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SWIPE_ACTION_WIDTH, 0],
+    extrapolate: 'clamp',
+  });
+  return (
+    <View style={menuStyles.swipeAction}>
+      <Animated.View style={[menuStyles.swipeActionContent, { transform: [{ translateX }] }]}>
+        <MaterialIcons name="queue-music" size={22} color={theme.colors.onPrimary} />
+        <Text style={menuStyles.swipeActionLabel}>Add last</Text>
+      </Animated.View>
+    </View>
+  );
+});
 
 // ─── Album track row — no art thumbnail ───────────────────────────
-const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
-  const { theme } = useTheme();
+const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLast, isPlaying, theme }) => {
   const styles = createStyles(theme);
 
   const duration = useMemo(() => {
@@ -34,58 +56,72 @@ const SongItem = memo(({ item, index, onPress, onMenuPress, isPlaying }) => {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }, [item.duration]);
 
-  return (
-    <TouchableOpacity
-      style={[styles.songItem, isPlaying && styles.songItemPlaying]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      {/* Liked status */}
-      <View style={styles.heartWrapper}>
-        <MaterialIcons
-          name={item.starred ? 'favorite' : null}
-          size={14}
-          style={item.starred ? styles.heartIcon : null}
-        />
-      </View>
+  const swipeRef = React.useRef(null);
 
-      <View style={styles.trackNumberWrapper}>
-        {isPlaying
-          ? <MaterialIcons name="play-arrow" size={14} color={theme.colors.primary} style={styles.nowPlayingIcon} />
-          : <Text style={styles.trackNumber}>{item.track || index + 1}</Text>
-        }
-      </View>
-      <View style={styles.songInfo}>
-        <Text style={[styles.songTitle, isPlaying && styles.songTitlePlaying]} numberOfLines={1}>
-          {item.title}
-        </Text>
-        {item.artist && item.artist !== item.albumArtist && (
-          <Text style={[styles.songArtistText, isPlaying && styles.songArtistPlaying]} numberOfLines={1}>
-            {item.artist}
+  const renderRightActions = useCallback((progress) => (
+    <SwipeAddLast progress={progress} theme={theme} />
+  ), [theme]);
+
+  const handleSwipeOpen = useCallback(() => {
+    onAddLast(item);
+    swipeRef.current?.close();
+  }, [item, onAddLast]);
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={renderRightActions}
+      onSwipeableOpen={handleSwipeOpen}
+      rightThreshold={60}
+      overshootRight={false}
+      friction={2}
+    >
+      <TouchableOpacity
+        style={[styles.songItem, isPlaying && styles.songItemPlaying]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        activeOpacity={0.7}
+      >
+        <View style={styles.trackNumberWrapper}>
+          {isPlaying
+            ? <MaterialIcons name="play-arrow" size={14} color={theme.colors.primary} style={styles.nowPlayingIcon} />
+            : <Text style={styles.trackNumber}>{item.track || index + 1}</Text>
+          }
+        </View>
+        <View style={styles.songInfo}>
+          <Text style={[styles.songTitle, isPlaying && styles.songTitlePlaying]} numberOfLines={1}>
+            {item.title}
           </Text>
-        )}
-      </View>
-      {duration ? <Text style={styles.songDuration}>{duration}</Text> : null}
-      <TouchableOpacity style={styles.menuButton} onPress={onMenuPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <MaterialIcons name="more-vert" size={18} color={theme.colors.onSurface} style={{ opacity: 0.4 }} />
+          {item.artist && item.artist !== item.albumArtist && (
+            <Text style={[styles.songArtistText, isPlaying && styles.songArtistPlaying]} numberOfLines={1}>
+              {item.artist}
+            </Text>
+          )}
+        </View>
+        {duration ? <Text style={styles.songDuration}>{duration}</Text> : null}
+        <TouchableOpacity style={styles.menuButton} onPress={() => onMenuPress(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <MaterialIcons name="more-vert" size={18} color={theme.colors.onSurface} style={{ opacity: 0.4 }} />
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
+    </Swipeable>
   );
 }, (prev, next) =>
   prev.item.id === next.item.id &&
   prev.index === next.index &&
   prev.isPlaying === next.isPlaying &&
-  Boolean(prev.item.starred) === Boolean(next.item.starred)
+  prev.theme === next.theme
 );
 
 export default function AlbumScreen({ route, navigation }) {
   const { album } = route.params;
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack } } = usePlayer();
+  const { playerState: { currentTrack }, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
   const [albumData, setAlbumData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [menuSong, setMenuSong] = useState(null);
 
   const loadAlbumData = async () => {
     try {
@@ -145,16 +181,12 @@ export default function AlbumScreen({ route, navigation }) {
 
   const discSections = useMemo(() => {
     if (!albumData?.song) return [];
-    
     const discMap = new Map();
     albumData.song.forEach((song) => {
       const discNum = song.discNumber || 1;
-      if (!discMap.has(discNum)) {
-        discMap.set(discNum, []);
-      }
+      if (!discMap.has(discNum)) discMap.set(discNum, []);
       discMap.get(discNum).push(song);
     });
-    
     return Array.from(discMap.entries())
       .sort(([a], [b]) => a - b)
       .map(([discNum, songs]) => ({
@@ -165,8 +197,7 @@ export default function AlbumScreen({ route, navigation }) {
 
   const discCount = useMemo(() => {
     if (!albumData?.song) return 0;
-    const discs = new Set(albumData.song.map(s => s.discNumber || 1));
-    return discs.size;
+    return new Set(albumData.song.map(s => s.discNumber || 1)).size;
   }, [albumData]);
 
   const coverArtUrl = useMemo(() => {
@@ -180,33 +211,70 @@ export default function AlbumScreen({ route, navigation }) {
     return DEFAULT_ART;
   }, [coverArtUrl, currentTrack?.coverArt]);
 
-  const [artSizeReady, setArtSizeReady] = useState(false);
   const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
-  useEffect(() => {
-    if (!coverArtUrl) {
-      setArtSizeReady(true);
-      return;
-    }
-    setArtSizeReady(false);
-    setArtDisplaySize({ width: ART_SIZE, height: ART_SIZE });
-    let cancelled = false;
-    Image.getSize(
-      coverArtUrl,
-      (w, h) => {
-        if (cancelled) return;
-        if (w && h) {
-          const ratio = w / h;
-          setArtDisplaySize(ratio >= 1
-            ? { width: ART_SIZE, height: Math.round(ART_SIZE / ratio) }
-            : { width: Math.round(ART_SIZE * ratio), height: ART_SIZE }
-          );
-        }
-        setArtSizeReady(true);
-      },
-      () => { if (!cancelled) setArtSizeReady(true); }
+  const handleArtLoad = useCallback((e) => {
+    const { width: w, height: h } = e.nativeEvent.source;
+    if (!w || !h) return;
+    const ratio = w / h;
+    setArtDisplaySize(ratio >= 1
+      ? { width: ART_SIZE, height: Math.round(ART_SIZE / ratio) }
+      : { width: Math.round(ART_SIZE * ratio), height: ART_SIZE }
     );
-    return () => { cancelled = true; };
-  }, [coverArtUrl]);
+  }, []);
+
+  const handleAddLast = useCallback((song) => {
+    appendToContextQueue(song);
+  }, [appendToContextQueue]);
+
+  const menuOptions = useMemo(() => {
+    if (!menuSong) return [];
+    return [
+      {
+        key: 'playFromStart',
+        label: 'Play from start',
+        icon: 'play-arrow',
+        onPress: () => {
+          const idx = albumData?.song?.findIndex(s => s.id === menuSong.id) ?? 0;
+          handleSongPress(menuSong, idx);
+        },
+      },
+      {
+        key: 'goToArtist',
+        label: 'Go to artist',
+        icon: 'person',
+        onPress: () => {
+          const artistId = menuSong.artistId || albumData?.artistId;
+          if (artistId) navigation.push('Artist', { artist: { id: artistId, name: menuSong.artist } });
+        },
+      },
+      {
+        key: 'addToPlaylist',
+        label: 'Add to playlist',
+        icon: 'playlist-add',
+        disabled: true,
+        onPress: () => {},
+      },
+      {
+        key: 'addNext',
+        label: 'Add next in queue',
+        icon: 'queue-play-next',
+        onPress: () => insertIntoPriorityQueue(menuSong, 0),
+      },
+      {
+        key: 'addLast',
+        label: 'Add last in queue',
+        icon: 'add-to-queue',
+        onPress: () => appendToContextQueue(menuSong),
+      },
+      {
+        key: 'download',
+        label: 'Download',
+        icon: 'download',
+        disabled: true,
+        onPress: () => {},
+      },
+    ];
+  }, [menuSong, albumData, handleSongPress, navigation, insertIntoPriorityQueue, appendToContextQueue]);
 
   const renderSectionHeader = useCallback(({ section: { title } }) => {
     if (!title) return null;
@@ -217,7 +285,7 @@ export default function AlbumScreen({ route, navigation }) {
     );
   }, [theme]);
 
-  const renderItem = useCallback(({ item, index, section }) => {
+  const renderItem = useCallback(({ item, index }) => {
     const globalIndex = albumData?.song?.findIndex(s => s.id === item.id) ?? index;
     const isPlaying = currentTrack?.id === item.id;
     return (
@@ -225,11 +293,14 @@ export default function AlbumScreen({ route, navigation }) {
         item={item}
         index={index}
         isPlaying={isPlaying}
+        theme={theme}
         onPress={() => handleSongPress(item, globalIndex)}
-        onMenuPress={() => {/* TODO */}}
+        onLongPress={() => setMenuSong(item)}
+        onMenuPress={setMenuSong}
+        onAddLast={handleAddLast}
       />
     );
-  }, [currentTrack?.id, handleSongPress, albumData]);
+  }, [currentTrack?.id, handleSongPress, albumData, theme, handleAddLast]);
 
   const keyExtractor = useCallback((item, index) => item.id || `song-${index}`, []);
 
@@ -253,6 +324,7 @@ export default function AlbumScreen({ route, navigation }) {
             style={[styles.artImage, artDisplaySize]}
             resizeMode="cover"
             defaultSource={DEFAULT_ART}
+            onLoad={handleArtLoad}
           />
         </View>
       </View>
@@ -270,7 +342,6 @@ export default function AlbumScreen({ route, navigation }) {
             <Text style={styles.albumArtist} numberOfLines={1}>{album.artist}</Text>
           </TouchableOpacity>
         )}
-        {/* Accent badge chips */}
         <View style={styles.badgeRow}>
           {album.year && <View style={styles.badge}><Text style={styles.badgeText}>{album.year}</Text></View>}
           {albumData && (
@@ -298,7 +369,6 @@ export default function AlbumScreen({ route, navigation }) {
           })()}
         </View>
 
-        {/* Play area */}
         <View style={styles.playAreaRow}>
           <TouchableOpacity style={styles.playPill} onPress={playAlbum} activeOpacity={0.8}>
             <MaterialIcons name="play-arrow" size={18} color={theme.colors.onPrimary} />
@@ -318,16 +388,16 @@ export default function AlbumScreen({ route, navigation }) {
 
       <View style={styles.divider} />
     </View>
-  ), [album, albumData, backgroundArt, navigation, theme, playAlbum, getTotalDuration, discCount, artDisplaySize]);
+  ), [album, albumData, backgroundArt, navigation, theme, playAlbum, getTotalDuration, discCount, artDisplaySize, handleArtLoad]);
 
-  if (isLoading || !artSizeReady) {
+  if (isLoading) {
     return (
       <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
-          {StickyHeader}
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.loadingText}>Loading album…</Text>
-          </View>
+        {StickyHeader}
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Loading album…</Text>
+        </View>
       </ScreenBackground>
     );
   }
@@ -335,12 +405,12 @@ export default function AlbumScreen({ route, navigation }) {
   if (!albumData) {
     return (
       <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
-          {StickyHeader}
-          <View style={styles.errorContainer}>
-            <MaterialIcons name="error-outline" size={64} color={theme.colors.error} />
-            <Text style={styles.errorText}>Failed to load album</Text>
-            <Text style={styles.errorSubtext}>Please try again later</Text>
-          </View>
+        {StickyHeader}
+        <View style={styles.errorContainer}>
+          <MaterialIcons name="error-outline" size={64} color={theme.colors.error} />
+          <Text style={styles.errorText}>Failed to load album</Text>
+          <Text style={styles.errorSubtext}>Please try again later</Text>
+        </View>
       </ScreenBackground>
     );
   }
@@ -373,6 +443,13 @@ export default function AlbumScreen({ route, navigation }) {
         />
         {StickyHeader}
       </View>
+
+      <SongMenu
+        song={menuSong}
+        visible={menuSong !== null}
+        onClose={() => setMenuSong(null)}
+        options={menuOptions}
+      />
     </ScreenBackground>
   );
 }

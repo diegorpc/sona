@@ -12,6 +12,7 @@ import {
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import ScreenBackground from '../components/ScreenBackground';
+import SongMenu from '../components/SongMenu';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
@@ -27,12 +28,13 @@ const MAX_RECENT_SEARCHES = 20;
 export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack } } = usePlayer();
+  const { playerState: { currentTrack }, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [playlists, setPlaylists] = useState([]);
   const [recentSearches, setRecentSearches] = useState([]);
+  const [menuSong, setMenuSong] = useState(null);
 
   const saveRecentSearch = useCallback((item, type) => {
     if (!item) return;
@@ -136,6 +138,56 @@ export default function SearchScreen({ navigation }) {
     return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
   }, []);
 
+  const menuOptions = useMemo(() => {
+    if (!menuSong) return [];
+    return [
+      {
+        key: 'goToAlbum',
+        label: 'Go to album',
+        icon: 'album',
+        onPress: () => {
+          if (menuSong.albumId) navigation.push('Album', {
+            album: { id: menuSong.albumId, name: menuSong.album, artist: menuSong.artist, coverArt: menuSong.coverArt },
+          });
+        },
+      },
+      {
+        key: 'goToArtist',
+        label: 'Go to artist',
+        icon: 'person',
+        onPress: () => {
+          if (menuSong.artistId) navigation.push('Artist', { artist: { id: menuSong.artistId, name: menuSong.artist } });
+        },
+      },
+      {
+        key: 'addToPlaylist',
+        label: 'Add to playlist',
+        icon: 'playlist-add',
+        disabled: true,
+        onPress: () => {},
+      },
+      {
+        key: 'addNext',
+        label: 'Add next in queue',
+        icon: 'queue-play-next',
+        onPress: () => insertIntoPriorityQueue(menuSong, 0),
+      },
+      {
+        key: 'addLast',
+        label: 'Add last in queue',
+        icon: 'add-to-queue',
+        onPress: () => appendToContextQueue(menuSong),
+      },
+      {
+        key: 'download',
+        label: 'Download',
+        icon: 'download',
+        disabled: true,
+        onPress: () => {},
+      },
+    ];
+  }, [menuSong, navigation, insertIntoPriorityQueue, appendToContextQueue]);
+
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) return { artist: [], album: [], song: [], playlist: [] };
@@ -195,6 +247,8 @@ export default function SearchScreen({ navigation }) {
       <TouchableOpacity
         style={styles.flatListItem}
         onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
+        onLongPress={() => setMenuSong(item)}
+        delayLongPress={350}
         activeOpacity={0.7}
       >
         <Image
@@ -287,12 +341,18 @@ export default function SearchScreen({ navigation }) {
 
   return (
     <ScreenBackground source={backgroundArt} backgroundStyle={styles.backgroundImage} blurStyle={styles.blurOverlay}>
+      <SongMenu
+        song={menuSong}
+        visible={menuSong !== null}
+        onClose={() => setMenuSong(null)}
+        options={menuOptions}
+      />
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>Search</Text>
           </View>
-        
+
           <Searchbar
             placeholderTextColor={theme.colors.onSurfaceVariant}
             placeholder="Artists, albums, songs, playlists..."

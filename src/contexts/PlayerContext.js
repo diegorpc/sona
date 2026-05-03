@@ -39,6 +39,7 @@ export const PlayerProvider = ({ children }) => {
       reorderPriorityQueue: AudioPlayer.reorderPriorityQueue.bind(AudioPlayer),
       removePriorityTrack: AudioPlayer.removePriorityTrack.bind(AudioPlayer),
       insertIntoPriorityQueue: AudioPlayer.insertIntoPriorityQueue.bind(AudioPlayer),
+      appendToContextQueue: AudioPlayer.appendToContextQueue.bind(AudioPlayer),
       reorderContextQueue: AudioPlayer.reorderContextQueue.bind(AudioPlayer),
       moveContextTrackToPriority: AudioPlayer.moveContextTrackToPriority.bind(AudioPlayer),
     }),

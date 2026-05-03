@@ -608,7 +608,16 @@ class AudioPlayerService {
       return;
     }
 
-    this.priorityQueue.splice(index, 1);
+    const updated = [...this.priorityQueue];
+    updated.splice(index, 1);
+    this.priorityQueue = updated;
+    this.persistQueueState();
+    this.notifyListeners();
+  }
+
+  appendToContextQueue(track) {
+    if (!track) return;
+    this.playlist = [...this.playlist, track];
     this.persistQueueState();
     this.notifyListeners();
   }
@@ -619,7 +628,9 @@ class AudioPlayerService {
     }
 
     const clampedIndex = Math.max(0, Math.min(targetIndex, this.priorityQueue.length));
-    this.priorityQueue.splice(clampedIndex, 0, track);
+    const updated = [...this.priorityQueue];
+    updated.splice(clampedIndex, 0, track);
+    this.priorityQueue = updated;
     this.persistQueueState();
     this.notifyListeners();
   }
@@ -650,13 +661,17 @@ class AudioPlayerService {
       return;
     }
 
-    const [track] = this.playlist.splice(absoluteIndex, 1);
+    const updatedPlaylist = [...this.playlist];
+    const [track] = updatedPlaylist.splice(absoluteIndex, 1);
     if (!track) {
       return;
     }
+    this.playlist = updatedPlaylist;
 
     const clampedIndex = Math.max(0, Math.min(priorityIndex, this.priorityQueue.length));
-    this.priorityQueue.splice(clampedIndex, 0, track);
+    const updatedPriority = [...this.priorityQueue];
+    updatedPriority.splice(clampedIndex, 0, track);
+    this.priorityQueue = updatedPriority;
 
     this.persistQueueState();
     this.notifyListeners();

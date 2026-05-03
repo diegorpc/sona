@@ -12,11 +12,22 @@ export const createStyles = (theme) => StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  handleBarContainer: {
+    alignItems: 'center',
+    paddingBottom: 8,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.onSurface,
+    opacity: 0.3,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLowOpacity,
   },
@@ -34,6 +45,9 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  nowPlayingContainer: {
+    marginBottom: 4,
   },
   sectionLabel: {
     fontSize: 10,

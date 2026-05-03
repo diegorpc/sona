@@ -14,7 +14,9 @@ import {
 } from 'react-native';
 import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import ScreenBackground from '../components/ScreenBackground';
+import SongMenu from '../components/SongMenu';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
@@ -23,6 +25,7 @@ import PlaylistCollage from '../components/PlaylistCollage';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/LibraryScreen.styles';
+import { createStyles as createMenuStyles } from '../styles/SongMenu.styles';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
@@ -154,6 +157,24 @@ const formatItemDuration = (seconds) => {
 const DEFAULT_LIST_IMAGE = require('../../assets/default-album.png');
 
 const LIBRARY_THUMB_SIZE = 52;
+const SWIPE_ACTION_WIDTH = 80;
+
+const SwipeAddLast = memo(({ progress, theme }) => {
+  const menuStyles = createMenuStyles(theme);
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SWIPE_ACTION_WIDTH, 0],
+    extrapolate: 'clamp',
+  });
+  return (
+    <View style={menuStyles.swipeAction}>
+      <Animated.View style={[menuStyles.swipeActionContent, { transform: [{ translateX }] }]}>
+        <MaterialIcons name="queue-music" size={22} color={theme.colors.onPrimary} />
+        <Text style={menuStyles.swipeActionLabel}>Add last</Text>
+      </Animated.View>
+    </View>
+  );
+});
 
 // Hoisted to module scope so memoization actually works across LibraryScreen renders.
 const ListItem = memo(function ListItem({
@@ -164,9 +185,14 @@ const ListItem = memo(function ListItem({
   primaryColor,
   collageData,
   isPlaying,
+  theme,
   onPress,
   onMenuPress,
+  onLongPress,
+  onAddLast,
 }) {
+  const swipeRef = useRef(null);
+
   const handlePress = useCallback(() => {
     onPress(item, index);
   }, [onPress, item, index]);
@@ -174,6 +200,19 @@ const ListItem = memo(function ListItem({
   const handleMenuPressCallback = useCallback(() => {
     onMenuPress(item);
   }, [onMenuPress, item]);
+
+  const handleLongPress = useCallback(() => {
+    if (onLongPress) onLongPress(item);
+  }, [onLongPress, item]);
+
+  const renderRightActions = useCallback((progress) => (
+    viewMode === 'liked' ? <SwipeAddLast progress={progress} theme={theme} /> : null
+  ), [viewMode, theme]);
+
+  const handleSwipeOpen = useCallback(() => {
+    if (onAddLast) onAddLast(item);
+    swipeRef.current?.close();
+  }, [item, onAddLast]);
 
   const title = viewMode === 'liked' ? item.title : item.name;
 
@@ -247,10 +286,12 @@ const ListItem = memo(function ListItem({
     );
   }, [imageData, styles.itemImageContainer, isRoundImage]);
 
-  return (
+  const row = (
     <TouchableOpacity
       style={[styles.flatListItem, isPlaying && styles.flatListItemPlaying]}
       onPress={handlePress}
+      onLongPress={handleLongPress}
+      delayLongPress={350}
       activeOpacity={0.7}
     >
       {viewMode === 'liked' && (
@@ -285,6 +326,23 @@ const ListItem = memo(function ListItem({
       )}
     </TouchableOpacity>
   );
+
+  if (viewMode === 'liked') {
+    return (
+      <Swipeable
+        ref={swipeRef}
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={handleSwipeOpen}
+        rightThreshold={60}
+        overshootRight={false}
+        friction={2}
+      >
+        {row}
+      </Swipeable>
+    );
+  }
+
+  return row;
 }, (prev, next) => {
   return (
     prev.item === next.item &&
@@ -294,18 +352,22 @@ const ListItem = memo(function ListItem({
     prev.primaryColor === next.primaryColor &&
     prev.collageData === next.collageData &&
     prev.isPlaying === next.isPlaying &&
+    prev.theme === next.theme &&
     prev.onPress === next.onPress &&
-    prev.onMenuPress === next.onMenuPress
+    prev.onMenuPress === next.onMenuPress &&
+    prev.onLongPress === next.onLongPress &&
+    prev.onAddLast === next.onAddLast
   );
 });
 
 export default function LibraryScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { playTrack } = usePlayer();
+  const { playTrack, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
   const {
     playerState: { currentTrack },
   } = usePlayer();
+  const [menuSong, setMenuSong] = useState(null);
   const [artists, setArtists] = useState([]);
   const [albums, setAlbums] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
@@ -1418,8 +1480,66 @@ export default function LibraryScreen({ navigation }) {
   }, [viewMode, navigation]);
 
   const handleMenuPress = useCallback((item) => {
-    // TODO: Implement menu functionality
+    setMenuSong(item);
   }, []);
+
+  const handleLongPressItem = useCallback((item) => {
+    if (viewMode === 'liked') setMenuSong(item);
+  }, [viewMode]);
+
+  const handleAddLast = useCallback((item) => {
+    appendToContextQueue(item);
+  }, [appendToContextQueue]);
+
+  const menuOptions = useMemo(() => {
+    if (!menuSong) return [];
+    return [
+      {
+        key: 'goToAlbum',
+        label: 'Go to album',
+        icon: 'album',
+        onPress: () => {
+          if (menuSong.albumId) navigation.push('Album', {
+            album: { id: menuSong.albumId, name: menuSong.album, artist: menuSong.artist, coverArt: menuSong.coverArt },
+          });
+        },
+      },
+      {
+        key: 'goToArtist',
+        label: 'Go to artist',
+        icon: 'person',
+        onPress: () => {
+          if (menuSong.artistId) navigation.push('Artist', { artist: { id: menuSong.artistId, name: menuSong.artist } });
+        },
+      },
+      {
+        key: 'addToPlaylist',
+        label: 'Add to playlist',
+        icon: 'playlist-add',
+        disabled: true,
+        onPress: () => {},
+      },
+      {
+        key: 'addNext',
+        label: 'Add next in queue',
+        icon: 'queue-play-next',
+        onPress: () => insertIntoPriorityQueue(menuSong, 0),
+      },
+      {
+        key: 'addLast',
+        label: 'Add last in queue',
+        icon: 'add-to-queue',
+        onPress: () => appendToContextQueue(menuSong),
+      },
+      {
+        key: 'download',
+        label: 'Download',
+        icon: 'download',
+        disabled: true,
+        onPress: () => {},
+      },
+    ];
+  }, [menuSong, navigation, insertIntoPriorityQueue, appendToContextQueue]);
 
   const currentTrackId = currentTrack?.id;
   const primaryColor = theme.colors.primary;
@@ -1441,11 +1561,14 @@ export default function LibraryScreen({ navigation }) {
         primaryColor={primaryColor}
         collageData={collageData}
         isPlaying={isPlaying}
+        theme={theme}
         onPress={handleItemPress}
         onMenuPress={handleMenuPress}
+        onLongPress={handleLongPressItem}
+        onAddLast={handleAddLast}
       />
     );
-  }, [viewMode, playlistCollages, styles, primaryColor, currentTrackId, handleItemPress, handleMenuPress]);
+  }, [viewMode, playlistCollages, styles, primaryColor, theme, currentTrackId, handleItemPress, handleMenuPress, handleLongPressItem, handleAddLast]);
 
   // Performance optimization: getItemLayout for FlatList
   const getItemLayout = useCallback((data, index) => ({
@@ -1800,6 +1923,13 @@ export default function LibraryScreen({ navigation }) {
         onMomentumScrollEnd={handleMomentumScrollEnd}
         ListFooterComponent={null}
       />
+      <SongMenu
+        song={menuSong}
+        visible={menuSong !== null}
+        onClose={() => setMenuSong(null)}
+        options={menuOptions}
+      />
+
       {isSortMenuVisible && (
         <View style={styles.sortMenuPortal} pointerEvents="box-none">
           <Pressable style={styles.sortMenuBackdrop} onPress={() => closeSortMenu()} />

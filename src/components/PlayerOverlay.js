@@ -235,13 +235,19 @@ const PlayerOverlay = () => {
       return;
     }
 
+    // Reset animation to start position (off-screen) before showing
+    queueAnimation.setValue(0);
     setIsQueueVisible(true);
-    Animated.timing(queueAnimation, {
-      toValue: 1,
-      duration: ANIMATION_DURATION,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    
+    // Small delay to ensure component is mounted before animating
+    setTimeout(() => {
+      Animated.timing(queueAnimation, {
+        toValue: 1,
+        duration: ANIMATION_DURATION,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }, 0);
   }, [isQueueVisible, queueAnimation]);
 
   const queueTranslateY = useMemo(
@@ -347,8 +353,6 @@ const PlayerOverlay = () => {
           style={[
             styles.queueOverlay,
             {
-              paddingBottom: insets.bottom,
-              paddingTop: insets.top,
               transform: [{ translateY: queueTranslateY }],
             },
           ]}
@@ -363,6 +367,7 @@ const PlayerOverlay = () => {
             onRemovePriority={removePriorityTrack}
             onReorderContext={reorderContextQueue}
             onMoveContextToPriority={moveContextTrackToPriority}
+            safeAreaInsets={insets}
           />
         </Animated.View>
       )}

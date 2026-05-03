@@ -10,7 +10,7 @@ class SubsonicAPI {
     this.salt = '';
     this.token = '';
     this.version = '1.16.1';
-    this.client = 'Sona';
+    this.client = 'sona';
   }
 
   // Initialize API with server configuration
@@ -285,6 +285,11 @@ class SubsonicAPI {
     }
 
     return Array.from(albumsById.values());
+  }
+
+  // Remove a song from a playlist by its 0-based index in the playlist
+  async removeFromPlaylist(playlistId, songIndexToRemove) {
+    return await this.request('updatePlaylist', { playlistId, songIndexToRemove });
   }
 
   // Get top songs for an artist by name

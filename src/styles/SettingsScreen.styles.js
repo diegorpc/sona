@@ -16,7 +16,7 @@ export const createStyles = (theme) => StyleSheet.create({
   // ─── Header ───────────────────────────────────────────────────
   header: {
     paddingHorizontal: 16,
-    paddingTop: 18,
+    paddingTop: 17,
     paddingBottom: 14,
     backgroundColor: 'transparent',
   },

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Image,
@@ -10,9 +10,11 @@ import { Text } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
 import { MaterialIcons } from '@expo/vector-icons';
 import ScreenBackground from '../components/ScreenBackground';
+import SongMenu from '../components/SongMenu';
 
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
+import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/PlayerScreen.styles';
 import TextTicker from 'react-native-text-ticker';
@@ -24,10 +26,12 @@ const PLAYER_ART_SIZE = SCREEN_WIDTH - 80;
 export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist, onNavigateToAlbum, safeAreaInsets }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
+  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
   const [isStarred, setIsStarred] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const isSlidingRef = useRef(false);
   const topInset = safeAreaInsets?.top ?? 0;
   const bottomInset = safeAreaInsets?.bottom ?? 0;
@@ -92,6 +96,50 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
   const formatTime = (ms) => AudioPlayer.formatTime(ms);
 
   const { currentTrack, isPlaying, position, duration, isLoading } = playerState;
+
+  const menuOptions = useMemo(() => {
+    if (!currentTrack) return [];
+    return [
+      onNavigateToAlbum && currentTrack.albumId ? {
+        key: 'goToAlbum',
+        label: 'Go to album',
+        icon: 'album',
+        onPress: () => onNavigateToAlbum(),
+      } : null,
+      onNavigateToArtist && currentTrack.artistId ? {
+        key: 'goToArtist',
+        label: 'Go to artist',
+        icon: 'person',
+        onPress: () => onNavigateToArtist(),
+      } : null,
+      {
+        key: 'addToPlaylist',
+        label: 'Add to playlist',
+        icon: 'playlist-add',
+        disabled: true,
+        onPress: () => {},
+      },
+      {
+        key: 'addNext',
+        label: 'Add next in queue',
+        icon: 'queue-play-next',
+        onPress: () => insertIntoPriorityQueue(currentTrack, 0),
+      },
+      {
+        key: 'addLast',
+        label: 'Add last in queue',
+        icon: 'add-to-queue',
+        onPress: () => appendToContextQueue(currentTrack),
+      },
+      {
+        key: 'download',
+        label: 'Download',
+        icon: 'download',
+        disabled: true,
+        onPress: () => {},
+      },
+    ].filter(Boolean);
+  }, [currentTrack, onNavigateToAlbum, onNavigateToArtist, insertIntoPriorityQueue, appendToContextQueue]);
 
   const [artDisplaySize, setArtDisplaySize] = useState({ width: PLAYER_ART_SIZE, height: PLAYER_ART_SIZE });
   useEffect(() => {
@@ -280,6 +328,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
               </TouchableOpacity>
 
               <TouchableOpacity
+                onPress={() => setMenuVisible(true)}
                 style={styles.secondaryButton}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -288,6 +337,12 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
             </View>
           </View>
         </View>
+      <SongMenu
+        song={currentTrack}
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        options={menuOptions}
+      />
     </ScreenBackground>
   );
 }

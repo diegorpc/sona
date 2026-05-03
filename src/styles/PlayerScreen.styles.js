@@ -69,7 +69,7 @@ export const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.onBackground,
     textAlign: 'center',
     textShadowColor: theme.colors.primary,
-    textShadowOffset: { width: 1, height: 2 },
+    textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 0,
     marginBottom: 6,
   },
