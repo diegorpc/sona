@@ -7,6 +7,7 @@ import { Text } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
+import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import { useTheme } from '../contexts/ThemeContext';
@@ -324,6 +325,7 @@ const QueueScreen = ({
     cycleRepeatMode,
   } = usePlayer();
   const [menuSong, setMenuSong] = useState(null);
+  const [addToPlaylistSong, setAddToPlaylistSong] = useState(null);
   const [contextPage, setContextPage] = useState(0);
 
   // Reset pagination when context queue changes (track change / new context)
@@ -442,8 +444,7 @@ const QueueScreen = ({
         key: 'addToPlaylist',
         label: 'Add to playlist',
         icon: 'playlist-add',
-        disabled: true,
-        onPress: () => {},
+        onPress: () => setAddToPlaylistSong(menuSong),
       },
       {
         key: 'addNext',
@@ -646,6 +647,11 @@ const QueueScreen = ({
           visible={menuSong !== null}
           onClose={() => setMenuSong(null)}
           options={menuOptions}
+        />
+        <AddToPlaylistModal
+          song={addToPlaylistSong}
+          visible={addToPlaylistSong !== null}
+          onClose={() => setAddToPlaylistSong(null)}
         />
       </ScreenBackground>
   );

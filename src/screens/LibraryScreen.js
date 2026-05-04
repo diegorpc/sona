@@ -17,6 +17,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
+import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
@@ -257,7 +258,7 @@ const ListItem = memo(function ListItem({
   );
 
   const showDuration = viewMode === 'liked' || viewMode === 'albums' || viewMode === 'playlists';
-  const showMenu = viewMode === 'liked' || viewMode === 'playlists';
+  const showMenu = viewMode === 'liked';
 
   const isRoundImage = viewMode === 'artists';
 
@@ -368,6 +369,7 @@ export default function LibraryScreen({ navigation }) {
     playerState: { currentTrack },
   } = usePlayer();
   const [menuSong, setMenuSong] = useState(null);
+  const [addToPlaylistSong, setAddToPlaylistSong] = useState(null);
   const [artists, setArtists] = useState([]);
   const [albums, setAlbums] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
@@ -767,11 +769,6 @@ export default function LibraryScreen({ navigation }) {
       // Load cached playlist collages immediately (non-blocking)
       let cachedCollages = await CacheService.getAsync('playlistCollages') || {};
       setPlaylistCollages(cachedCollages);
-      
-      // Asynchronously load missing collages in the background
-      if (playlistsData.length > 0) {
-        loadPlaylistCollagesAsync(playlistsData, cachedCollages, forceRefresh);
-      }
 
     } catch (error) {
       console.error('Error loading library:', error);
@@ -812,66 +809,6 @@ export default function LibraryScreen({ navigation }) {
     } catch (error) {
       console.error('Error loading albums with sort:', error);
       return [];
-    }
-  }, []);
-
-  const loadPlaylistCollagesAsync = useCallback(async (playlistsData, cachedCollages, forceRefresh = false) => {
-    try {
-      const updatedCollages = { ...cachedCollages };
-      
-      // Find playlists that need collages.
-      // Skip playlists that already expose a real coverArt id from the server,
-      // since that art will be used directly and the collage is only a fallback.
-      const playlistsNeedingCollages = playlistsData.filter(playlist =>
-        playlist.id && !playlist.coverArt && (!cachedCollages[playlist.id] || forceRefresh)
-      );
-      
-      if (playlistsNeedingCollages.length === 0) {
-        return;
-      }
-      
-      // Wait for interactions to complete before starting background loading
-      InteractionManager.runAfterInteractions(() => {
-        // Batch collage updates to prevent constant re-renders
-        const batchSize = 5;
-        let batchIndex = 0;
-        
-        const loadNextBatch = async () => {
-          const batch = playlistsNeedingCollages.slice(batchIndex, batchIndex + batchSize);
-          if (batch.length === 0) return;
-          
-          const batchUpdates = {};
-          
-          for (const playlist of batch) {
-            try {
-              const collageData = await SubsonicAPI.generatePlaylistCollage(playlist.id, 50);
-              if (collageData) {
-                updatedCollages[playlist.id] = collageData;
-                batchUpdates[playlist.id] = collageData;
-              }
-            } catch (error) {
-              console.error(`Error generating collage for playlist ${playlist.name}:`, error);
-            }
-          }
-          
-          // Only update state if user is not actively scrolling
-          if (!isScrollingRef.current && Object.keys(batchUpdates).length > 0) {
-            setPlaylistCollages(prev => ({ ...prev, ...batchUpdates }));
-            await CacheService.set('playlistCollages', updatedCollages);
-          }
-          
-          batchIndex += batchSize;
-          
-          // Continue loading next batch after a delay
-          if (batchIndex < playlistsNeedingCollages.length) {
-            setTimeout(loadNextBatch, 300);
-          }
-        };
-        
-        loadNextBatch();
-      });
-    } catch (error) {
-      console.error('Error in loadPlaylistCollagesAsync:', error);
     }
   }, []);
 
@@ -1519,8 +1456,7 @@ export default function LibraryScreen({ navigation }) {
         key: 'addToPlaylist',
         label: 'Add to playlist',
         icon: 'playlist-add',
-        disabled: true,
-        onPress: () => {},
+        onPress: () => setAddToPlaylistSong(menuSong),
       },
       {
         key: 'addNext',
@@ -1931,6 +1867,11 @@ export default function LibraryScreen({ navigation }) {
         visible={menuSong !== null}
         onClose={() => setMenuSong(null)}
         options={menuOptions}
+      />
+      <AddToPlaylistModal
+        song={addToPlaylistSong}
+        visible={addToPlaylistSong !== null}
+        onClose={() => setAddToPlaylistSong(null)}
       />
 
       {isSortMenuVisible && (

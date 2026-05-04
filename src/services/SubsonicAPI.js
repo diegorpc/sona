@@ -292,6 +292,18 @@ class SubsonicAPI {
     return await this.request('updatePlaylist', { playlistId, songIndexToRemove });
   }
 
+  // Create a new playlist and optionally add one song to it
+  async createPlaylist(name, songId = null) {
+    const params = { name };
+    if (songId) params.songId = songId;
+    return await this.request('createPlaylist', params);
+  }
+
+  // Add a single song to an existing playlist
+  async addSongToPlaylist(playlistId, songId) {
+    return await this.request('updatePlaylist', { playlistId, songIdToAdd: songId });
+  }
+
   // Get top songs for an artist by name
   async getTopSongs(artistName, count = 50) {
     const response = await this.request('getTopSongs', { artist: artistName, count });

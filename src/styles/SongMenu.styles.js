@@ -32,7 +32,7 @@ export const createStyles = (theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingVertical: 2,
     gap: 14,
   },
   songHeaderArt: {

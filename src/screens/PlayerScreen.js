@@ -11,6 +11,7 @@ import Slider from '@react-native-assets/slider';
 import { MaterialIcons } from '@expo/vector-icons';
 import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
+import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
@@ -32,6 +33,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
   const [sliderValue, setSliderValue] = useState(0);
   const [isStarred, setIsStarred] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [addToPlaylistVisible, setAddToPlaylistVisible] = useState(false);
   const isSlidingRef = useRef(false);
   const topInset = safeAreaInsets?.top ?? 0;
   const bottomInset = safeAreaInsets?.bottom ?? 0;
@@ -116,8 +118,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
         key: 'addToPlaylist',
         label: 'Add to playlist',
         icon: 'playlist-add',
-        disabled: true,
-        onPress: () => {},
+        onPress: () => setAddToPlaylistVisible(true),
       },
       {
         key: 'addNext',
@@ -342,6 +343,11 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         options={menuOptions}
+      />
+      <AddToPlaylistModal
+        song={currentTrack}
+        visible={addToPlaylistVisible}
+        onClose={() => setAddToPlaylistVisible(false)}
       />
     </ScreenBackground>
   );

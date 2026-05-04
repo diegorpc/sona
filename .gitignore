@@ -12,6 +12,7 @@ web-build/
 android/
 .claude/
 .idea/
+.idea/*
 
 # macOS
 .DS_Store
