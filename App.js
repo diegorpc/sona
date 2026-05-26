@@ -17,6 +17,7 @@ import {
 } from '@expo-google-fonts/lexend';
 
 import LoginScreen from './src/screens/LoginScreen';
+import HomeScreen from './src/screens/HomeScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -32,10 +33,22 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+const HomeStack = createStackNavigator();
 const LibraryStack = createStackNavigator();
 const SearchStack = createStackNavigator();
 
 const detailScreenOptions = { headerShown: false };
+
+function HomeStackNavigator() {
+  return (
+    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+      <HomeStack.Screen name="HomeHome" component={HomeScreen} />
+      <HomeStack.Screen name="Artist" component={ArtistScreen} options={detailScreenOptions} />
+      <HomeStack.Screen name="Album" component={AlbumScreen} options={detailScreenOptions} />
+      <HomeStack.Screen name="Playlist" component={PlaylistScreen} options={detailScreenOptions} />
+    </HomeStack.Navigator>
+  );
+}
 
 function LibraryStackNavigator() {
   return (
@@ -68,7 +81,9 @@ function MainTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
-          if (route.name === 'Library') {
+          if (route.name === 'Home') {
+            iconName = 'home';
+          } else if (route.name === 'Library') {
             iconName = 'library-music';
           } else if (route.name === 'Search') {
             iconName = 'search';
@@ -82,7 +97,8 @@ function MainTabs() {
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
-          borderTopColor: theme.colors.borderLowOpacity,
+          borderTopColor: theme.colors.outline,
+          borderTopWidth: 1,
         },
         headerShown: false,
       })}
@@ -90,6 +106,7 @@ function MainTabs() {
         backgroundColor: 'transparent',
       }}
     >
+      <Tab.Screen name="Home" component={HomeStackNavigator} options={{ tabBarLabelStyle: { fontSize: 12, fontWeight: 500, fontFamily: 'Lexend' } }} />
       <Tab.Screen name="Library" component={LibraryStackNavigator} options={{ tabBarLabelStyle: { fontSize: 12, fontWeight: 500, fontFamily: 'Lexend' } }} />
       <Tab.Screen name="Search" component={SearchStackNavigator} options={{ tabBarLabelStyle: { fontSize: 12, fontWeight: 500, fontFamily: 'Lexend' } }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabelStyle: { fontSize: 12, fontWeight: 500, fontFamily: 'Lexend' } }} />

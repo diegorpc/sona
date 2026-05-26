@@ -16,6 +16,7 @@ import SongMenu from '../components/SongMenu';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import { recordPlaylistPlayed } from '../services/RecentPlaylists';
 import PlaylistCollage from '../components/PlaylistCollage';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -170,6 +171,7 @@ export default function PlaylistScreen({ route, navigation }) {
   const handleSongPress = useCallback(async (song, index) => {
     if (!playlistData?.entry) return;
     try {
+      recordPlaylistPlayed(playlist);
       await AudioPlayer.playTrack(song, playlistData.entry, index, {
         contextName: playlist.name,
         contextType: 'playlist',
@@ -184,6 +186,7 @@ export default function PlaylistScreen({ route, navigation }) {
   const playPlaylist = useCallback(async () => {
     if (!playlistData?.entry?.length) return;
     try {
+      recordPlaylistPlayed(playlist);
       await AudioPlayer.playTrack(playlistData.entry[0], playlistData.entry, 0, {
         contextName: playlist.name,
         contextType: 'playlist',

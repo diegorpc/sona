@@ -4,6 +4,7 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
+  Image,
   Animated,
   Easing,
 } from 'react-native';
@@ -18,6 +19,7 @@ import {
   Portal,
   TextInput,
   ProgressBar,
+  IconButton,
 } from 'react-native-paper';
 import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,6 +27,7 @@ import Slider from '@react-native-community/slider';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
+import { getPinnedPlaylistIds, setPinnedPlaylistIds, MAX_PINNED } from '../services/PinnedPlaylists';
 import ScreenBackground from '../components/ScreenBackground';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -72,6 +75,8 @@ export default function SettingsScreen({ navigation }) {
   const [cacheStats, setCacheStats] = useState(null);
   const [maxCacheSize, setMaxCacheSize] = useState(500);
   const [showCacheDialog, setShowCacheDialog] = useState(false);
+  const [playlists, setPlaylists] = useState([]);
+  const [pinnedIds, setPinnedIds] = useState([]);
 
   const chipHighlightAnimations = useRef(
     TABS.reduce((acc, { key }) => {
@@ -91,7 +96,58 @@ export default function SettingsScreen({ navigation }) {
     loadServerInfo();
     loadSettings();
     loadCacheStats();
+    loadPlaylistPins();
   }, []);
+
+  const loadPlaylistPins = async () => {
+    try {
+      const [resp, pinned] = await Promise.all([
+        SubsonicAPI.getPlaylists().catch(() => null),
+        getPinnedPlaylistIds(),
+      ]);
+      const list = resp?.playlist || [];
+      setPlaylists(list);
+      // Drop pins whose playlist was deleted — but only when the fetch succeeded,
+      // so a failed request doesn't wipe valid pins.
+      if (list.length > 0) {
+        const existing = new Set(list.map(p => String(p.id)));
+        const valid = pinned.filter(id => existing.has(id));
+        if (valid.length !== pinned.length) {
+          setPinnedIds(await setPinnedPlaylistIds(valid));
+          return;
+        }
+      }
+      setPinnedIds(pinned);
+    } catch (error) {
+      console.error('Error loading playlist pins:', error);
+    }
+  };
+
+  const togglePin = async (playlistId) => {
+    const key = String(playlistId);
+    let next;
+    if (pinnedIds.includes(key)) {
+      next = pinnedIds.filter(id => id !== key);
+    } else {
+      if (pinnedIds.length >= MAX_PINNED) {
+        Alert.alert('Pin limit reached', `You can pin up to ${MAX_PINNED} playlists. Unpin one first.`);
+        return;
+      }
+      next = [...pinnedIds, key];
+    }
+    setPinnedIds(await setPinnedPlaylistIds(next));
+  };
+
+  // Pinned playlists first (in pin order), then the rest alphabetically.
+  const sortedPlaylists = useMemo(() => {
+    const byId = new Map(playlists.map(p => [String(p.id), p]));
+    const pinned = pinnedIds.map(id => byId.get(String(id))).filter(Boolean);
+    const pinnedSet = new Set(pinned.map(p => String(p.id)));
+    const rest = playlists
+      .filter(p => !pinnedSet.has(String(p.id)))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+    return [...pinned, ...rest];
+  }, [playlists, pinnedIds]);
 
   const loadCacheStats = async () => {
     try {
@@ -341,6 +397,49 @@ export default function SettingsScreen({ navigation }) {
               />
             )}
           />
+        </Card.Content>
+      </Card>
+
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text style={styles.sectionTitle}>Home Playlists</Text>
+          <Text style={styles.sectionDescription}>
+            Pin playlists to keep them in the Home grid. Pinned playlists always show first; the remaining slots fill automatically with recently-listened ones.
+          </Text>
+          <Text style={styles.pinCountHint}>{pinnedIds.length} / {MAX_PINNED} pinned</Text>
+          {sortedPlaylists.length === 0 ? (
+            <Text style={styles.sectionDescription}>No playlists found.</Text>
+          ) : (
+            sortedPlaylists.map((pl, idx) => {
+              const isPinned = pinnedIds.includes(String(pl.id));
+              const coverUrl = pl.coverArt ? SubsonicAPI.getCoverArtUrl(pl.coverArt, 150) : null;
+              return (
+                <React.Fragment key={pl.id}>
+                  {idx > 0 && <Divider />}
+                  <List.Item
+                    title={pl.name}
+                    titleNumberOfLines={1}
+                    description={pl.songCount != null ? `${pl.songCount} songs` : undefined}
+                    onPress={() => togglePin(pl.id)}
+                    left={() =>
+                      coverUrl
+                        ? <Image source={{ uri: coverUrl }} style={styles.playlistThumb} resizeMode="cover" />
+                        : <List.Icon icon="playlist-music" />
+                    }
+                    right={() => (
+                      <IconButton
+                        icon={isPinned ? 'pin' : 'pin-outline'}
+                        size={22}
+                        iconColor={isPinned ? theme.colors.primary : theme.colors.onSurfaceVariant}
+                        onPress={() => togglePin(pl.id)}
+                        accessibilityLabel={isPinned ? `Unpin ${pl.name}` : `Pin ${pl.name}`}
+                      />
+                    )}
+                  />
+                </React.Fragment>
+              );
+            })
+          )}
         </Card.Content>
       </Card>
 

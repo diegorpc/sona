@@ -305,7 +305,7 @@ export default function AddToPlaylistModal({ song, visible, onClose }) {
               }
             />
           )}
-        </Animated.View>
+        </Animated.View>  
       </View>
     </Modal>
   );

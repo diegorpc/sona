@@ -188,4 +188,19 @@ export const createStyles = (theme) => StyleSheet.create({
   divider: {
     marginVertical: 8,
   },
+  // ─── Home playlist pinning ─────────────────────────────────────
+  playlistThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    marginLeft: 8,
+    alignSelf: 'center',
+    backgroundColor: theme.colors.surfaceVariant,
+  },
+  pinCountHint: {
+    fontSize: 12,
+    fontFamily: 'Lexend_500Medium',
+    color: theme.colors.onSurfaceVariant,
+    marginBottom: 12,
+  },
 });

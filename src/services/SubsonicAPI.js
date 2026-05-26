@@ -134,8 +134,9 @@ class SubsonicAPI {
 
   // Get paginated album lists with sorting
   // Valid types: random, newest, highest, frequent, recent, alphabeticalByName, alphabeticalByArtist, starred, byYear, byGenre
-  async getAlbumList(type = 'alphabeticalByName', size = 500, offset = 0) {
-    const params = { type, size };
+  // extraParams carries type-specific args (e.g. fromYear/toYear for byYear, genre for byGenre)
+  async getAlbumList(type = 'alphabeticalByName', size = 500, offset = 0, extraParams = {}) {
+    const params = { type, size, ...extraParams };
     if (offset) params.offset = offset;
 
     const response = await this.request('getAlbumList2', params);

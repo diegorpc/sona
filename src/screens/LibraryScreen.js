@@ -15,6 +15,9 @@ import {
 import { Text, ActivityIndicator, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
+import { useFocusEffect } from '@react-navigation/native';
+import { getPlaylistPlayTimes, compareByRecentlyListened } from '../services/RecentPlaylists';
+import { getRandomAlbums } from '../services/RandomAlbums';
 import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
@@ -50,6 +53,7 @@ const LIKED_SORT_OPTIONS = [
 
 // Sort options for playlists
 const PLAYLIST_SORT_OPTIONS = [
+  { key: 'recentlyListened', label: 'Recently Listened', icon: 'history' },
   { key: 'default', label: 'Default', icon: 'list' },
   { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
   { key: 'dateCreated', label: 'Date Created', icon: 'schedule' },
@@ -68,6 +72,7 @@ const ALBUM_SORT_OPTIONS = [
   { key: 'frequent', label: 'Frequently Listened', icon: 'repeat' },
   { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
   { key: 'dateReleased', label: 'Date Released', icon: 'event' },
+  { key: 'random', label: 'Random', icon: 'shuffle' },
 ];
 
 const DEFAULT_SORT_OPTION = 'dateLoved';
@@ -75,6 +80,21 @@ const LIKED_DEFAULT_SORT_OPTION = 'dateLoved';
 const PLAYLIST_DEFAULT_SORT_OPTION = 'alphabetical';
 const ARTIST_DEFAULT_SORT_OPTION = 'alphabetical';
 const ALBUM_DEFAULT_SORT_OPTION = 'newest';
+
+const DEFAULT_SORT_BY_VIEW = {
+  liked: LIKED_DEFAULT_SORT_OPTION,
+  playlists: PLAYLIST_DEFAULT_SORT_OPTION,
+  artists: ARTIST_DEFAULT_SORT_OPTION,
+  albums: ALBUM_DEFAULT_SORT_OPTION,
+};
+
+const ALBUM_SORT_TYPE_MAP = {
+  recent: 'recent',
+  newest: 'newest',
+  frequent: 'frequent',
+  alphabetical: 'alphabeticalByName',
+  random: 'random',
+};
 
 const ALL_SORT_OPTIONS = [
   ...LIKED_SORT_OPTIONS,
@@ -361,9 +381,13 @@ const ListItem = memo(function ListItem({
   );
 });
 
-export default function LibraryScreen({ navigation }) {
+export default function LibraryScreen({ navigation, route }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Deep-link entry (e.g. "See All" from Home): land on a specific tab + sort.
+  const initialTab = route?.params?.initialTab || 'liked';
+  const initialSort = route?.params?.initialSort || DEFAULT_SORT_BY_VIEW[initialTab] || DEFAULT_SORT_OPTION;
   const { playTrack, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
   const {
     playerState: { currentTrack },
@@ -374,16 +398,17 @@ export default function LibraryScreen({ navigation }) {
   const [albums, setAlbums] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
   const [playlists, setPlaylists] = useState([]);
+  const [playlistPlayTimes, setPlaylistPlayTimes] = useState({});
   const [playlistCollages, setPlaylistCollages] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState('liked'); // 'liked', 'playlists', 'albums', 'artists'
-  const [chipDisplayOrder, setChipDisplayOrder] = useState(() => buildChipOrder('liked'));
-  const [activeChip, setActiveChip] = useState('liked');
+  const [viewMode, setViewMode] = useState(initialTab); // 'liked', 'playlists', 'albums', 'artists'
+  const [chipDisplayOrder, setChipDisplayOrder] = useState(() => buildChipOrder(initialTab));
+  const [activeChip, setActiveChip] = useState(initialTab);
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [headerContentWidth, setHeaderContentWidth] = useState(0);
-  const [sortOption, setSortOption] = useState(DEFAULT_SORT_OPTION);
+  const [sortOption, setSortOption] = useState(initialSort);
   const [sortDirection, setSortDirection] = useState('desc');
   const [isSortMenuVisible, setIsSortMenuVisible] = useState(false);
   const [sortMenuAnchor, setSortMenuAnchor] = useState(null);
@@ -406,7 +431,7 @@ export default function LibraryScreen({ navigation }) {
   const currentViewModeData = useRef(null); // Track current view data to prevent race conditions
   const chipAnimations = useRef({}).current;
   const chipHighlightAnimations = useRef({}).current;
-  const previousActiveChipRef = useRef('liked');
+  const previousActiveChipRef = useRef(initialTab);
   const chipLayoutsRef = useRef({});
   const pendingChipAnimation = useRef(null);
   const searchReveal = useRef(new Animated.Value(0)).current;
@@ -428,6 +453,10 @@ export default function LibraryScreen({ navigation }) {
 
     if (targetViewMode === 'playlists') {
       if (targetSortOption === 'default') return () => 0;
+      if (targetSortOption === 'recentlyListened') {
+        const compare = compareByRecentlyListened(playlistPlayTimes);
+        return (a, b) => d * compare(a, b);
+      }
       if (targetSortOption === 'dateCreated') {
         const dateFields = ['created', 'dateAdded', 'dateCreated'];
         return (a, b) => {
@@ -497,7 +526,7 @@ export default function LibraryScreen({ navigation }) {
       if (aCount !== bCount) return d * (bCount - aCount);
       return alphabeticalCompare(a, b);
     };
-  }, []);
+  }, [playlistPlayTimes]);
 
   const sortComparator = useMemo(() => {
     return createSortComparator(sortOption, viewMode, sortDirection);
@@ -713,27 +742,32 @@ export default function LibraryScreen({ navigation }) {
       await CacheService.set('artists', allArtists);
       setArtists(allArtists);
 
-      // Load albums using proper API with sort type
-      const albumSortTypeMap = {
-        recent: 'recent',
-        newest: 'newest',
-        frequent: 'frequent',
-        alphabetical: 'alphabeticalByName',
-      };
-      
-      const albumCacheKey = `albums_${sortOption}`;
-      let allAlbums = await CacheService.getAsync(albumCacheKey);
-      
-      if (!allAlbums || forceRefresh) {
-        const apiSortType = albumSortTypeMap[sortOption] || 'recent';
-        console.log(`Loading albums with sort type: ${apiSortType}`);
-        
+      // Load albums using proper API with sort type.
+      // Random is fetched fresh (single batch, never cached) so it reshuffles each load.
+      let allAlbums;
+      if (sortOption === 'random') {
+        // Shared, persisted random ordering (same as Home); reset only via refresh.
         try {
-          allAlbums = await SubsonicAPI.getAllAlbums(apiSortType, 2000);
-          await CacheService.set(albumCacheKey, allAlbums);
+          allAlbums = await getRandomAlbums();
         } catch (error) {
-          console.error('Error loading albums:', error);
+          console.error('Error loading random albums:', error);
           allAlbums = [];
+        }
+      } else {
+        const albumCacheKey = `albums_${sortOption}`;
+        allAlbums = await CacheService.getAsync(albumCacheKey);
+
+        if (!allAlbums || forceRefresh) {
+          const apiSortType = ALBUM_SORT_TYPE_MAP[sortOption] || 'recent';
+          console.log(`Loading albums with sort type: ${apiSortType}`);
+
+          try {
+            allAlbums = await SubsonicAPI.getAllAlbums(apiSortType, 2000);
+            await CacheService.set(albumCacheKey, allAlbums);
+          } catch (error) {
+            console.error('Error loading albums:', error);
+            allAlbums = [];
+          }
         }
       }
       setAlbums(allAlbums);
@@ -786,24 +820,24 @@ export default function LibraryScreen({ navigation }) {
   // Load albums with specific sort when needed - returns the albums directly
   const loadAlbumsWithSort = useCallback(async (albumSortOption) => {
     try {
-      const albumSortTypeMap = {
-        recent: 'recent',
-        newest: 'newest',
-        frequent: 'frequent',
-        alphabetical: 'alphabeticalByName',
-      };
-      
+      // Shared, persisted random ordering (same as Home); reset only via refresh.
+      if (albumSortOption === 'random') {
+        const randomAlbums = await getRandomAlbums();
+        setAlbums(randomAlbums);
+        return randomAlbums;
+      }
+
       const albumCacheKey = `albums_${albumSortOption}`;
       let allAlbums = await CacheService.getAsync(albumCacheKey);
-      
+
       if (!allAlbums) {
-        const apiSortType = albumSortTypeMap[albumSortOption] || 'recent';
+        const apiSortType = ALBUM_SORT_TYPE_MAP[albumSortOption] || 'recent';
         console.log(`Loading albums with sort type: ${apiSortType}`);
-        
+
         allAlbums = await SubsonicAPI.getAllAlbums(apiSortType, 2000);
         await CacheService.set(albumCacheKey, allAlbums);
       }
-      
+
       setAlbums(allAlbums);
       return allAlbums; // Return the albums for immediate use
     } catch (error) {
@@ -1034,25 +1068,20 @@ export default function LibraryScreen({ navigation }) {
     isScrollingRef.current = false;
   }, []);
 
-  const runViewModeTransition = useCallback(async (mode) => {
+  const runViewModeTransition = useCallback(async (mode, sortOverride = null) => {
     try {
       // Mark transition as pending
       pendingViewModeChange.current = mode;
-      
+
       // Fade out the library content FIRST
       await animateListOpacityTo(0, 300);
-      
+
       // Clear displayed data immediately to prevent flash
       setDisplayedData([]);
-      
-      // Get default sort for the new mode
-      const defaultSortByView = {
-        liked: LIKED_DEFAULT_SORT_OPTION,
-        playlists: PLAYLIST_DEFAULT_SORT_OPTION,
-        artists: ARTIST_DEFAULT_SORT_OPTION,
-        albums: ALBUM_DEFAULT_SORT_OPTION,
-      };
-      const targetSort = defaultSortByView[mode] || DEFAULT_SORT_OPTION;
+
+      // Use an explicit sort when deep-linked (e.g. "See All" from Home),
+      // otherwise fall back to the tab's default sort.
+      const targetSort = sortOverride || DEFAULT_SORT_BY_VIEW[mode] || DEFAULT_SORT_OPTION;
       
       // For albums, load the correct sort data BEFORE switching
       let albumsForMode = albums;
@@ -1093,8 +1122,11 @@ export default function LibraryScreen({ navigation }) {
       const sortedData = baseData.slice().sort(comparator);
       const paginatedNewData = sortedData.slice(0, ITEMS_PER_PAGE);
       
-      // NOW change view mode and update data atomically
+      // NOW change view mode and update data atomically.
+      // Set previousViewModeRef first so the sort-reset effect doesn't clobber targetSort.
+      previousViewModeRef.current = mode;
       setViewMode(mode);
+      setSortOption(targetSort);
       setSortDirection('desc');
       setCurrentPage(0);
       setDisplayedData(paginatedNewData);
@@ -1158,6 +1190,63 @@ export default function LibraryScreen({ navigation }) {
     runViewModeTransition(mode);
 
   }, [activeChip, runViewModeTransition, isSortMenuVisible, closeSortMenu]);
+
+  // Switch tab + sort together, used for deep-links from Home ("See All").
+  // Unlike handleViewModePress it allows the same tab with a different sort.
+  const applyDeepLink = useCallback((mode, sort) => {
+    if (isAnimatingList.current) {
+      return;
+    }
+
+    const targetSort = sort || DEFAULT_SORT_BY_VIEW[mode] || DEFAULT_SORT_OPTION;
+    if (mode === activeChip && targetSort === sortOption) {
+      return;
+    }
+
+    if (isSortMenuVisible) {
+      closeSortMenu();
+    }
+
+    isAnimatingList.current = true;
+    setActiveChip(mode);
+
+    const previousLayouts = Object.keys(chipLayoutsRef.current).reduce((acc, key) => {
+      acc[key] = { ...chipLayoutsRef.current[key] };
+      return acc;
+    }, {});
+    pendingChipAnimation.current = previousLayouts;
+
+    setChipDisplayOrder(buildChipOrder(mode));
+    chipScrollRef.current?.scrollTo({ x: 0, animated: true });
+
+    runViewModeTransition(mode, targetSort);
+  }, [activeChip, sortOption, runViewModeTransition, isSortMenuVisible, closeSortMenu]);
+
+  // Consume deep-link params on focus. A fresh mount already initializes from
+  // route.params via useState, so only apply here when the screen was already
+  // mounted (i.e. returning to the Library tab via "See All").
+  useFocusEffect(
+    useCallback(() => {
+      const tab = route?.params?.initialTab;
+      if (!tab) {
+        return;
+      }
+      if (hasLoadedInitialData.current) {
+        applyDeepLink(tab, route?.params?.initialSort || null);
+      }
+      navigation.setParams({ initialTab: undefined, initialSort: undefined });
+    }, [route?.params?.initialTab, route?.params?.initialSort, applyDeepLink, navigation])
+  );
+
+  // Keep playlist listen-times fresh so the "Recently Listened" sort reflects
+  // playlists played since the screen mounted.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      getPlaylistPlayTimes().then(times => { if (active) setPlaylistPlayTimes(times); });
+      return () => { active = false; };
+    }, [])
+  );
 
   const handleHeaderLayout = useCallback(({ nativeEvent }) => {
     const width = nativeEvent?.layout?.width ?? 0;
@@ -1384,6 +1473,35 @@ export default function LibraryScreen({ navigation }) {
     await animateListOpacityTo(1, 280);
     isAnimatingList.current = false;
   }, [sortDirection, sortOption, viewMode, artists, albums, likedSongs, playlists, createSortComparator, animateListOpacityTo]);
+
+  // For the random album sort, the direction toggle is replaced by a refresh
+  // action that reshuffles and re-persists the shared random ordering (the reset).
+  const refreshRandomAlbums = useCallback(async () => {
+    if (isAnimatingList.current) return;
+    isAnimatingList.current = true;
+    try {
+      await animateListOpacityTo(0, 180);
+      setDisplayedData([]);
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+
+      const fresh = await getRandomAlbums(true);
+      setAlbums(fresh);
+      const paginatedNewData = fresh.slice(0, ITEMS_PER_PAGE);
+
+      setCurrentPage(0);
+      setDisplayedData(paginatedNewData);
+      setHasMoreData(fresh.length > ITEMS_PER_PAGE);
+
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await animateListOpacityTo(1, 280);
+    } catch (error) {
+      console.error('Error refreshing random albums:', error);
+      await animateListOpacityTo(1, 280);
+    } finally {
+      isAnimatingList.current = false;
+    }
+  }, [animateListOpacityTo]);
 
   // Ref to the full sorted+filtered list so handleItemPress can enqueue all liked songs,
   // not just the currently-displayed page.
@@ -1649,21 +1767,37 @@ export default function LibraryScreen({ navigation }) {
         <Text style={styles.sortTriggerLabel}>{SORT_OPTION_LABELS[sortOption]}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.sortDirectionButton}
-        onPress={handleSortDirectionToggle}
-        accessibilityRole="button"
-        accessibilityLabel={sortDirection === 'desc' ? 'Sort ascending' : 'Sort descending'}
-        activeOpacity={0.7}
-      >
-        <MaterialIcons
-          name={sortDirection === 'desc' ? 'arrow-downward' : 'arrow-upward'}
-          size={16}
-          color={theme.colors.onSurfaceVariant}
-        />
-      </TouchableOpacity>
+      {viewMode === 'albums' && sortOption === 'random' ? (
+        <TouchableOpacity
+          style={styles.sortDirectionButton}
+          onPress={refreshRandomAlbums}
+          accessibilityRole="button"
+          accessibilityLabel="Shuffle random albums"
+          activeOpacity={0.7}
+        >
+          <MaterialIcons
+            name="refresh"
+            size={17}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={styles.sortDirectionButton}
+          onPress={handleSortDirectionToggle}
+          accessibilityRole="button"
+          accessibilityLabel={sortDirection === 'desc' ? 'Sort ascending' : 'Sort descending'}
+          activeOpacity={0.7}
+        >
+          <MaterialIcons
+            name={sortDirection === 'desc' ? 'arrow-downward' : 'arrow-upward'}
+            size={16}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </TouchableOpacity>
+      )}
     </View>
-  ), [sortOption, sortDirection, showSortOptions, isSortMenuVisible, handleSortDirectionToggle, theme]);
+  ), [viewMode, sortOption, sortDirection, showSortOptions, isSortMenuVisible, handleSortDirectionToggle, refreshRandomAlbums, theme]);
 
   const backgroundArt = useMemo(() => {
     if (currentTrack?.coverArt) {

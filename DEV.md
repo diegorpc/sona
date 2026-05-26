@@ -31,6 +31,7 @@ src/
 │   └── ThemeContext.js           # Accent color state, persists to AsyncStorage, exposes useTheme()
 ├── screens/
 │   ├── LoginScreen.js            # Server URL + credentials, calls SubsonicAPI.initialize()
+│   ├── HomeScreen.js             # Landing tab: recently-listened playlists grid + horizontal album sections
 │   ├── LibraryScreen.js          # Main browser: animated chip tabs + per-tab sort controls + FlatList
 │   ├── SearchScreen.js           # search3 unified search (artists, albums, songs)
 │   ├── SettingsScreen.js         # Animated chip tabs: Appearance, General, Server, Storage
@@ -44,6 +45,9 @@ src/
 │   ├── AudioPlayer.js            # expo-audio singleton: playback, queues, persistence, listeners
 │   ├── CacheService.js           # AsyncStorage-backed LRU cache for library data
 │   ├── PlayerOverlayController.js # Singleton: expandPlayerOverlay / collapsePlayerOverlay
+│   ├── RecentPlaylists.js        # Tracks playlist listen-times; sort helpers for "Recently Listened"
+│   ├── PinnedPlaylists.js        # User-pinned Home playlists (set in Settings); merge helper for the grid
+│   ├── RandomAlbums.js           # Shared, persisted random album ordering (Home + Library); reset on demand
 │   └── NavigationService.js      # Navigation ref for imperative navigation outside components
 ├── styles/
 │   └── <Screen>.styles.js        # One per screen/component; all export createStyles(theme)
@@ -58,8 +62,9 @@ Stack Navigator (root)
 ├── Login (unauthenticated gate)
 └── Main
     ├── Bottom Tab Navigator
-    │   ├── Library  → LibraryScreen
-    │   ├── Search   → SearchScreen
+    │   ├── Home     → HomeStack   (HomeScreen + Artist/Album/Playlist)   ← default/first tab
+    │   ├── Library  → LibraryStack (LibraryScreen + Artist/Album/Playlist)
+    │   ├── Search   → SearchStack  (SearchScreen + Artist/Album/Playlist)
     │   └── Settings → SettingsScreen
     ├── Artist  (stack push)
     ├── Album   (stack push)
@@ -69,6 +74,8 @@ PlayerOverlay — mounted at app root, not in navigator
   Layers (bottom to top): MiniPlayer → PlayerScreen → QueueScreen
   Gestures: swipe-down collapses, swipe-up shows queue
 ```
+
+Home, Library, and Search each have their own stack so detail screens (Artist/Album/Playlist) push within the active tab. "See All" on Home is cross-tab: `navigation.navigate('Library', { screen: 'LibraryHome', params: { initialTab, initialSort } })`.
 
 ## Theme system
 
@@ -124,7 +131,7 @@ Key methods:
 | `getArtist(id)` | `getArtist` | artist + album array |
 | `getArtistImage(id)` | `getArtistInfo` | tries largeImageUrl, mediumImageUrl, smallImageUrl |
 | `getAlbum(id)` | `getAlbum` | album + song array |
-| `getAlbumList(type, size, offset)` | `getAlbumList2` | valid types: random, newest, highest, frequent, recent, alphabeticalByName, alphabeticalByArtist, starred, byYear, byGenre |
+| `getAlbumList(type, size, offset, extraParams?)` | `getAlbumList2` | valid types: random, newest, highest, frequent, recent, alphabeticalByName, alphabeticalByArtist, starred, byYear, byGenre. `extraParams` spreads type-specific args (e.g. `{ fromYear, toYear }` for byYear — fromYear > toYear ⇒ newest-released first) |
 | `getAllAlbums(type, max)` | batched | fetches in 500-item batches up to max |
 | `search(query, ...)` | `search3` | returns `searchResult3` with artist/album/song arrays |
 | `getTopSongs(artistName, count)` | `getTopSongs` | by artist name (not ID); requires API ≥ 1.13.0 |
@@ -158,6 +165,26 @@ Listener pattern: `addListener(fn)` / `removeListener(fn)` — `fn(state)` calle
 
 Singleton. In-memory `Map` + AsyncStorage backing. Default max 500 MB. Metadata key `@sona_cache_metadata` stores per-entry sizes and timestamps. LRU eviction when limit exceeded. Used by LibraryScreen for artist/album/playlist lists.
 
+## RecentPlaylists
+
+Module at `src/services/RecentPlaylists.js`. Persists an `{ [playlistId]: timestamp }` map under AsyncStorage key `playlistPlayTimes`.
+- `recordPlaylistPlayed(playlist)` — stamps `Date.now()` for the playlist id (called from PlaylistScreen on play)
+- `getPlaylistPlayTimes()` — returns the map
+- `compareByRecentlyListened(playTimes)` — descending comparator: listen-time, then created-date fallback (`getPlaylistCreatedTimestamp`), then name. Shared by HomeScreen and LibraryScreen so both order playlists identically.
+
+## PinnedPlaylists
+
+Module at `src/services/PinnedPlaylists.js`. Stores the user's pinned Home playlists (an ordered id array) under AsyncStorage key `pinnedPlaylistIds`, capped at `MAX_PINNED` (6). Pins are managed in SettingsScreen → General → "Home Playlists".
+- `getPinnedPlaylistIds()` / `setPinnedPlaylistIds(ids)` — read/write (dedupes, clamps to 6)
+- `buildHomePlaylists(allPlaylists, pinnedIds, playTimes, count)` — pinned playlists first (in pin order), then `compareByRecentlyListened` fills remaining slots. Pins not present in `allPlaylists` (deleted) are skipped, so they revert to the fallback. Used by HomeScreen.
+
+## RandomAlbums
+
+Module at `src/services/RandomAlbums.js`. Holds the single random album ordering shared by Home's "Random" row and Library's "Random" sort, persisted under AsyncStorage key `randomAlbums` (raw AsyncStorage, not CacheService, so it isn't LRU-evicted).
+- `getRandomAlbums(force = false)` — returns the persisted ordering if present; otherwise (or when `force`) fetches `getAlbumList('random', 500)`, persists it, and returns it. `force` is the reset, triggered by Library's refresh button.
+
+Because both surfaces read the same key, Home's row and Library show the same shuffle until a reset.
+
 ## PlayerOverlay
 
 Mounted outside the navigator at app root. Three vertical layers controlled by `Animated.Value overlayY`:
@@ -169,14 +196,29 @@ Mounted outside the navigator at app root. Three vertical layers controlled by `
 
 ## Screen-specific details
 
+### HomeScreen
+Default/first bottom tab. Background: `ScreenBackground` with current track art (mirrors LibraryScreen). Content fades in via `listOpacity` once albums load. Sections, top to bottom:
+- **Title** "Home" (shared page-title style: 28px Lexend_700Bold + accent text-shadow).
+- **Playlists** — 2-column grid of up to 6 wide chips (cover art left, name right). Built by `buildHomePlaylists(getPlaylists(), pinnedIds, playTimes, 6)`: user-pinned playlists (from Settings) first in pin order, then `compareByRecentlyListened` fills the rest (most-recently-listened, then most-recently-created). Always fills to 6 when enough playlists exist; hidden when there are none. A pinned playlist that has been deleted drops out and reverts to the fallback.
+- **Four horizontal album rows** (max 20 each): **Recently Played** (`getAlbumList('recent')`), **Recently Added** (`newest`), **Recently Released** (`byYear`, `fromYear=currentYear`/`toYear=0`), **Random** (first 20 of `getRandomAlbums()` — the shared persisted ordering, see RandomAlbums). Empty sections auto-hide.
+- Each section header has a right-aligned "See All →" that deep-links into LibraryScreen on the matching tab + sort (see Navigation). The **Random** "See All" just passes `initialSort: 'random'` — Library reads the same persisted ordering, so the two match without passing data. The **Playlists** "See All" passes `initialSort: 'recentlyListened'`.
+
+Playlists ordering and the random section refresh on focus (a Library reset re-persists the shared random set). Pull-to-refresh reloads albums + playlists.
+
 ### LibraryScreen
 Chip tabs: Liked Songs, Playlists, Albums, Artists. Each tab has its own sort options stored in AsyncStorage. Albums fetched via `getAllAlbums(type)` where `type` maps to Subsonic sort keys. Artists fetched once via `getArtists()`. List fades in via `listOpacity` Animated.Value (0→1, 400ms) after data loads — pattern to copy for any background-loaded list.
 
 Sort options per tab:
 - Liked Songs: Recently Listened, Recently Added, Date Loved, Alphabetical
-- Playlists: Default, Alphabetical, Date Created
-- Albums: Recently Listened, Recently Added, Frequently Listened, Alphabetical, Date Released
+- Playlists: Recently Listened, Default, Alphabetical, Date Created
+- Albums: Recently Listened, Recently Added, Frequently Listened, Alphabetical, Date Released, Random
 - Artists: Alphabetical, Album Count
+
+**Playlists "Recently Listened"** uses the same `compareByRecentlyListened` as Home (listen-time desc, then created-date fallback); listen-times are read from `RecentPlaylists` into `playlistPlayTimes` state (refreshed on focus) and feed `createSortComparator`.
+
+**Albums "Random"** reads the shared persisted ordering via `getRandomAlbums()` (RandomAlbums), so it matches Home and stays stable across navigation. When Random is the active album sort, the sort-direction toggle is replaced by a **refresh button** (`refreshRandomAlbums`) that calls `getRandomAlbums(true)` to reshuffle and re-persist (the only reset).
+
+**Deep-link params** (`route.params`, consumed then cleared): `initialTab`, `initialSort`. A fresh (lazy) mount initializes `viewMode`/`sortOption` from these via `useState`; an already-mounted Library applies them on focus via `applyDeepLink` → `runViewModeTransition(mode, sortOverride)`.
 
 ### ArtistScreen
 - Header: circular artist image (falls back to `getCoverArtUrl(artist.id)`)
@@ -195,6 +237,7 @@ Sort options per tab:
 ### PlaylistScreen
 - Song rows with 44×44 cover art, `resizeMode="contain"` in fixed container (no JS resize on load)
 - Collage: if `generatePlaylistCollage` returns `{ type: 'collage' }`, `PlaylistCollage` renders a 2×2 grid
+- Calls `recordPlaylistPlayed(playlist)` (RecentPlaylists) on both single-song play and play-all, feeding the "Recently Listened" ordering on Home and in Library
 
 ### PlayerScreen
 - Rendered inside `PlayerOverlay`, receives `onClose`, `onShowQueue`, `onNavigateToArtist`, `onNavigateToAlbum`, `safeAreaInsets` as props
@@ -206,6 +249,7 @@ Sort options per tab:
 ### SettingsScreen
 Chip tabs: Appearance, General, Server, Storage.
 - Appearance: accent color picker using `accentPalettes` from theme.js
+- General: playback switches; **Home Playlists** pin manager — lists all playlists (pinned first), each with a pin/unpin `IconButton`; persists via `PinnedPlaylists` (`MAX_PINNED` = 6). Reflected on Home on next focus.
 - Server: re-login flow via `SubsonicAPI.initialize()` then `CommonActions.reset`
 - Storage: cache stats from `CacheService.getStats()`, clear cache button
 

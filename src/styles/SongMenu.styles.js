@@ -23,7 +23,7 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   handleBar: {
     alignSelf: 'center',
-    paddingVertical: 8,
+    paddingVertical: 4,
     paddingHorizontal: 32,
     marginTop: 2,
   },
@@ -32,7 +32,7 @@ export const createStyles = (theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 2,
+    paddingBottom: 12,
     gap: 14,
   },
   songHeaderArt: {
