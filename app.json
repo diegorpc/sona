@@ -19,7 +19,6 @@
       "bundleIdentifier": "com.yourname.sona",
       "infoPlist": {
         "UIBackgroundModes": [
-          "audio",
           "audio"
         ],
         "NSAppleMusicUsageDescription": "This app plays music from your personal server",
@@ -53,7 +52,8 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-asset"
     ],
     "sdkVersion": "54.0.0",
     "extra": {

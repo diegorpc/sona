@@ -1,10 +1,10 @@
 # sona – Subsonic/Navidrome Client (React Native / Expo)
 
-iOS-first music streaming client. Development on Windows, tested via Expo Go on physical iOS device.
+iOS-first music streaming client. Development on Linux, tested via Expo Go on physical iOS device.
 
 ## Stack
 
-- **React Native** 0.81.4 + **React** 19.1.0 + **Expo** ~54
+- **React Native** 0.81.5 + **React** 19.1.0 + **Expo** ~54
 - **expo-audio** for playback (not expo-av)
 - **react-native-paper** (MD3) for base UI components
 - **@expo/vector-icons** (MaterialIcons throughout)
@@ -14,13 +14,14 @@ iOS-first music streaming client. Development on Windows, tested via Expo Go on 
 - **@expo-google-fonts/lexend** (Lexend_400Regular, _500Medium, _600SemiBold, _700Bold)
 - **axios** + **crypto-js** for Subsonic API
 - **@react-native-async-storage/async-storage** for persistence
-- `@react-native-assets/slider` for the player seek bar (not the community slider)
+- `@react-native-assets/slider` for the player seek bar; `@react-native-community/slider` only for the Settings cache-size slider
 
 ## Project layout
 
 ```
 src/
 ├── components/
+│   ├── AddToPlaylistModal.js     # Bottom sheet: search/create playlists, add a song (used by SongMenu surfaces)
 │   ├── MiniPlayer.js             # Collapsed player bar (tappable, swipe-up gesture handled by PlayerOverlay)
 │   ├── PlayerOverlay.js          # Full-screen overlay: MiniPlayer + PlayerScreen + QueueScreen stacked
 │   ├── PlaylistCollage.js        # 2×2 cover art grid component used as a fallback in PlaylistScreen
@@ -137,6 +138,10 @@ Key methods:
 | `getTopSongs(artistName, count)` | `getTopSongs` | by artist name (not ID); requires API ≥ 1.13.0 |
 | `getStarred()` | `getStarred` | returns `starred` with song/album/artist arrays |
 | `getArtistAppearsIn(artist, excludeIds)` | `search3` | finds albums where artist has songs but isn't album artist |
+| `getPlaylists()` / `getPlaylist(id)` | `getPlaylists` / `getPlaylist` | playlist list / detail with songs |
+| `createPlaylist(name, songId?)` | `createPlaylist` | optionally seeds with one song |
+| `addSongToPlaylist(playlistId, songId)` | `updatePlaylist` | via `songIdToAdd` |
+| `removeFromPlaylist(playlistId, index)` | `updatePlaylist` | via `songIndexToRemove` (0-based) |
 | `getStreamUrl(songId, maxBitRate?)` | `stream` | returns URL string (not a request) |
 | `getCoverArtUrl(id, size)` | `getCoverArt` | returns URL string |
 | `scrobble(songId, submission)` | `scrobble` | call on track start |
@@ -148,16 +153,17 @@ Key methods:
 
 Singleton at `src/services/AudioPlayer.js`. Uses `createAudioPlayer` from `expo-audio`.
 
-State fields: `currentTrack`, `playlist[]`, `currentIndex`, `isPlaying`, `position` (ms), `duration` (ms), `isLoading`, `priorityQueue[]`, `queueContext { name, type, id }`, `currentTrackSource ('context'|'priority')`
+State fields: `currentTrack`, `playlist[]`, `currentIndex`, `isPlaying`, `position` (ms), `duration` (ms), `isLoading`, `priorityQueue[]`, `contextQueue { name, type, id }`, `currentTrackSource ('context'|'priority')`, `shuffle` (bool), `repeatMode ('none'|'all'|'one')`
 
 Queue model:
 - **playlist** — the context queue (album, artist, playlist)
 - **priorityQueue** — tracks inserted to play next; consumed before advancing playlist
 - `currentTrackSource` distinguishes which queue the current track came from
+- `toggleShuffle()` shuffles upcoming context tracks (restores `originalUpcoming` on toggle off); `cycleRepeatMode()` cycles none → all → one
 
 `playTrack(track, playlist, index, options)` — stops current, sets state, persists to AsyncStorage, creates new `createAudioPlayer` instance. UI updates immediately via `notifyListeners()`.
 
-Persistence keys: `currentTrack`, `currentPlaylist`, `currentIndex`, `currentPosition`, `isPlaying`, `audioPlayerPriorityQueue`, `audioPlayerQueueContext`, `audioPlayerCurrentTrackSource`.
+Persistence keys: `currentTrack`, `currentPlaylist`, `currentIndex`, `currentPosition`, `isPlaying`, `audioPlayerPriorityQueue`, `audioPlayerQueueContext`, `audioPlayerCurrentTrackSource`, `audioPlayerShuffle`, `audioPlayerRepeatMode`.
 
 Listener pattern: `addListener(fn)` / `removeListener(fn)` — `fn(state)` called on every state change. `PlayerContext` subscribes and exposes state via `usePlayer()`.
 
@@ -246,6 +252,11 @@ Sort options per tab:
 - Long titles: `react-native-text-ticker` for marquee scroll
 - Star toggle: calls `SubsonicAPI.star/unstar` directly, local `isStarred` state
 
+### AddToPlaylistModal
+- Bottom sheet (60% height, capped 520px) rendered by PlayerScreen, QueueScreen, and LibraryScreen; opened from SongMenu's "Add to playlist" action
+- Search filter over `getPlaylists()`; create-new-playlist row calls `createPlaylist(name, songId)`; row tap calls `addSongToPlaylist`
+- Expands to fullscreen when the keyboard shows (animated height + corner radius), collapses on hide
+
 ### SettingsScreen
 Chip tabs: Appearance, General, Server, Storage.
 - Appearance: accent color picker using `accentPalettes` from theme.js
@@ -276,8 +287,9 @@ SubsonicAPI.getSomeData()
 ## Running
 
 ```bash
-npm start                        # Expo dev server; scan QR with Expo Go on iPhone
-npm start -- --reset-cache       # Clear Metro cache
+npx expo start --go              # Expo dev server for Expo Go; scan QR on iPhone
+npx expo start                   # Defaults to dev-client mode (expo-dev-client is installed); press s to switch to Expo Go
+npx expo start --clear           # Clear Metro cache
 ```
 
 Server credentials are stored in AsyncStorage (`serverConfig`). To reset auth, use Settings → Server tab or clear app storage.
