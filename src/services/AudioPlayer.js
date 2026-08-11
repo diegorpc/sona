@@ -2,6 +2,8 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from './SubsonicAPI';
+import SongCache from './SongCache';
+import { getAppSettings } from './AppSettings';
 
 const PRIORITY_QUEUE_KEY = 'audioPlayerPriorityQueue';
 const CONTEXT_QUEUE_KEY = 'audioPlayerQueueContext';
@@ -171,10 +173,10 @@ class AudioPlayerService {
 
       this.persistQueueState();
 
-      const streamUrl = SubsonicAPI.getStreamUrl(track.id);
+      const sourceUri = await this.resolveSourceUri(track.id);
 
       this.sound = createAudioPlayer(
-        { uri: streamUrl },
+        { uri: sourceUri },
         {
           loop: false,
           volume: 1.0,
@@ -290,6 +292,18 @@ class AudioPlayerService {
     }
   }
 
+  // Prefer a cached local file; otherwise stream (transcoded to MP3 320 kbps
+  // unless original-quality streaming is enabled in settings).
+  async resolveSourceUri(trackId) {
+    const cachedUri = await SongCache.getCachedUri(trackId).catch(() => null);
+    if (cachedUri) return cachedUri;
+    const settings = await getAppSettings();
+    return SubsonicAPI.getStreamUrl(
+      trackId,
+      settings.originalQualityStreaming ? {} : { format: 'mp3', maxBitRate: 320 }
+    );
+  }
+
   async initializeTrackForPlayback(track, position = 0, shouldPlay = false) {
     if (!track) {
       return;
@@ -301,9 +315,9 @@ class AudioPlayerService {
 
       await this.stopCurrentTrack();
 
-      const streamUrl = SubsonicAPI.getStreamUrl(track.id);
+      const sourceUri = await this.resolveSourceUri(track.id);
       this.sound = createAudioPlayer(
-        { uri: streamUrl },
+        { uri: sourceUri },
         {
           loop: false,
           volume: 1.0,

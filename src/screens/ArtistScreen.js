@@ -12,9 +12,12 @@ import {
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import ScreenBackground from '../components/ScreenBackground';
+import CachedImage from '../components/CachedImage';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import ArtworkCache from '../services/ArtworkCache';
+import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -46,18 +49,15 @@ const AlbumCard = memo(({ item, onPress }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
-  const coverArtUrl = useMemo(() =>
-    item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 400) : null,
-    [item.coverArt]
-  );
-
   const subtitle = [item.year, item.songCount ? `${item.songCount} songs` : null]
     .filter(Boolean).join(' · ');
 
   return (
     <TouchableOpacity style={styles.albumCard} onPress={onPress} activeOpacity={0.7}>
-      <Image
-        source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+      <CachedImage
+        coverArtId={item.coverArt || item.id}
+        size={400}
+        fallbackSource={DEFAULT_ART}
         style={styles.albumCardArt}
         defaultSource={DEFAULT_ART}
       />
@@ -72,10 +72,6 @@ const SongRow = memo(({ item, index, isPlaying, onPress, onMenuPress }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
-  const coverArtUrl = useMemo(() =>
-    item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null,
-    [item.coverArt]
-  );
   const duration = useMemo(() => {
     if (!item.duration) return '';
     const m = Math.floor(item.duration / 60);
@@ -95,8 +91,10 @@ const SongRow = memo(({ item, index, isPlaying, onPress, onMenuPress }) => {
           : <Text style={styles.trackNumber}>{index + 1}</Text>
         }
       </View>
-      <Image
-        source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+      <CachedImage
+        coverArtId={item.coverArt}
+        size={200}
+        fallbackSource={DEFAULT_ART}
         style={styles.songImage}
         defaultSource={DEFAULT_ART}
       />
@@ -160,8 +158,17 @@ export default function ArtistScreen({ route, navigation }) {
       setIsLoading(true);
       setIsLoadingTopSongs(true);
       setIsLoadingFavorites(true);
+      // Cached-first: paint immediately, then refresh from the network
+      if (!artistData) {
+        const cached = await CacheService.getAsync(`artist_${artist.id}`).catch(() => null);
+        if (cached) {
+          setArtistData(cached);
+          setIsLoading(false);
+        }
+      }
       data = await SubsonicAPI.getArtist(artist.id);
       setArtistData(data);
+      CacheService.set(`artist_${artist.id}`, data);
     } catch (e) {
       console.error('Error loading artist:', e);
     } finally {
@@ -217,17 +224,11 @@ export default function ArtistScreen({ route, navigation }) {
     }
   }, [artist]);
 
-  const artistImageUrl = useMemo(() => {
-    if (artist.artistImageUrl) return artist.artistImageUrl;
-    if (artist.id) return SubsonicAPI.getCoverArtUrl(artist.id, 600);
-    return null;
-  }, [artist]);
-
   const backgroundArt = useMemo(() => {
-    if (artistImageUrl) return { uri: artistImageUrl };
-    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    if (artist.id) return ArtworkCache.getArtworkSource(artist.id, 600, DEFAULT_ART);
+    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
     return DEFAULT_ART;
-  }, [artistImageUrl, currentTrack?.coverArt]);
+  }, [artist, currentTrack?.coverArt]);
 
   const handleChipLayout = useCallback((key) => (event) => {
     const { x } = event.nativeEvent.layout;

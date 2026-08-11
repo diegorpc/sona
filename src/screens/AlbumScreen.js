@@ -16,6 +16,8 @@ import SongMenu from '../components/SongMenu';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import ArtworkCache from '../services/ArtworkCache';
+import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -126,8 +128,17 @@ export default function AlbumScreen({ route, navigation }) {
   const loadAlbumData = async () => {
     try {
       setIsLoading(true);
+      // Cached-first: paint immediately, then refresh from the network
+      if (!albumData) {
+        const cached = await CacheService.getAsync(`album_${album.id}`).catch(() => null);
+        if (cached) {
+          setAlbumData(cached);
+          setIsLoading(false);
+        }
+      }
       const data = await SubsonicAPI.getAlbum(album.id);
       setAlbumData(data);
+      CacheService.set(`album_${album.id}`, data);
     } catch (e) {
       console.error('Error loading album:', e);
     } finally {
@@ -200,16 +211,12 @@ export default function AlbumScreen({ route, navigation }) {
     return new Set(albumData.song.map(s => s.discNumber || 1)).size;
   }, [albumData]);
 
-  const coverArtUrl = useMemo(() => {
-    const art = album.coverArt || albumData?.coverArt;
-    return art ? SubsonicAPI.getCoverArtUrl(art, 600) : null;
-  }, [album.coverArt, albumData?.coverArt]);
-
   const backgroundArt = useMemo(() => {
-    if (coverArtUrl) return { uri: coverArtUrl };
-    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    const art = album.coverArt || albumData?.coverArt;
+    if (art) return ArtworkCache.getArtworkSource(art, 600, DEFAULT_ART);
+    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
     return DEFAULT_ART;
-  }, [coverArtUrl, currentTrack?.coverArt]);
+  }, [album.coverArt, albumData?.coverArt, currentTrack?.coverArt]);
 
   const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
   const handleArtLoad = useCallback((e) => {

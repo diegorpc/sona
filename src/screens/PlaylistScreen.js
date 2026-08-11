@@ -13,9 +13,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
+import CachedImage from '../components/CachedImage';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import ArtworkCache from '../services/ArtworkCache';
+import CacheService from '../services/CacheService';
 import { recordPlaylistPlayed } from '../services/RecentPlaylists';
 import PlaylistCollage from '../components/PlaylistCollage';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
@@ -51,10 +54,6 @@ const SwipeAddLast = memo(({ progress, theme }) => {
 const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLast, isPlaying, theme }) => {
   const styles = createStyles(theme);
 
-  const coverArtUrl = useMemo(() =>
-    item.coverArt ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200) : null,
-    [item.coverArt]
-  );
   const duration = useMemo(() => {
     if (!item.duration) return '';
     const m = Math.floor(item.duration / 60);
@@ -102,8 +101,10 @@ const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLa
         </View>
 
         <View style={styles.songImageContainer}>
-          <Image
-            source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+          <CachedImage
+            coverArtId={item.coverArt}
+            size={200}
+            fallbackSource={DEFAULT_ART}
             style={styles.songImage}
             resizeMode="contain"
             defaultSource={DEFAULT_ART}
@@ -147,14 +148,32 @@ export default function PlaylistScreen({ route, navigation }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [menuSong, setMenuSong] = useState(null);
   const [menuSongIndex, setMenuSongIndex] = useState(null);
+  // Bumped whenever playlist art is invalidated/redownloaded, to force the
+  // header image to pick up the fresh file instead of a stale cached one.
+  const [artNonce, setArtNonce] = useState(0);
 
   useEffect(() => { loadPlaylistData(); }, []);
 
   const loadPlaylistData = async () => {
     try {
       setIsLoading(true);
+      // Cached-first: paint immediately, then refresh from the network
+      if (!playlistData) {
+        const cached = await CacheService.getAsync(`playlist_${playlist.id}`).catch(() => null);
+        if (cached) {
+          setPlaylistData(cached);
+          setIsLoading(false);
+        }
+      }
       const data = await SubsonicAPI.getPlaylist(playlist.id);
       setPlaylistData(data);
+      CacheService.set(`playlist_${playlist.id}`, data);
+      // Unlike album/artist art, a playlist's art can change on the server
+      // while its coverArt id stays the same (regenerated collage, new custom
+      // image) — always drop the cached file and let it redownload fresh.
+      if (data?.coverArt) {
+        ArtworkCache.invalidate(data.coverArt).then(() => setArtNonce(n => n + 1));
+      }
     } catch (e) {
       console.error('Error loading playlist:', e);
     } finally {
@@ -231,25 +250,25 @@ export default function PlaylistScreen({ route, navigation }) {
     }
   }, [playlist.id, menuSongIndex]);
 
-  const coverArtUrl = useMemo(() => {
-    return SubsonicAPI.getCoverArtUrl(playlist.coverArt, 600);
-  }, [playlist]);
+  const artCoverId = playlistData?.coverArt || playlist.coverArt;
 
   const backgroundArt = useMemo(() => {
-    if (coverArtUrl) return { uri: coverArtUrl };
-    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+    if (artCoverId) return ArtworkCache.getArtworkSource(artCoverId, 600, DEFAULT_ART);
+    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
     return DEFAULT_ART;
-  }, [coverArtUrl, currentTrack?.coverArt]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artCoverId, artNonce, currentTrack?.coverArt]);
 
   const [artSizeReady, setArtSizeReady] = useState(false);
   const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
   useEffect(() => {
-    if (!coverArtUrl) { setArtSizeReady(true); return; }
+    const uri = backgroundArt?.uri;
+    if (!uri) { setArtSizeReady(true); return; }
     setArtSizeReady(false);
     setArtDisplaySize({ width: ART_SIZE, height: ART_SIZE });
     let cancelled = false;
     Image.getSize(
-      coverArtUrl,
+      uri,
       (w, h) => {
         if (cancelled) return;
         if (w && h) {
@@ -264,7 +283,7 @@ export default function PlaylistScreen({ route, navigation }) {
       () => { if (!cancelled) setArtSizeReady(true); }
     );
     return () => { cancelled = true; };
-  }, [coverArtUrl]);
+  }, [backgroundArt]);
 
   const menuOptions = useMemo(() => {
     if (!menuSong) return [];

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import SubsonicAPI from '../services/SubsonicAPI';
+import ArtworkCache from '../services/ArtworkCache';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/SongMenu.styles';
 
@@ -100,9 +100,7 @@ export default function SongMenu({ song, visible, onClose, options }) {
 
   if (!song && !visible) return null;
 
-  const coverArtUrl = song?.coverArt
-    ? SubsonicAPI.getCoverArtUrl(song.coverArt, 200)
-    : null;
+  const coverArtSource = ArtworkCache.getArtworkSource(song?.coverArt, 200, DEFAULT_ART);
 
   const activeOptions = (options || []).filter(Boolean);
 
@@ -138,7 +136,7 @@ export default function SongMenu({ song, visible, onClose, options }) {
           {song && (
             <View style={styles.songHeader}>
               <Image
-                source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+                source={coverArtSource}
                 style={styles.songHeaderArt}
                 defaultSource={DEFAULT_ART}
               />

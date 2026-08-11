@@ -14,6 +14,7 @@ iOS-first music streaming client. Development on Linux, tested via Expo Go on ph
 - **@expo-google-fonts/lexend** (Lexend_400Regular, _500Medium, _600SemiBold, _700Bold)
 - **axios** + **crypto-js** for Subsonic API
 - **@react-native-async-storage/async-storage** for persistence
+- **expo-file-system** (legacy API, `expo-file-system/legacy`) for artwork + song file caches
 - `@react-native-assets/slider` for the player seek bar; `@react-native-community/slider` only for the Settings cache-size slider
 
 ## Project layout
@@ -22,6 +23,7 @@ iOS-first music streaming client. Development on Linux, tested via Expo Go on ph
 src/
 ├── components/
 │   ├── AddToPlaylistModal.js     # Bottom sheet: search/create playlists, add a song (used by SongMenu surfaces)
+│   ├── CachedImage.js            # Drop-in cover art Image backed by ArtworkCache (used throughout)
 │   ├── MiniPlayer.js             # Collapsed player bar (tappable, swipe-up gesture handled by PlayerOverlay)
 │   ├── PlayerOverlay.js          # Full-screen overlay: MiniPlayer + PlayerScreen + QueueScreen stacked
 │   ├── PlaylistCollage.js        # 2×2 cover art grid component used as a fallback in PlaylistScreen
@@ -44,7 +46,11 @@ src/
 ├── services/
 │   ├── SubsonicAPI.js            # Subsonic v1.16.1 API client, MD5 token auth, singleton
 │   ├── AudioPlayer.js            # expo-audio singleton: playback, queues, persistence, listeners
-│   ├── CacheService.js           # AsyncStorage-backed LRU cache for library data
+│   ├── AppSettings.js            # Setting defaults + getAppSettings()/saveAppSettings() (key: appSettings)
+│   ├── CacheService.js           # AsyncStorage-backed LRU cache for library metadata (JSON)
+│   ├── ArtworkCache.js           # Disk cache for cover art files; LRU only under budget pressure, otherwise permanent
+│   ├── SongCache.js              # Disk cache for full song files (the "music cache"); never auto-evicted
+│   ├── LibrarySync.js            # Throttled background warm-up of LibraryScreen's cache on launch
 │   ├── PlayerOverlayController.js # Singleton: expandPlayerOverlay / collapsePlayerOverlay
 │   ├── RecentPlaylists.js        # Tracks playlist listen-times; sort helpers for "Recently Listened"
 │   ├── PinnedPlaylists.js        # User-pinned Home playlists (set in Settings); merge helper for the grid
@@ -142,7 +148,7 @@ Key methods:
 | `createPlaylist(name, songId?)` | `createPlaylist` | optionally seeds with one song |
 | `addSongToPlaylist(playlistId, songId)` | `updatePlaylist` | via `songIdToAdd` |
 | `removeFromPlaylist(playlistId, index)` | `updatePlaylist` | via `songIndexToRemove` (0-based) |
-| `getStreamUrl(songId, maxBitRate?)` | `stream` | returns URL string (not a request) |
+| `getStreamUrl(songId, { maxBitRate?, format? })` | `stream` | returns URL string (not a request); `format: 'mp3'` transcodes server-side, `'raw'` forces the original file |
 | `getCoverArtUrl(id, size)` | `getCoverArt` | returns URL string |
 | `scrobble(songId, submission)` | `scrobble` | call on track start |
 | `star(id, albumId?, artistId?)` | `star` | |
@@ -165,11 +171,45 @@ Queue model:
 
 Persistence keys: `currentTrack`, `currentPlaylist`, `currentIndex`, `currentPosition`, `isPlaying`, `audioPlayerPriorityQueue`, `audioPlayerQueueContext`, `audioPlayerCurrentTrackSource`, `audioPlayerShuffle`, `audioPlayerRepeatMode`.
 
+Playback source: `resolveSourceUri(trackId)` (used by `playTrack` and session restore) prefers a `SongCache` local file; otherwise builds a stream URL — transcoded MP3 320 kbps unless the `originalQualityStreaming` setting is on.
+
 Listener pattern: `addListener(fn)` / `removeListener(fn)` — `fn(state)` called on every state change. `PlayerContext` subscribes and exposes state via `usePlayer()`.
 
-## CacheService
+## Caching
 
-Singleton. In-memory `Map` + AsyncStorage backing. Default max 500 MB. Metadata key `@sona_cache_metadata` stores per-entry sizes and timestamps. LRU eviction when limit exceeded. Used by LibraryScreen for artist/album/playlist lists.
+Two user-facing caches, each with a settable budget (Settings → Storage):
+- **Metadata & artwork cache** — `CacheService` (JSON) + `ArtworkCache` (art files) sharing one budget, default 50 MB
+- **Music cache** — `SongCache` (song files), default 2048 MB
+
+### CacheService
+Singleton. In-memory `Map` + AsyncStorage backing (`@sona_cache_` prefix). Metadata key `@sona_cache_metadata` stores per-entry sizes/timestamps and `maxSizeMB`; LRU eviction (oldest-touched evicted first when over budget — nothing expires by age). Used by LibraryScreen (lists), HomeScreen (`home_albums`, `home_playlists`), and the detail screens (`album_<id>`, `artist_<id>`, `playlist_<id>`).
+
+**Cached-first pattern** (Home + detail screens): on mount, `getAsync(key)` — if hit, render immediately and clear the spinner; then fetch from the network, re-render, and `set(key, data)`. Pull-to-refresh reuses the same load function. This means an album/artist/playlist screen always re-syncs its metadata (tracklist, playlist membership, etc.) from the server on every mount, not just on first view.
+
+LibraryScreen is the exception: if its cache keys (`artists`, `albums_<sortOption>`, `likedSongs`, `playlists`) are already populated, it renders from cache **without** hitting the network at all — a manual pull-to-refresh (or the Random-sort reset button) is required to see changes. `LibrarySync` (below) exists mainly to work around this by keeping those keys warm.
+
+### ArtworkCache
+Singleton at `src/services/ArtworkCache.js`. Downloads cover art to `cacheDirectory/artwork/` (index under `@sona_artwork_index`), keyed `<coverArtId>_<size>`. An entry, once downloaded, is never re-checked against the server — treat art as immutable once cached.
+- `getArtwork(id, size)` — sync: returns the local URI if cached; otherwise starts a deduplicated background download and returns `null` (caller renders the remote URL — no mid-render source swap, no flicker)
+- `getArtworkSource(id, size, fallback)` — same, but returns an `Image`-source object (`{ uri }` local/remote, or `fallback`) for call sites that don't render through `CachedImage` (`ScreenBackground` sources, `Image.getSize` probes, `MiniPlayer`'s `coverArtUrl` prop). `CachedImage` is a thin wrapper around this.
+- `invalidate(id)` — drops every cached size for an id (and any negative-cache entry, see below) so the next fetch redownloads it fresh. Album and artist art are never invalidated (they don't change). **Playlist art is invalidated on every playlist-screen refresh** (see PlaylistScreen below), since a playlist's coverArt id can stay the same while the underlying image changes (regenerated collage, new custom image).
+- Negative caching: a 404 (e.g. an artist with no photo) is remembered in `index.missing[key]` and never retried — `getArtwork`/`getArtworkSource` return `null`/`fallback` immediately instead of re-attempting the download every render. Cleared by `invalidate(id)`.
+- `pruneToBudget()` — evicts oldest art so that artwork + CacheService JSON fit the shared `maxSizeMB`
+- Consumed via the `CachedImage` component (`coverArtId`, `size`, `fallbackSource`, + Image props) — used everywhere cover art is rendered (Home, Library, Artist, Album, Playlist, Search, Queue, Player, MiniPlayer, SongMenu, AddToPlaylistModal, Settings' pin manager)
+
+### SongCache
+Singleton at `src/services/SongCache.js`. Song files in `documentDirectory/music/`, index under `@sona_music_cache_index`, own `maxSizeMB` budget (default 2048).
+- **Cached songs are never evicted automatically.** `cacheSong()` no longer prunes on download — a cached song persists until removed manually (`removeSong`, `clearAll`) or the budget is explicitly lowered via `setMaxSize()`, which prunes LRU-style to fit. There's no "manual eviction from a menu" UI yet — that's future work.
+- `getCachedUri(songId)` — local URI or null (verifies file exists, touches LRU timestamp for the `setMaxSize` prune path); used by AudioPlayer
+- `cacheSong(track)` / `cacheSongs(tracks)` / `cacheAlbum(albumId)` / `cachePlaylist(playlistId)` — download into the cache. **Not yet wired to any menus/UI** — exposed for later
+- `removeSong(songId)`, `getStats()`, `setMaxSize(mb)`, `clearAll()`
+- Download quality follows the `originalQualityCaching` setting: original file (`format=raw`) or MP3 320 kbps transcode
+
+### LibrarySync
+Module at `src/services/LibrarySync.js`. `syncLibrary()` is called fire-and-forget from `App.js` after every successful login-status check (internally throttled to once per 5 minutes, since that check re-runs on every navigation-state change). Warms LibraryScreen's `albums_newest`, `likedSongs`, and `playlists` CacheService keys directly from the network, so Library shows new albums/songs/playlists on next open without requiring a manual pull-to-refresh — including on a cold first launch, before Library has ever been opened. Deliberately skips the `artists` key — LibraryScreen still fetches and caches that list itself the first time it's opened, and re-seeding it here would just cause a redundant write.
+
+### AppSettings
+Module at `src/services/AppSettings.js`. `DEFAULT_SETTINGS` + `getAppSettings()` / `saveAppSettings()` over the `appSettings` AsyncStorage key. Settings: `autoPlay`, `originalQualityStreaming` (default false ⇒ streams transcode to MP3 320 kbps), `originalQualityCaching` (default true), `downloadOverWifi`, `scrobbling`. `getAppSettings` migrates the legacy `highQuality` key to `originalQualityStreaming`.
 
 ## RecentPlaylists
 
@@ -211,8 +251,12 @@ Default/first bottom tab. Background: `ScreenBackground` with current track art 
 
 Playlists ordering and the random section refresh on focus (a Library reset re-persists the shared random set). Pull-to-refresh reloads albums + playlists.
 
+Cached-first: album rows render instantly from `CacheService` key `home_albums` while the network refresh runs; the playlist grid falls back to `home_playlists` when the fetch fails. Art renders through `CachedImage`.
+
 ### LibraryScreen
 Chip tabs: Liked Songs, Playlists, Albums, Artists. Each tab has its own sort options stored in AsyncStorage. Albums fetched via `getAllAlbums(type)` where `type` maps to Subsonic sort keys. Artists fetched once via `getArtists()`. List fades in via `listOpacity` Animated.Value (0→1, 400ms) after data loads — pattern to copy for any background-loaded list.
+
+Row art (albums/liked/playlists/artists) all resolve through `ArtworkCache.getArtworkSource` — same disk cache as everywhere else in the app. Artist rows use the artist's own id as the coverArt id (`ArtworkCache.getArtworkSource(artist.id, 200)`); there's no separate artist-image AsyncStorage cache or enrichment step — an artist with no photo is negative-cached inside `ArtworkCache` itself (see below) so it isn't re-fetched on every render.
 
 Sort options per tab:
 - Liked Songs: Recently Listened, Recently Added, Date Loved, Alphabetical
@@ -234,16 +278,19 @@ Sort options per tab:
 - Favorite Songs: `getStarred()` filtered by `artistId` or `artist` name; `isLoadingFavorites` state controls ActivityIndicator
 - Appears In: `getArtistAppearsIn(artist, ownAlbumIds)` — non-blocking background fetch
 - All background fetches use `.then().catch().finally(() => setLoading(false))`
+- Cached-first via CacheService key `artist_<id>` (albums tab only; the background fetches always hit the network)
 
 ### AlbumScreen
 - `SectionList` grouped by `song.discNumber` (default 1); disc headers only shown when >1 disc
 - Song rows: no thumbnail, track number or play arrow, optional guest artist line
 - Art: aspect-ratio adaptive via `onLoad` → `handleArtLoad`
+- Cached-first via CacheService key `album_<id>`
 
 ### PlaylistScreen
 - Song rows with 44×44 cover art, `resizeMode="contain"` in fixed container (no JS resize on load)
 - Collage: if `generatePlaylistCollage` returns `{ type: 'collage' }`, `PlaylistCollage` renders a 2×2 grid
 - Calls `recordPlaylistPlayed(playlist)` (RecentPlaylists) on both single-song play and play-all, feeding the "Recently Listened" ordering on Home and in Library
+- Cached-first via CacheService key `playlist_<id>`. Unlike album/artist art, playlist art can change server-side while the coverArt id stays the same — every network refresh (mount + pull-to-refresh) calls `ArtworkCache.invalidate(data.coverArt)` and bumps an `artNonce` state to force the header image to redownload and redisplay the fresh file.
 
 ### PlayerScreen
 - Rendered inside `PlayerOverlay`, receives `onClose`, `onShowQueue`, `onNavigateToArtist`, `onNavigateToAlbum`, `safeAreaInsets` as props
@@ -260,9 +307,9 @@ Sort options per tab:
 ### SettingsScreen
 Chip tabs: Appearance, General, Server, Storage.
 - Appearance: accent color picker using `accentPalettes` from theme.js
-- General: playback switches; **Home Playlists** pin manager — lists all playlists (pinned first), each with a pin/unpin `IconButton`; persists via `PinnedPlaylists` (`MAX_PINNED` = 6). Reflected on Home on next focus.
+- General: playback switches (auto-play, **Original quality streaming**, **Original quality caching**, scrobbling — see AppSettings); **Home Playlists** pin manager — lists all playlists (pinned first), each with a pin/unpin `IconButton`; persists via `PinnedPlaylists` (`MAX_PINNED` = 6). Reflected on Home on next focus.
 - Server: re-login flow via `SubsonicAPI.initialize()` then `CommonActions.reset`
-- Storage: cache stats from `CacheService.getStats()`, clear cache button
+- Storage: two cache cards via `renderCacheCard` — **Metadata & Artwork** (combined CacheService + ArtworkCache stats, slider 10–500 MB) and **Music** (SongCache stats, slider 100 MB–20 GB); each with usage bar, max-size dialog, and clear button
 
 ## Common patterns
 

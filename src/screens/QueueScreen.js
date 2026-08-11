@@ -9,7 +9,7 @@ import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
-import SubsonicAPI from '../services/SubsonicAPI';
+import ArtworkCache from '../services/ArtworkCache';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { createStyles } from '../styles/QueueScreen.styles';
@@ -71,8 +71,8 @@ SwipeDelete.displayName = 'SwipeDelete';
 const ContextQueueRow = memo(({ item, index, theme, styles, onPress, onLongPress, onSwipeAddNext }) => {
   const swipeRef = useRef(null);
   const coverArtSource = useMemo(() => {
-    if (item?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(item.coverArt, 200) };
-    if (item?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(item.albumId, 200) };
+    if (item?.coverArt) return ArtworkCache.getArtworkSource(item.coverArt, 200, DEFAULT_ART);
+    if (item?.albumId) return ArtworkCache.getArtworkSource(item.albumId, 200, DEFAULT_ART);
     return DEFAULT_ART;
   }, [item?.coverArt, item?.albumId]);
   const isStarred = Boolean(item?.starred);
@@ -145,8 +145,8 @@ const ContextQueueRow = memo(({ item, index, theme, styles, onPress, onLongPress
 ContextQueueRow.displayName = 'ContextQueueRow';
 
 const getCoverArt = (track, size = 80) => {
-  if (track?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(track.coverArt, size) };
-  if (track?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(track.albumId, size) };
+  if (track?.coverArt) return ArtworkCache.getArtworkSource(track.coverArt, size, DEFAULT_ART);
+  if (track?.albumId) return ArtworkCache.getArtworkSource(track.albumId, size, DEFAULT_ART);
   return DEFAULT_ART;
 };
 
@@ -341,8 +341,8 @@ const QueueScreen = ({
   const isAtTopRef = useRef(true);
 
   const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
-    if (currentTrack?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
+    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
     return DEFAULT_ART;
   }, [currentTrack?.coverArt, currentTrack?.albumId]);
 

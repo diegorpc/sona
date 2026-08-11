@@ -13,9 +13,11 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
+import CachedImage from '../components/CachedImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import ArtworkCache from '../services/ArtworkCache';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -121,17 +123,6 @@ export default function SearchScreen({ navigation }) {
     return () => { isMounted = false; };
   }, []);
 
-  const getCoverArtUrl = useCallback((item) => {
-    if (item.coverArt) return SubsonicAPI.getCoverArtUrl(item.coverArt, 200);
-    return null;
-  }, []);
-
-  const getArtistImageUrl = useCallback((item) => {
-    if (item.artistImageUrl) return item.artistImageUrl;
-    if (item.id) return SubsonicAPI.getCoverArtUrl(item.id, 200);
-    return null;
-  }, []);
-
   const formatDuration = useCallback((seconds) => {
     if (!seconds) return '';
     const minutes = Math.floor(seconds / 60);
@@ -205,88 +196,84 @@ export default function SearchScreen({ navigation }) {
     };
   }, [searchResults, searchQuery, playlists]);
 
-  const renderArtist = useCallback(({ item }) => {
-    const imageUrl = getArtistImageUrl(item);
-    return (
-      <TouchableOpacity style={styles.flatListItem} onPress={() => handleArtistPress(item)} activeOpacity={0.7}>
-        <Image
-          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
-          style={styles.itemImageRound}
-          defaultSource={DEFAULT_ART}
-        />
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemTitle}>{item.name}</Text>
-          <Text style={styles.itemSubtitle}>
-            {item.albumCount} album{item.albumCount !== 1 ? 's' : ''}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [handleArtistPress, getArtistImageUrl, styles]);
+  const renderArtist = useCallback(({ item }) => (
+    <TouchableOpacity style={styles.flatListItem} onPress={() => handleArtistPress(item)} activeOpacity={0.7}>
+      <CachedImage
+        coverArtId={item.id}
+        size={200}
+        fallbackSource={DEFAULT_ART}
+        style={styles.itemImageRound}
+        defaultSource={DEFAULT_ART}
+      />
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemTitle}>{item.name}</Text>
+        <Text style={styles.itemSubtitle}>
+          {item.albumCount} album{item.albumCount !== 1 ? 's' : ''}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  ), [handleArtistPress, styles]);
 
-  const renderAlbum = useCallback(({ item }) => {
-    const imageUrl = getCoverArtUrl(item);
-    return (
-      <TouchableOpacity style={styles.flatListItem} onPress={() => handleAlbumPress(item)} activeOpacity={0.7}>
-        <Image
-          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
-          style={styles.itemImage}
-          defaultSource={DEFAULT_ART}
-        />
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemTitle}>{item.name}</Text>
-          <Text style={styles.itemSubtitle}>{item.artist}</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [handleAlbumPress, getCoverArtUrl, styles]);
+  const renderAlbum = useCallback(({ item }) => (
+    <TouchableOpacity style={styles.flatListItem} onPress={() => handleAlbumPress(item)} activeOpacity={0.7}>
+      <CachedImage
+        coverArtId={item.coverArt}
+        size={200}
+        fallbackSource={DEFAULT_ART}
+        style={styles.itemImage}
+        defaultSource={DEFAULT_ART}
+      />
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemTitle}>{item.name}</Text>
+        <Text style={styles.itemSubtitle}>{item.artist}</Text>
+      </View>
+    </TouchableOpacity>
+  ), [handleAlbumPress, styles]);
 
-  const renderSong = useCallback(({ item, index, section }) => {
-    const imageUrl = getCoverArtUrl(item);
-    return (
-      <TouchableOpacity
-        style={styles.flatListItem}
-        onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
-        onLongPress={() => setMenuSong(item)}
-        delayLongPress={350}
-        activeOpacity={0.7}
-      >
-        <Image
-          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
-          style={styles.itemImage}
-          defaultSource={DEFAULT_ART}
-        />
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemTitle}>{item.title}</Text>
-          <Text style={styles.itemSubtitle}>{item.artist}</Text>
+  const renderSong = useCallback(({ item, index, section }) => (
+    <TouchableOpacity
+      style={styles.flatListItem}
+      onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
+      onLongPress={() => setMenuSong(item)}
+      delayLongPress={350}
+      activeOpacity={0.7}
+    >
+      <CachedImage
+        coverArtId={item.coverArt}
+        size={200}
+        fallbackSource={DEFAULT_ART}
+        style={styles.itemImage}
+        defaultSource={DEFAULT_ART}
+      />
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemTitle}>{item.title}</Text>
+        <Text style={styles.itemSubtitle}>{item.artist}</Text>
+      </View>
+      {item.duration && (
+        <View style={styles.itemRightContent}>
+          <Text style={styles.itemDuration}>{formatDuration(item.duration)}</Text>
         </View>
-        {item.duration && (
-          <View style={styles.itemRightContent}>
-            <Text style={styles.itemDuration}>{formatDuration(item.duration)}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }, [handleSongPress, getCoverArtUrl, formatDuration, styles]);
+      )}
+    </TouchableOpacity>
+  ), [handleSongPress, formatDuration, styles]);
 
-  const renderPlaylist = useCallback(({ item }) => {
-    const imageUrl = getCoverArtUrl(item);
-    return (
-      <TouchableOpacity style={styles.flatListItem} onPress={() => handlePlaylistPress(item)} activeOpacity={0.7}>
-        <Image
-          source={imageUrl ? { uri: imageUrl } : DEFAULT_ART}
-          style={styles.itemImage}
-          defaultSource={DEFAULT_ART}
-        />
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemTitle}>{item.name}</Text>
-          <Text style={styles.itemSubtitle}>
-            {item.songCount || 0} song{(item.songCount || 0) !== 1 ? 's' : ''}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [handlePlaylistPress, getCoverArtUrl, styles]);
+  const renderPlaylist = useCallback(({ item }) => (
+    <TouchableOpacity style={styles.flatListItem} onPress={() => handlePlaylistPress(item)} activeOpacity={0.7}>
+      <CachedImage
+        coverArtId={item.coverArt}
+        size={200}
+        fallbackSource={DEFAULT_ART}
+        style={styles.itemImage}
+        defaultSource={DEFAULT_ART}
+      />
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemTitle}>{item.name}</Text>
+        <Text style={styles.itemSubtitle}>
+          {item.songCount || 0} song{(item.songCount || 0) !== 1 ? 's' : ''}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  ), [handlePlaylistPress, styles]);
 
   const renderRecentItem = useCallback(({ item, index }) => {
     const actualItem = item.item;
@@ -331,8 +318,8 @@ export default function SearchScreen({ navigation }) {
   }, []);
 
   const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
-    if (currentTrack?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
+    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
     return DEFAULT_ART;
   }, [currentTrack?.albumId, currentTrack?.coverArt]);
 

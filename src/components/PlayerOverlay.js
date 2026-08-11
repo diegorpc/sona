@@ -14,7 +14,7 @@ import PlayerScreen from '../screens/PlayerScreen';
 import QueueScreen from '../screens/QueueScreen';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
-import SubsonicAPI from '../services/SubsonicAPI';
+import ArtworkCache from '../services/ArtworkCache';
 import { createStyles } from '../styles/PlayerOverlay.styles';
 import {
   registerPlayerOverlay,
@@ -70,9 +70,7 @@ const PlayerOverlay = () => {
     }
   }, [currentTrack]);
 
-  const coverArtUrl = currentTrack?.coverArt
-    ? SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 240)
-    : null;
+  const coverArtUrl = ArtworkCache.getArtworkSource(currentTrack?.coverArt, 240)?.uri || null;
 
   const backdropOpacity = animation.interpolate({
     inputRange: [0, 1],

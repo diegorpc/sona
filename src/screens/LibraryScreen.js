@@ -23,6 +23,7 @@ import SongMenu from '../components/SongMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
+import ArtworkCache from '../services/ArtworkCache';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import PlaylistCollage from '../components/PlaylistCollage';
@@ -251,26 +252,23 @@ const ListItem = memo(function ListItem({
     }
   }, [viewMode, item.albumCount, item.artist, item.songCount]);
 
-  // Resolve image: prefer direct coverArt URL; for playlists fall back to a 2x2 collage.
+  // Resolve image: prefer direct coverArt art (disk-cached via ArtworkCache);
+  // for playlists fall back to a 2x2 collage when there's no coverArt id.
   const imageData = useMemo(() => {
     if (viewMode === 'artists') {
-      return item?.artistImageUrl || null;
+      return item?.id ? ArtworkCache.getArtworkSource(item.id, 200) : null;
     }
     if (viewMode === 'albums' || viewMode === 'liked') {
-      return (item.coverArt && SubsonicAPI.baseUrl)
-        ? SubsonicAPI.getCoverArtUrl(item.coverArt, 200)
-        : null;
+      return item.coverArt ? ArtworkCache.getArtworkSource(item.coverArt, 200) : null;
     }
     if (viewMode === 'playlists') {
       // Newer Subsonic servers expose a real playlist cover art id; prefer it over the
       // generated collage and only fall back to the collage when none exists.
-      if (item.coverArt && SubsonicAPI.baseUrl) {
-        return SubsonicAPI.getCoverArtUrl(item.coverArt, 200);
-      }
+      if (item.coverArt) return ArtworkCache.getArtworkSource(item.coverArt, 200);
       return collageData || null;
     }
     return null;
-  }, [viewMode, item.id, item.coverArt, item.artistImageUrl, collageData]);
+  }, [viewMode, item.id, item.coverArt, collageData]);
 
   const duration = useMemo(
     () => (item.duration ? formatItemDuration(item.duration) : ''),
@@ -290,11 +288,13 @@ const ListItem = memo(function ListItem({
         </View>
       );
     }
-    const imageUrl = typeof imageData === 'string' ? imageData : null;
+    const source = typeof imageData === 'string'
+      ? { uri: imageData, cache: 'force-cache' }
+      : (imageData?.uri ? imageData : null);
     return (
       <View style={styles.itemImageContainer}>
         <Image
-          source={imageUrl ? { uri: imageUrl, cache: 'force-cache' } : DEFAULT_LIST_IMAGE}
+          source={source || DEFAULT_LIST_IMAGE}
           style={isRoundImage
             ? { width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE, borderRadius: LIBRARY_THUMB_SIZE / 2 }
             : { width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE, borderRadius: 5 }
@@ -699,48 +699,9 @@ export default function LibraryScreen({ navigation, route }) {
         await CacheService.set('artists', allArtists);
       }
       setArtists(allArtists);
-
-      // Load artist images (cached separately for efficiency)
-      const cachedArtistImages = await CacheService.getAsync('artistImages') || {};
-      const updatedArtistImages = { ...cachedArtistImages };
-      const shouldUseCachedImages = !forceRefresh;
-
-      const enrichedArtists = await Promise.all(
-        (allArtists || []).map(async artist => {
-          if (!artist || !artist.id) {
-            return artist;
-          }
-
-          const cachedImage = shouldUseCachedImages ? cachedArtistImages[artist.id] : undefined;
-          if (cachedImage !== undefined) {
-            return { ...artist, artistImageUrl: cachedImage };
-          }
-
-          if (shouldUseCachedImages && typeof artist.artistImageUrl === 'string') {
-            updatedArtistImages[artist.id] = artist.artistImageUrl;
-            return artist;
-          }
-
-          try {
-            const imageUrl = await SubsonicAPI.getCoverArtUrl(artist.id);
-            if (typeof imageUrl === 'string' && imageUrl.trim()) {
-              const trimmed = imageUrl.trim();
-              updatedArtistImages[artist.id] = trimmed;
-              return { ...artist, artistImageUrl: trimmed };
-            }
-          } catch (error) {
-            console.warn(`Error loading image for artist ${artist.name}:`, error);
-          }
-
-          updatedArtistImages[artist.id] = null;
-          return { ...artist, artistImageUrl: null };
-        })
-      );
-
-      await CacheService.set('artistImages', updatedArtistImages);
-      allArtists = enrichedArtists;
-      await CacheService.set('artists', allArtists);
-      setArtists(allArtists);
+      // Artist images are resolved per-row via ArtworkCache (see imageData
+      // below) — same disk-backed cache as every other cover art in the app,
+      // instead of a separate AsyncStorage map of resolved URL strings.
 
       // Load albums using proper API with sort type.
       // Random is fetched fresh (single batch, never cached) so it reshuffles each load.
@@ -1801,10 +1762,10 @@ export default function LibraryScreen({ navigation, route }) {
 
   const backgroundArt = useMemo(() => {
     if (currentTrack?.coverArt) {
-      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
+      return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
     }
     if (currentTrack?.albumId) {
-      return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+      return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
     }
     return DEFAULT_ART;
   }, [currentTrack?.albumId, currentTrack?.coverArt]);

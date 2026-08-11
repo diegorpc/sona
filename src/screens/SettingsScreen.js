@@ -27,6 +27,9 @@ import Slider from '@react-native-community/slider';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
+import ArtworkCache from '../services/ArtworkCache';
+import SongCache from '../services/SongCache';
+import { DEFAULT_SETTINGS, getAppSettings, saveAppSettings } from '../services/AppSettings';
 import { getPinnedPlaylistIds, setPinnedPlaylistIds, MAX_PINNED } from '../services/PinnedPlaylists';
 import ScreenBackground from '../components/ScreenBackground';
 import { useTheme } from '../contexts/ThemeContext';
@@ -62,19 +65,17 @@ export default function SettingsScreen({ navigation }) {
   const { playerState: { currentTrack } } = usePlayer();
   const [activeTab, setActiveTab] = useState('appearance');
   const [serverInfo, setServerInfo] = useState(null);
-  const [settings, setSettings] = useState({
-    autoPlay: true,
-    highQuality: false,
-    downloadOverWifi: true,
-    scrobbling: true,
-  });
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [showServerDialog, setShowServerDialog] = useState(false);
   const [newServerUrl, setNewServerUrl] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [cacheStats, setCacheStats] = useState(null);
-  const [maxCacheSize, setMaxCacheSize] = useState(500);
-  const [showCacheDialog, setShowCacheDialog] = useState(false);
+  const [metaCacheStats, setMetaCacheStats] = useState(null);
+  const [musicCacheStats, setMusicCacheStats] = useState(null);
+  const [maxMetaCacheSize, setMaxMetaCacheSize] = useState(50);
+  const [maxMusicCacheSize, setMaxMusicCacheSize] = useState(2048);
+  // null | 'metadata' | 'music'
+  const [cacheDialog, setCacheDialog] = useState(null);
   const [playlists, setPlaylists] = useState([]);
   const [pinnedIds, setPinnedIds] = useState([]);
 
@@ -152,9 +153,22 @@ export default function SettingsScreen({ navigation }) {
   const loadCacheStats = async () => {
     try {
       await CacheService.initialize();
-      const stats = await CacheService.getStats();
-      setCacheStats(stats);
-      setMaxCacheSize(stats.maxSizeMB);
+      const [jsonStats, artStats, musicStats] = await Promise.all([
+        CacheService.getStats(),
+        ArtworkCache.getStats(),
+        SongCache.getStats(),
+      ]);
+      // Metadata + artwork share one budget; combine them for display
+      const combinedBytes = jsonStats.totalSizeBytes + artStats.totalSizeBytes;
+      setMetaCacheStats({
+        totalSizeMB: (combinedBytes / (1024 * 1024)).toFixed(2),
+        totalSizeBytes: combinedBytes,
+        maxSizeMB: jsonStats.maxSizeMB,
+        entryCount: jsonStats.entryCount + artStats.entryCount,
+      });
+      setMaxMetaCacheSize(jsonStats.maxSizeMB);
+      setMusicCacheStats(musicStats);
+      setMaxMusicCacheSize(musicStats.maxSizeMB);
     } catch (error) {
       console.error('Error loading cache stats:', error);
     }
@@ -176,10 +190,7 @@ export default function SettingsScreen({ navigation }) {
 
   const loadSettings = async () => {
     try {
-      const savedSettings = await AsyncStorage.getItem('appSettings');
-      if (savedSettings) {
-        setSettings(prev => ({ ...prev, ...JSON.parse(savedSettings) }));
-      }
+      setSettings(await getAppSettings());
     } catch (error) {
       console.error('Error loading settings:', error);
     }
@@ -187,7 +198,7 @@ export default function SettingsScreen({ navigation }) {
 
   const saveSettings = async (newSettings) => {
     try {
-      await AsyncStorage.setItem('appSettings', JSON.stringify(newSettings));
+      await saveAppSettings(newSettings);
       setSettings(newSettings);
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -241,10 +252,10 @@ export default function SettingsScreen({ navigation }) {
     );
   };
 
-  const clearCache = async () => {
+  const clearMetadataCache = async () => {
     Alert.alert(
-      'Clear Cache',
-      `This will clear ${cacheStats?.totalSizeMB || 0} MB of cached data. Continue?`,
+      'Clear Metadata Cache',
+      `This will clear ${metaCacheStats?.totalSizeMB || 0} MB of cached metadata and artwork. Continue?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -252,9 +263,9 @@ export default function SettingsScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await CacheService.clearAll();
+              await Promise.all([CacheService.clearAll(), ArtworkCache.clearAll()]);
               await loadCacheStats();
-              Alert.alert('Success', 'Cache cleared successfully');
+              Alert.alert('Success', 'Metadata cache cleared');
             } catch (error) {
               Alert.alert('Error', 'Failed to clear cache');
               console.error('Error clearing cache:', error);
@@ -265,12 +276,41 @@ export default function SettingsScreen({ navigation }) {
     );
   };
 
-  const handleMaxCacheSizeChange = async (newSize) => {
+  const clearMusicCache = async () => {
+    Alert.alert(
+      'Clear Music Cache',
+      `This will delete ${musicCacheStats?.totalSizeMB || 0} MB of cached songs. Continue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await SongCache.clearAll();
+              await loadCacheStats();
+              Alert.alert('Success', 'Music cache cleared');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear cache');
+              console.error('Error clearing music cache:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleMaxCacheSizeChange = async (kind, newSize) => {
     try {
-      await CacheService.setMaxSize(newSize);
-      setMaxCacheSize(newSize);
+      if (kind === 'music') {
+        await SongCache.setMaxSize(newSize);
+      } else {
+        await CacheService.setMaxSize(newSize);
+        // Shrinking the shared budget may require evicting artwork too
+        await ArtworkCache.pruneToBudget();
+      }
       await loadCacheStats();
-      setShowCacheDialog(false);
+      setCacheDialog(null);
       Alert.alert('Success', `Maximum cache size set to ${newSize} MB`);
     } catch (error) {
       Alert.alert('Error', 'Failed to update cache size');
@@ -329,8 +369,8 @@ export default function SettingsScreen({ navigation }) {
   }, [activeTab, chipHighlightAnimations, chipAnimations]);
 
   const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
-    if (currentTrack?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
+    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
     return DEFAULT_ART;
   }, [currentTrack?.coverArt, currentTrack?.albumId]);
 
@@ -375,13 +415,25 @@ export default function SettingsScreen({ navigation }) {
           />
           <Divider />
           <List.Item
-            title="High quality streaming"
-            description="Use higher bitrate for better audio quality"
+            title="Original quality streaming"
+            description="Stream untouched files. Off: transcode to MP3 320 kbps to save data"
             left={props => <List.Icon {...props} icon="high-definition" />}
             right={() => (
               <Switch
-                value={settings.highQuality}
-                onValueChange={(value) => handleSettingChange('highQuality', value)}
+                value={settings.originalQualityStreaming}
+                onValueChange={(value) => handleSettingChange('originalQualityStreaming', value)}
+              />
+            )}
+          />
+          <Divider />
+          <List.Item
+            title="Original quality caching"
+            description="Cache untouched files. Off: cached songs are transcoded to MP3 320 kbps"
+            left={props => <List.Icon {...props} icon="download" />}
+            right={() => (
+              <Switch
+                value={settings.originalQualityCaching}
+                onValueChange={(value) => handleSettingChange('originalQualityCaching', value)}
               />
             )}
           />
@@ -412,7 +464,7 @@ export default function SettingsScreen({ navigation }) {
           ) : (
             sortedPlaylists.map((pl, idx) => {
               const isPinned = pinnedIds.includes(String(pl.id));
-              const coverUrl = pl.coverArt ? SubsonicAPI.getCoverArtUrl(pl.coverArt, 150) : null;
+              const coverSource = pl.coverArt ? ArtworkCache.getArtworkSource(pl.coverArt, 150) : null;
               return (
                 <React.Fragment key={pl.id}>
                   {idx > 0 && <Divider />}
@@ -422,8 +474,8 @@ export default function SettingsScreen({ navigation }) {
                     description={pl.songCount != null ? `${pl.songCount} songs` : undefined}
                     onPress={() => togglePin(pl.id)}
                     left={() =>
-                      coverUrl
-                        ? <Image source={{ uri: coverUrl }} style={styles.playlistThumb} resizeMode="cover" />
+                      coverSource
+                        ? <Image source={coverSource} style={styles.playlistThumb} resizeMode="cover" />
                         : <List.Icon icon="playlist-music" />
                     }
                     right={() => (
@@ -497,48 +549,68 @@ export default function SettingsScreen({ navigation }) {
     </>
   );
 
+  const renderCacheCard = (title, description, stats, maxSize, onSetMax, onClear) => (
+    <Card style={styles.card}>
+      <Card.Content>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionDescription}>{description}</Text>
+        {stats && (
+          <>
+            <View style={styles.cacheStatsContainer}>
+              <View style={styles.cacheStatRow}>
+                <Text style={styles.cacheStatLabel}>Usage</Text>
+                <Text style={styles.cacheStatValue}>
+                  {stats.totalSizeMB} MB / {stats.maxSizeMB} MB
+                </Text>
+              </View>
+              <ProgressBar
+                progress={Math.min(stats.totalSizeBytes / (stats.maxSizeMB * 1024 * 1024), 1)}
+                color={theme.colors.primary}
+                style={styles.progressBar}
+              />
+              <View style={styles.cacheStatRow}>
+                <Text style={styles.cacheStatLabel}>Cached Items</Text>
+                <Text style={styles.cacheStatValue}>{stats.entryCount}</Text>
+              </View>
+            </View>
+            <Divider style={styles.divider} />
+          </>
+        )}
+        <List.Item
+          title="Maximum Size"
+          description={`Currently set to ${maxSize} MB`}
+          left={props => <List.Icon {...props} icon="database" />}
+          onPress={onSetMax}
+        />
+        <Divider />
+        <List.Item
+          title="Clear Cache"
+          description={stats ? `Clear ${stats.totalSizeMB} MB of cached data` : 'Clear all cached data'}
+          left={props => <List.Icon {...props} icon="delete-sweep" />}
+          onPress={onClear}
+        />
+      </Card.Content>
+    </Card>
+  );
+
   const renderStorageTab = () => (
     <>
-      <Card style={styles.card}>
-        <Card.Content>
-          <Text style={styles.sectionTitle}>Storage & Cache</Text>
-          {cacheStats && (
-            <>
-              <View style={styles.cacheStatsContainer}>
-                <View style={styles.cacheStatRow}>
-                  <Text style={styles.cacheStatLabel}>Cache Usage</Text>
-                  <Text style={styles.cacheStatValue}>
-                    {cacheStats.totalSizeMB} MB / {cacheStats.maxSizeMB} MB
-                  </Text>
-                </View>
-                <ProgressBar
-                  progress={Math.min(cacheStats.totalSizeBytes / (cacheStats.maxSizeMB * 1024 * 1024), 1)}
-                  color={theme.colors.primary}
-                  style={styles.progressBar}
-                />
-                <View style={styles.cacheStatRow}>
-                  <Text style={styles.cacheStatLabel}>Cached Items</Text>
-                  <Text style={styles.cacheStatValue}>{cacheStats.entryCount}</Text>
-                </View>
-              </View>
-              <Divider style={styles.divider} />
-            </>
-          )}
-          <List.Item
-            title="Maximum Cache Size"
-            description={`Currently set to ${maxCacheSize} MB`}
-            left={props => <List.Icon {...props} icon="database" />}
-            onPress={() => setShowCacheDialog(true)}
-          />
-          <Divider />
-          <List.Item
-            title="Clear Cache"
-            description={cacheStats ? `Clear ${cacheStats.totalSizeMB} MB of cached data` : 'Clear all cached data'}
-            left={props => <List.Icon {...props} icon="delete-sweep" />}
-            onPress={clearCache}
-          />
-        </Card.Content>
-      </Card>
+      {renderCacheCard(
+        'Metadata & Artwork Cache',
+        'Library data and cover art kept for instant page loads.',
+        metaCacheStats,
+        maxMetaCacheSize,
+        () => setCacheDialog('metadata'),
+        clearMetadataCache
+      )}
+      {renderCacheCard(
+        'Music Cache',
+        'Downloaded songs for instant, offline-capable playback.',
+        musicCacheStats,
+        maxMusicCacheSize,
+        () => setCacheDialog('music'),
+        clearMusicCache
+      )}
 
       <Card style={styles.card}>
         <Card.Content>
@@ -659,34 +731,49 @@ export default function SettingsScreen({ navigation }) {
               </Dialog.Actions>
             </Dialog>
 
-            <Dialog visible={showCacheDialog} onDismiss={() => setShowCacheDialog(false)}>
-              <Dialog.Title>Maximum Cache Size</Dialog.Title>
+            <Dialog visible={cacheDialog !== null} onDismiss={() => setCacheDialog(null)}>
+              <Dialog.Title>
+                {cacheDialog === 'music' ? 'Maximum Music Cache Size' : 'Maximum Metadata Cache Size'}
+              </Dialog.Title>
               <Dialog.Content>
                 <Text style={styles.dialogDescription}>
-                  Set the maximum amount of storage the app can use for caching library data.
+                  {cacheDialog === 'music'
+                    ? 'Set the maximum storage used for cached songs.'
+                    : 'Set the maximum storage used for cached library data and cover art.'}
                 </Text>
                 <View style={styles.sliderContainer}>
-                  <Text style={styles.sliderLabel}>{maxCacheSize} MB</Text>
+                  <Text style={styles.sliderLabel}>
+                    {cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize} MB
+                  </Text>
                   <Slider
                     style={styles.slider}
-                    minimumValue={100}
-                    maximumValue={20000}
-                    step={50}
-                    value={maxCacheSize}
-                    onValueChange={setMaxCacheSize}
+                    minimumValue={cacheDialog === 'music' ? 100 : 10}
+                    maximumValue={cacheDialog === 'music' ? 20000 : 500}
+                    step={cacheDialog === 'music' ? 100 : 10}
+                    value={cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize}
+                    onValueChange={cacheDialog === 'music' ? setMaxMusicCacheSize : setMaxMetaCacheSize}
                     minimumTrackTintColor={theme.colors.primary}
                     maximumTrackTintColor={theme.colors.outline}
                     thumbTintColor={theme.colors.primary}
                   />
                   <View style={styles.sliderLabels}>
-                    <Text style={styles.sliderLabelSmall}>100 MB</Text>
-                    <Text style={styles.sliderLabelSmall}>20 GB</Text>
+                    <Text style={styles.sliderLabelSmall}>{cacheDialog === 'music' ? '100 MB' : '10 MB'}</Text>
+                    <Text style={styles.sliderLabelSmall}>{cacheDialog === 'music' ? '20 GB' : '500 MB'}</Text>
                   </View>
                 </View>
               </Dialog.Content>
               <Dialog.Actions>
-                <Button onPress={() => setShowCacheDialog(false)}>Cancel</Button>
-                <Button onPress={() => handleMaxCacheSizeChange(maxCacheSize)}>Apply</Button>
+                <Button onPress={() => setCacheDialog(null)}>Cancel</Button>
+                <Button
+                  onPress={() =>
+                    handleMaxCacheSizeChange(
+                      cacheDialog,
+                      cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize
+                    )
+                  }
+                >
+                  Apply
+                </Button>
               </Dialog.Actions>
             </Dialog>
           </Portal>

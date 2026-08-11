@@ -4,7 +4,6 @@ import {
   ScrollView,
   FlatList,
   TouchableOpacity,
-  Image,
   Animated,
   RefreshControl,
 } from 'react-native';
@@ -12,7 +11,10 @@ import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import ScreenBackground from '../components/ScreenBackground';
+import CachedImage from '../components/CachedImage';
 import SubsonicAPI from '../services/SubsonicAPI';
+import ArtworkCache from '../services/ArtworkCache';
+import CacheService from '../services/CacheService';
 import { getPlaylistPlayTimes } from '../services/RecentPlaylists';
 import { getPinnedPlaylistIds, buildHomePlaylists } from '../services/PinnedPlaylists';
 import { getRandomAlbums } from '../services/RandomAlbums';
@@ -33,15 +35,12 @@ const PLAYLIST_GRID_COUNT = 6;
 const ALBUM_SECTION_COUNT = 20;
 
 const AlbumCard = memo(function AlbumCard({ album, styles, onPress }) {
-  const coverUrl = useMemo(() => {
-    const id = album.coverArt || album.id;
-    return id ? SubsonicAPI.getCoverArtUrl(id, 300) : null;
-  }, [album.coverArt, album.id]);
-
   return (
     <TouchableOpacity style={styles.albumCard} activeOpacity={0.7} onPress={() => onPress(album)}>
-      <Image
-        source={coverUrl ? { uri: coverUrl } : DEFAULT_ART}
+      <CachedImage
+        coverArtId={album.coverArt || album.id}
+        size={300}
+        fallbackSource={DEFAULT_ART}
         style={styles.albumCardImage}
         resizeMode="cover"
         defaultSource={DEFAULT_ART}
@@ -54,14 +53,12 @@ const AlbumCard = memo(function AlbumCard({ album, styles, onPress }) {
 });
 
 const PlaylistChip = memo(function PlaylistChip({ playlist, styles, onPress }) {
-  const coverUrl = useMemo(() => {
-    return playlist.coverArt ? SubsonicAPI.getCoverArtUrl(playlist.coverArt, 150) : null;
-  }, [playlist.coverArt]);
-
   return (
     <TouchableOpacity style={styles.playlistChip} activeOpacity={0.7} onPress={() => onPress(playlist)}>
-      <Image
-        source={coverUrl ? { uri: coverUrl } : DEFAULT_ART}
+      <CachedImage
+        coverArtId={playlist.coverArt}
+        size={150}
+        fallbackSource={DEFAULT_ART}
         style={styles.playlistChipImage}
         resizeMode="cover"
         defaultSource={DEFAULT_ART}
@@ -93,6 +90,7 @@ export default function HomeScreen({ navigation }) {
       getRandomAlbums().then(a => a.slice(0, ALBUM_SECTION_COUNT)).catch(() => []),
     ]);
     setSections({ recent, newest, released, random });
+    CacheService.set('home_albums', { recent, newest, released, random });
   }, []);
 
   // Pinned playlists first (set in Settings), then recently-listened fallback fills
@@ -103,23 +101,35 @@ export default function HomeScreen({ navigation }) {
       getPlaylistPlayTimes(),
       getPinnedPlaylistIds(),
     ]);
-    const all = resp?.playlist || [];
+    // Fall back to the cached list when the fetch fails
+    const all = resp?.playlist
+      || (await CacheService.getAsync('home_playlists').catch(() => null))
+      || [];
+    if (resp?.playlist) CacheService.set('home_playlists', resp.playlist);
     setRecentPlaylists(buildHomePlaylists(all, pinnedIds, playTimes, PLAYLIST_GRID_COUNT));
   }, []);
 
   useEffect(() => {
     let active = true;
+    const reveal = () => {
+      setIsLoading(false);
+      requestAnimationFrame(() => {
+        Animated.timing(listOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      });
+    };
     (async () => {
+      // Cached-first: paint immediately with the last session's data, then
+      // refresh from the network in the background.
+      const cached = await CacheService.getAsync('home_albums').catch(() => null);
+      if (active && cached) {
+        setSections(prev => ({ ...prev, ...cached }));
+        reveal();
+      }
       try {
         await SubsonicAPI.loadConfiguration();
         await loadAlbums();
       } finally {
-        if (active) {
-          setIsLoading(false);
-          requestAnimationFrame(() => {
-            Animated.timing(listOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-          });
-        }
+        if (active) reveal();
       }
     })();
     return () => { active = false; };
@@ -158,8 +168,8 @@ export default function HomeScreen({ navigation }) {
   );
 
   const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.coverArt, 600) };
-    if (currentTrack?.albumId) return { uri: SubsonicAPI.getCoverArtUrl(currentTrack.albumId, 600) };
+    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
+    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
     return DEFAULT_ART;
   }, [currentTrack?.coverArt, currentTrack?.albumId]);
 

@@ -207,9 +207,11 @@ class SubsonicAPI {
   }
 
   // Get stream URL for a song
-  getStreamUrl(songId, maxBitRate = null) {
+  // options.format: 'raw' streams the original file, 'mp3' transcodes server-side
+  getStreamUrl(songId, { maxBitRate = null, format = null } = {}) {
     const params = { id: songId };
     if (maxBitRate) params.maxBitRate = maxBitRate;
+    if (format) params.format = format;
     return this.buildUrl('stream', params);
   }
 

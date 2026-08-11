@@ -15,6 +15,7 @@ import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
+import ArtworkCache from '../services/ArtworkCache';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/PlayerScreen.styles';
@@ -90,10 +91,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
     }
   };
 
-  const getCoverArtUrl = (track) => {
-    if (track?.coverArt) return SubsonicAPI.getCoverArtUrl(track.coverArt, 400);
-    return null;
-  };
+  const getArtSource = (track) => ArtworkCache.getArtworkSource(track?.coverArt, 400, null);
 
   const formatTime = (ms) => AudioPlayer.formatTime(ms);
 
@@ -167,13 +165,13 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
     );
   }
 
-  const coverArtUrl = getCoverArtUrl(currentTrack);
+  const artSource = getArtSource(currentTrack) || DEFAULT_ART;
   const shouldShowDuration = !isLoading && Number.isFinite(duration) && duration > 0;
   const endTimeDisplay = shouldShowDuration ? formatTime(duration) : 'Loading…';
 
   return (
     <ScreenBackground
-      source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+      source={artSource}
       backgroundStyle={styles.backgroundImage}
       blurStyle={styles.blurOverlay}
     >
@@ -194,7 +192,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
           <View style={styles.albumArtContainer}>
             <View style={[styles.albumArtShadow, artDisplaySize]}>
               <Image
-                source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+                source={artSource}
                 style={[styles.albumArt, artDisplaySize]}
                 defaultSource={DEFAULT_ART}
                 onLoad={handleArtLoad}

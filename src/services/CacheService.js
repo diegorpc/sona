@@ -5,7 +5,7 @@ class CacheService {
     this.memoryCache = new Map();
     this.CACHE_PREFIX = '@sona_cache_';
     this.METADATA_KEY = '@sona_cache_metadata';
-    this.DEFAULT_MAX_SIZE_MB = 500; // 500 MB default limit
+    this.DEFAULT_MAX_SIZE_MB = 50; // metadata + artwork budget (music has its own cache)
     this.initialized = false;
   }
 
