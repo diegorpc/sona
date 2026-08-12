@@ -27,7 +27,7 @@ import ArtworkCache from '../services/ArtworkCache';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import PlaylistCollage from '../components/PlaylistCollage';
-import { usePlayer } from '../contexts/PlayerContext';
+import { useCurrentTrack, usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/LibraryScreen.styles';
 import { createStyles as createMenuStyles } from '../styles/SongMenu.styles';
@@ -70,7 +70,7 @@ const ARTIST_SORT_OPTIONS = [
 const ALBUM_SORT_OPTIONS = [
   { key: 'recent', label: 'Recently Listened', icon: 'history' },
   { key: 'newest', label: 'Recently Added', icon: 'new-releases' },
-  { key: 'frequent', label: 'Frequently Listened', icon: 'repeat' },
+  { key: 'frequent', label: 'Most Listened', icon: 'repeat' },
   { key: 'alphabetical', label: 'Alphabetical', icon: 'sort-by-alpha' },
   { key: 'dateReleased', label: 'Date Released', icon: 'event' },
   { key: 'random', label: 'Random', icon: 'shuffle' },
@@ -388,10 +388,8 @@ export default function LibraryScreen({ navigation, route }) {
   // Deep-link entry (e.g. "See All" from Home): land on a specific tab + sort.
   const initialTab = route?.params?.initialTab || 'liked';
   const initialSort = route?.params?.initialSort || DEFAULT_SORT_BY_VIEW[initialTab] || DEFAULT_SORT_OPTION;
-  const { playTrack, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
-  const {
-    playerState: { currentTrack },
-  } = usePlayer();
+  const { playTrack, insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
+  const currentTrack = useCurrentTrack();
   const [menuSong, setMenuSong] = useState(null);
   const [addToPlaylistSong, setAddToPlaylistSong] = useState(null);
   const [artists, setArtists] = useState([]);
@@ -1595,9 +1593,14 @@ export default function LibraryScreen({ navigation, route }) {
     index,
   }), []);
 
+  // No index in the key: fullFilteredData already dedupes on this exact
+  // id/name/title fallback, so the base key is unique within a view. Including
+  // the index made every key change whenever the list order did (sort change,
+  // direction flip), forcing React to unmount and remount every row instead of
+  // just reordering them.
   const keyExtractor = useCallback((item, index) => {
-    const baseKey = item?.id ?? item?.name ?? item?.title ?? `item-${index}`;
-    return `${viewMode}-${baseKey}-${index}`;
+    const baseKey = item?.id ?? item?.name ?? item?.title;
+    return baseKey ? `${viewMode}-${baseKey}` : `${viewMode}-item-${index}`;
   }, [viewMode]);
 
   const renderEmptyState = () => {

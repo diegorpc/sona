@@ -70,7 +70,13 @@ const PlayerOverlay = () => {
     }
   }, [currentTrack]);
 
-  const coverArtUrl = ArtworkCache.getArtworkSource(currentTrack?.coverArt, 240)?.uri || null;
+  // playerState (and this component) updates up to 10x/sec from AudioPlayer's
+  // position-tracking timer — memoize on the coverArt id so ArtworkCache only
+  // resolves/downloads art once per track change, not on every tick.
+  const coverArtSource = useMemo(
+    () => ArtworkCache.getArtworkSource(currentTrack?.coverArt, 240),
+    [currentTrack?.coverArt]
+  );
 
   const backdropOpacity = animation.interpolate({
     inputRange: [0, 1],
@@ -328,7 +334,7 @@ const PlayerOverlay = () => {
           isLoading={isLoading}
           position={position}
           duration={duration}
-          coverArtUrl={coverArtUrl}
+          coverArtSource={coverArtSource}
           onPlayPause={togglePlayPause}
           onExpand={handleExpand}
         />

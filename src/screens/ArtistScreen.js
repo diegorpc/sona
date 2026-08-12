@@ -19,7 +19,7 @@ import AudioPlayer from '../services/AudioPlayer';
 import ArtworkCache from '../services/ArtworkCache';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
-import { usePlayer } from '../contexts/PlayerContext';
+import { useCurrentTrack } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/ArtistScreen.styles';
 
@@ -124,7 +124,7 @@ export default function ArtistScreen({ route, navigation }) {
   const { artist } = route.params;
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack } } = usePlayer();
+  const currentTrack = useCurrentTrack();
   const [artistData, setArtistData] = useState(null);
   const [topSongs, setTopSongs] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);

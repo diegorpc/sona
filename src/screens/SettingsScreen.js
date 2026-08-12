@@ -21,7 +21,6 @@ import {
   ProgressBar,
   IconButton,
 } from 'react-native-paper';
-import { CommonActions } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import SubsonicAPI from '../services/SubsonicAPI';
@@ -31,9 +30,10 @@ import ArtworkCache from '../services/ArtworkCache';
 import SongCache from '../services/SongCache';
 import { DEFAULT_SETTINGS, getAppSettings, saveAppSettings } from '../services/AppSettings';
 import { getPinnedPlaylistIds, setPinnedPlaylistIds, MAX_PINNED } from '../services/PinnedPlaylists';
+import { notifyAuthChange } from '../services/NavigationService';
 import ScreenBackground from '../components/ScreenBackground';
 import { useTheme } from '../contexts/ThemeContext';
-import { usePlayer } from '../contexts/PlayerContext';
+import { useCurrentTrack } from '../contexts/PlayerContext';
 import { accentPalettes } from '../theme/theme';
 import { createStyles } from '../styles/SettingsScreen.styles';
 
@@ -59,10 +59,10 @@ const buildChipOrder = (selectedKey) => {
   return [selected, ...TABS.filter(t => t.key !== selectedKey)];
 };
 
-export default function SettingsScreen({ navigation }) {
+export default function SettingsScreen() {
   const { theme, accentColor, changeAccentColor } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack } } = usePlayer();
+  const currentTrack = useCurrentTrack();
   const [activeTab, setActiveTab] = useState('appearance');
   const [serverInfo, setServerInfo] = useState(null);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -240,9 +240,7 @@ export default function SettingsScreen({ navigation }) {
               await AudioPlayer.stop();
               await SubsonicAPI.logout();
               await AsyncStorage.clear();
-              navigation.dispatch(
-                CommonActions.reset({ index: 0, routes: [{ name: 'Login' }] })
-              );
+              notifyAuthChange();
             } catch (error) {
               console.error('Error during logout:', error);
             }

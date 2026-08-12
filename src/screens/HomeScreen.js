@@ -18,15 +18,16 @@ import CacheService from '../services/CacheService';
 import { getPlaylistPlayTimes } from '../services/RecentPlaylists';
 import { getPinnedPlaylistIds, buildHomePlaylists } from '../services/PinnedPlaylists';
 import { getRandomAlbums } from '../services/RandomAlbums';
-import { usePlayer } from '../contexts/PlayerContext';
+import { useCurrentTrack } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/HomeScreen.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
 const ALBUM_SECTIONS = [
-  { key: 'recent', title: 'Recently Played', sort: 'recent' },
   { key: 'newest', title: 'Recently Added', sort: 'newest' },
+  { key: 'frequent', title: 'Most Played', sort: 'frequent' },
+  { key: 'recent', title: 'Recently Played', sort: 'recent' },
   { key: 'released', title: 'Recently Released', sort: 'dateReleased' },
   { key: 'random', title: 'Random', sort: 'random' },
 ];
@@ -71,7 +72,7 @@ const PlaylistChip = memo(function PlaylistChip({ playlist, styles, onPress }) {
 export default function HomeScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { playerState: { currentTrack } } = usePlayer();
+  const currentTrack = useCurrentTrack();
 
   const [recentPlaylists, setRecentPlaylists] = useState([]);
   const [sections, setSections] = useState({ recent: [], newest: [], released: [], random: [] });
@@ -81,16 +82,16 @@ export default function HomeScreen({ navigation }) {
 
   const loadAlbums = useCallback(async () => {
     const currentYear = new Date().getFullYear();
-    const [recent, newest, released, random] = await Promise.all([
-      SubsonicAPI.getAlbumList('recent', ALBUM_SECTION_COUNT).catch(() => []),
+    const [newest, frequent, recent, released, random] = await Promise.all([
       SubsonicAPI.getAlbumList('newest', ALBUM_SECTION_COUNT).catch(() => []),
-      // byYear with fromYear > toYear returns newest-released first
+      SubsonicAPI.getAlbumList('frequent', ALBUM_SECTION_COUNT).catch(() => []),
+      SubsonicAPI.getAlbumList('recent', ALBUM_SECTION_COUNT).catch(() => []),
       SubsonicAPI.getAlbumList('byYear', ALBUM_SECTION_COUNT, 0, { fromYear: currentYear, toYear: 0 }).catch(() => []),
       // Shared, persisted random ordering (same as Library); reset only via Library's refresh.
       getRandomAlbums().then(a => a.slice(0, ALBUM_SECTION_COUNT)).catch(() => []),
     ]);
-    setSections({ recent, newest, released, random });
-    CacheService.set('home_albums', { recent, newest, released, random });
+    setSections({ newest, frequent, recent, released, random });
+    CacheService.set('home_albums', { newest, frequent, recent, released, random });
   }, []);
 
   // Pinned playlists first (set in Settings), then recently-listened fallback fills

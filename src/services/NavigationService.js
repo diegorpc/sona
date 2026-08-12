@@ -7,3 +7,13 @@ export function navigate(name, params) {
     navigationRef.current.navigate(name, params);
   }
 }
+
+let authChangeHandler = null;
+
+export function setAuthChangeHandler(handler) {
+  authChangeHandler = handler;
+}
+
+export function notifyAuthChange() {
+  authChangeHandler?.();
+}

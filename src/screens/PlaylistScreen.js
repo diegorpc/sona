@@ -22,7 +22,7 @@ import CacheService from '../services/CacheService';
 import { recordPlaylistPlayed } from '../services/RecentPlaylists';
 import PlaylistCollage from '../components/PlaylistCollage';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
-import { usePlayer } from '../contexts/PlayerContext';
+import { useCurrentTrack, usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/PlaylistScreen.styles';
 import { createStyles as createMenuStyles } from '../styles/SongMenu.styles';
@@ -31,6 +31,24 @@ const DEFAULT_ART = require('../../assets/default-album.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ART_SIZE = Math.min(220, SCREEN_WIDTH - 140);
 const SWIPE_ACTION_WIDTH = 80;
+
+// a 2x2 collage fallback when the playlist has no dedicated coverArt
+function pickCollageIds(entries) {
+  const ids = [];
+  const seenCoverArt = new Set();
+  const seenAlbum = new Set();
+  for (const song of entries || []) {
+    const coverArtId = song.coverArt;
+    const albumId = song.albumId;
+    if (coverArtId && !seenCoverArt.has(coverArtId) && (!albumId || !seenAlbum.has(albumId))) {
+      seenCoverArt.add(coverArtId);
+      if (albumId) seenAlbum.add(albumId);
+      ids.push(coverArtId);
+      if (ids.length >= 4) break;
+    }
+  }
+  return ids;
+}
 
 // ─── Swipe-left "Add last" action ─────────────────────────────────
 const SwipeAddLast = memo(({ progress, theme }) => {
@@ -142,7 +160,8 @@ export default function PlaylistScreen({ route, navigation }) {
   const { playlist } = route.params;
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack }, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
+  const currentTrack = useCurrentTrack();
+  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
   const [playlistData, setPlaylistData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -151,12 +170,16 @@ export default function PlaylistScreen({ route, navigation }) {
   // Bumped whenever playlist art is invalidated/redownloaded, to force the
   // header image to pick up the fresh file instead of a stale cached one.
   const [artNonce, setArtNonce] = useState(0);
+  // Up to 4 album coverArt ids for the 2x2 collage fallback (playlists with
+  // no dedicated coverArt). null = not computed yet, [] = none available.
+  const [collageIds, setCollageIds] = useState(null);
 
   useEffect(() => { loadPlaylistData(); }, []);
 
-  const loadPlaylistData = async () => {
+  const loadPlaylistData = async ({ refreshArt = false } = {}) => {
     try {
       setIsLoading(true);
+      let hadCollage = collageIds !== null;
       // Cached-first: paint immediately, then refresh from the network
       if (!playlistData) {
         const cached = await CacheService.getAsync(`playlist_${playlist.id}`).catch(() => null);
@@ -164,15 +187,25 @@ export default function PlaylistScreen({ route, navigation }) {
           setPlaylistData(cached);
           setIsLoading(false);
         }
+        const cachedCollageIds = await CacheService.getAsync(`playlist_${playlist.id}_collageIds`).catch(() => null);
+        if (cachedCollageIds) {
+          setCollageIds(cachedCollageIds);
+          hadCollage = true;
+        }
       }
       const data = await SubsonicAPI.getPlaylist(playlist.id);
       setPlaylistData(data);
       CacheService.set(`playlist_${playlist.id}`, data);
-      // Unlike album/artist art, a playlist's art can change on the server
-      // while its coverArt id stays the same (regenerated collage, new custom
-      // image) — always drop the cached file and let it redownload fresh.
+
+      // playlist art is only redownloaded/recomputed on an explicit refresh
       if (data?.coverArt) {
-        ArtworkCache.invalidate(data.coverArt).then(() => setArtNonce(n => n + 1));
+        if (refreshArt) {
+          ArtworkCache.invalidate(data.coverArt).then(() => setArtNonce(n => n + 1));
+        }
+      } else if (refreshArt || !hadCollage) {
+        const ids = pickCollageIds(data?.entry);
+        setCollageIds(ids);
+        CacheService.set(`playlist_${playlist.id}_collageIds`, ids);
       }
     } catch (e) {
       console.error('Error loading playlist:', e);
@@ -183,7 +216,7 @@ export default function PlaylistScreen({ route, navigation }) {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadPlaylistData();
+    await loadPlaylistData({ refreshArt: true });
     setIsRefreshing(false);
   };
 
@@ -251,17 +284,26 @@ export default function PlaylistScreen({ route, navigation }) {
   }, [playlist.id, menuSongIndex]);
 
   const artCoverId = playlistData?.coverArt || playlist.coverArt;
+  // Fall back to the first collage album 
+  const collageArtId = collageIds && collageIds.length > 0 ? collageIds[0] : null;
+  const showCollageGrid = !artCoverId && collageIds && collageIds.length > 1;
 
   const backgroundArt = useMemo(() => {
     if (artCoverId) return ArtworkCache.getArtworkSource(artCoverId, 600, DEFAULT_ART);
+    if (collageArtId) return ArtworkCache.getArtworkSource(collageArtId, 600, DEFAULT_ART);
     if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
     return DEFAULT_ART;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [artCoverId, artNonce, currentTrack?.coverArt]);
+  }, [artCoverId, artNonce, collageArtId, currentTrack?.coverArt]);
 
   const [artSizeReady, setArtSizeReady] = useState(false);
   const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
   useEffect(() => {
+    if (showCollageGrid) {
+      setArtDisplaySize({ width: ART_SIZE, height: ART_SIZE });
+      setArtSizeReady(true);
+      return;
+    }
     const uri = backgroundArt?.uri;
     if (!uri) { setArtSizeReady(true); return; }
     setArtSizeReady(false);
@@ -283,7 +325,7 @@ export default function PlaylistScreen({ route, navigation }) {
       () => { if (!cancelled) setArtSizeReady(true); }
     );
     return () => { cancelled = true; };
-  }, [backgroundArt]);
+  }, [backgroundArt, showCollageGrid]);
 
   const menuOptions = useMemo(() => {
     if (!menuSong) return [];
@@ -385,12 +427,19 @@ export default function PlaylistScreen({ route, navigation }) {
     <View>
       <View style={styles.artContainer}>
         <View style={[styles.artShadow, artDisplaySize]}>
-          <Image
-            source={backgroundArt}
-            style={[styles.artImage, artDisplaySize]}
-            resizeMode="cover"
-            defaultSource={DEFAULT_ART}
-          />
+          {showCollageGrid ? (
+            <PlaylistCollage
+              collageData={{ type: 'collage', coverArtIds: collageIds }}
+              size={artDisplaySize.width}
+            />
+          ) : (
+            <Image
+              source={backgroundArt}
+              style={[styles.artImage, artDisplaySize]}
+              resizeMode="contain"
+              defaultSource={DEFAULT_ART}
+            />
+          )}
         </View>
       </View>
 
@@ -431,7 +480,7 @@ export default function PlaylistScreen({ route, navigation }) {
 
       <View style={styles.divider} />
     </View>
-  ), [playlist, playlistData, backgroundArt, theme, playPlaylist, getTotalDuration, artDisplaySize]);
+  ), [playlist, playlistData, backgroundArt, theme, playPlaylist, getTotalDuration, artDisplaySize, showCollageGrid, collageIds]);
 
   if (isLoading || !artSizeReady) {
     return (

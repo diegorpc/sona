@@ -19,7 +19,7 @@ import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import ArtworkCache from '../services/ArtworkCache';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
-import { usePlayer } from '../contexts/PlayerContext';
+import { useCurrentTrack, usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/SearchScreen.styles';
 
@@ -30,7 +30,8 @@ const MAX_RECENT_SEARCHES = 20;
 export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack }, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
+  const currentTrack = useCurrentTrack();
+  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);

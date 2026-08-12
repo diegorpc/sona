@@ -11,6 +11,17 @@ const CURRENT_TRACK_SOURCE_KEY = 'audioPlayerCurrentTrackSource';
 const SHUFFLE_KEY = 'audioPlayerShuffle';
 const REPEAT_MODE_KEY = 'audioPlayerRepeatMode';
 
+// Subsonic track metadata already carries a duration (seconds) — use it as
+// the displayed duration immediately, before the native player has buffered
+// enough of the (often transcoded, chunked) stream to know its own duration.
+// The status timer below only ever overwrites this with a live value once
+// one is actually known, so the UI never regresses to "Loading…"/NaN once a
+// number is showing.
+function knownDurationMs(track) {
+  const seconds = track?.duration;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+}
+
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -157,7 +168,7 @@ class AudioPlayerService {
       }
 
       this.position = 0;
-      this.duration = 0;
+      this.duration = knownDurationMs(track);
       this.isLoading = true;
       this.isPlaying = false;
 
@@ -228,7 +239,13 @@ class AudioPlayerService {
       const duration = this.sound.duration;
 
       this.position = currentTime * 1000;
-      this.duration = duration * 1000;
+      // The native player can report NaN/0 for a while before it has
+      // buffered enough to know the real duration — only take its value once
+      // it's actually known, so we never regress a good number (metadata
+      // fallback or a previously-known live value) back to "Loading…"/NaN.
+      if (Number.isFinite(duration) && duration > 0) {
+        this.duration = duration * 1000;
+      }
       this.isPlaying = this.sound.playing;
 
       // Track-end detection with threshold to prevent false positives
@@ -311,6 +328,7 @@ class AudioPlayerService {
 
     try {
       this.isLoading = true;
+      this.duration = knownDurationMs(track);
       this.notifyListeners();
 
       await this.stopCurrentTrack();

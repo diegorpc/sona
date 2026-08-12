@@ -23,14 +23,14 @@ iOS-first music streaming client. Development on Linux, tested via Expo Go on ph
 src/
 ├── components/
 │   ├── AddToPlaylistModal.js     # Bottom sheet: search/create playlists, add a song (used by SongMenu surfaces)
-│   ├── CachedImage.js            # Drop-in cover art Image backed by ArtworkCache (used throughout)
+│   ├── CachedImage.js            # Drop-in cover art Image backed by ArtworkCache; self-heals if the initial remote load stalls (used throughout)
 │   ├── MiniPlayer.js             # Collapsed player bar (tappable, swipe-up gesture handled by PlayerOverlay)
 │   ├── PlayerOverlay.js          # Full-screen overlay: MiniPlayer + PlayerScreen + QueueScreen stacked
 │   ├── PlaylistCollage.js        # 2×2 cover art grid component used as a fallback in PlaylistScreen
 │   ├── ScreenBackground.js       # Cross-platform background: ImageBackground+BlurView (iOS) or themed View (Android)
 |   └── SongMenu.js               # Menu component used for song listings and in PlayerScreen
 ├── contexts/
-│   ├── PlayerContext.js          # Global player state; wraps AudioPlayer, exposes usePlayer()
+│   ├── PlayerContext.js          # Global player state; wraps AudioPlayer. usePlayer() / useCurrentTrack() / usePlayerActions()
 │   └── ThemeContext.js           # Accent color state, persists to AsyncStorage, exposes useTheme()
 ├── screens/
 │   ├── LoginScreen.js            # Server URL + credentials, calls SubsonicAPI.initialize()
@@ -161,6 +161,8 @@ Singleton at `src/services/AudioPlayer.js`. Uses `createAudioPlayer` from `expo-
 
 State fields: `currentTrack`, `playlist[]`, `currentIndex`, `isPlaying`, `position` (ms), `duration` (ms), `isLoading`, `priorityQueue[]`, `contextQueue { name, type, id }`, `currentTrackSource ('context'|'priority')`, `shuffle` (bool), `repeatMode ('none'|'all'|'one')`
 
+`duration` is seeded from the Subsonic track metadata (`track.duration`, seconds → ms) the instant playback starts, via `knownDurationMs()` — the native player can take a while (sometimes much longer for transcoded/chunked streams) to determine its own duration, and reports `NaN` in the meantime. The 100ms status-timer poll only overwrites `duration` once `this.sound.duration` is actually finite and positive, so the UI shows a real number immediately instead of "Loading…"/NaN and never regresses once it has one.
+
 Queue model:
 - **playlist** — the context queue (album, artist, playlist)
 - **priorityQueue** — tracks inserted to play next; consumed before advancing playlist
@@ -173,7 +175,23 @@ Persistence keys: `currentTrack`, `currentPlaylist`, `currentIndex`, `currentPos
 
 Playback source: `resolveSourceUri(trackId)` (used by `playTrack` and session restore) prefers a `SongCache` local file; otherwise builds a stream URL — transcoded MP3 320 kbps unless the `originalQualityStreaming` setting is on.
 
-Listener pattern: `addListener(fn)` / `removeListener(fn)` — `fn(state)` called on every state change. `PlayerContext` subscribes and exposes state via `usePlayer()`.
+Listener pattern: `addListener(fn)` / `removeListener(fn)` — `fn(state)` called on every state change. `PlayerContext` subscribes and re-publishes it (see below).
+
+**The 100ms status timer means player state changes ~10x/sec while a track plays** — this dominates the perf characteristics of anything consuming it, so `PlayerContext` is split by update frequency rather than exposing one value.
+
+## PlayerContext
+
+`src/contexts/PlayerContext.js` provides three separate contexts, because a context consumer re-renders whenever its context value changes regardless of which fields it actually reads:
+
+| Hook | Provides | Re-renders |
+|---|---|---|
+| `usePlayer()` | `{ playerState, ...actions }` | ~10x/sec while playing |
+| `useCurrentTrack()` | `currentTrack` only | only on track change |
+| `usePlayerActions()` | the action callbacks | never |
+
+**Only use `usePlayer()` if you render live position/duration** — currently just PlayerScreen's slider, PlayerOverlay (MiniPlayer progress), and QueueScreen. Everything else wants `useCurrentTrack()` (backdrop art, now-playing row highlight) and/or `usePlayerActions()`.
+
+The action callbacks are `.bind()`-ed **once at module scope** (`playerActions`) and must stay that way. They were previously re-bound inside a `useMemo` keyed on `playerState`, which handed every consumer new function identities 10x/sec. That silently defeated downstream memoization — in LibraryScreen it invalidated `handleAddLast` → `renderItem` → every row's `React.memo` comparator, so the entire visible list genuinely re-rendered 10x/sec and `VirtualizedList` logged "large list that is slow to update" warnings.
 
 ## Caching
 
@@ -189,13 +207,13 @@ Singleton. In-memory `Map` + AsyncStorage backing (`@sona_cache_` prefix). Metad
 LibraryScreen is the exception: if its cache keys (`artists`, `albums_<sortOption>`, `likedSongs`, `playlists`) are already populated, it renders from cache **without** hitting the network at all — a manual pull-to-refresh (or the Random-sort reset button) is required to see changes. `LibrarySync` (below) exists mainly to work around this by keeping those keys warm.
 
 ### ArtworkCache
-Singleton at `src/services/ArtworkCache.js`. Downloads cover art to `cacheDirectory/artwork/` (index under `@sona_artwork_index`), keyed `<coverArtId>_<size>`. An entry, once downloaded, is never re-checked against the server — treat art as immutable once cached.
+Singleton at `src/services/ArtworkCache.js`. Downloads cover art to `documentDirectory/artwork/` (index under `@sona_artwork_index`), keyed `<coverArtId>_<size>`. An entry, once downloaded, is never re-checked against the server — treat art as immutable once cached. Deliberately `documentDirectory`, not `cacheDirectory` — the OS (and Expo Go especially) can purge `cacheDirectory` at any time, which would silently break every previously-cached image while the persisted index still claims they exist. `initialize()` also self-heals: it verifies each indexed file still exists on disk and drops any that don't, so a purge (or a leftover index from before this fix) degrades to a normal re-download instead of a permanently-broken local path.
 - `getArtwork(id, size)` — sync: returns the local URI if cached; otherwise starts a deduplicated background download and returns `null` (caller renders the remote URL — no mid-render source swap, no flicker)
 - `getArtworkSource(id, size, fallback)` — same, but returns an `Image`-source object (`{ uri }` local/remote, or `fallback`) for call sites that don't render through `CachedImage` (`ScreenBackground` sources, `Image.getSize` probes, `MiniPlayer`'s `coverArtUrl` prop). `CachedImage` is a thin wrapper around this.
-- `invalidate(id)` — drops every cached size for an id (and any negative-cache entry, see below) so the next fetch redownloads it fresh. Album and artist art are never invalidated (they don't change). **Playlist art is invalidated on every playlist-screen refresh** (see PlaylistScreen below), since a playlist's coverArt id can stay the same while the underlying image changes (regenerated collage, new custom image).
+- `invalidate(id)` — drops every cached size for an id (and any negative-cache entry, see below) so the next fetch redownloads it fresh. Album and artist art are never invalidated (they don't change). **Playlist art is invalidated only on an explicit pull-to-refresh** (see PlaylistScreen below), since a playlist's own coverArt id can stay the same while the underlying image changes (regenerated collage, new custom image) — but that's not checked on every open, only when the user asks for a refresh.
 - Negative caching: a 404 (e.g. an artist with no photo) is remembered in `index.missing[key]` and never retried — `getArtwork`/`getArtworkSource` return `null`/`fallback` immediately instead of re-attempting the download every render. Cleared by `invalidate(id)`.
 - `pruneToBudget()` — evicts oldest art so that artwork + CacheService JSON fit the shared `maxSizeMB`
-- Consumed via the `CachedImage` component (`coverArtId`, `size`, `fallbackSource`, + Image props) — used everywhere cover art is rendered (Home, Library, Artist, Album, Playlist, Search, Queue, Player, MiniPlayer, SongMenu, AddToPlaylistModal, Settings' pin manager)
+- Consumed via the `CachedImage` component (`coverArtId`, `size`, `fallbackSource`, + Image props) — used everywhere cover art is rendered (Home, Library, Artist, Album, Playlist, Search, Queue, Player, MiniPlayer, SongMenu, AddToPlaylistModal, Settings' pin manager). `CachedImage` renders the remote URL immediately if nothing's cached yet (no flicker), but also awaits its own `download()` call and bumps a `readyTick` state once it resolves — without this, a screen that mounts many of these at once (e.g. Home's rows) could have some remote loads stall/fail with no way to recover, stuck on the placeholder forever even after the background download succeeds and caches the file (visible correctly only on a fresh mount elsewhere, e.g. AlbumScreen). Non-component call sites using `getArtworkSource` directly (`ScreenBackground` sources, `MiniPlayer`'s `coverArtUrl`, `Image.getSize` probes) don't get this self-heal — lower risk since each screen only has one or two "hero" images, not dozens at once.
 
 ### SongCache
 Singleton at `src/services/SongCache.js`. Song files in `documentDirectory/music/`, index under `@sona_music_cache_index`, own `maxSizeMB` budget (default 2048).
@@ -288,9 +306,9 @@ Sort options per tab:
 
 ### PlaylistScreen
 - Song rows with 44×44 cover art, `resizeMode="contain"` in fixed container (no JS resize on load)
-- Collage: if `generatePlaylistCollage` returns `{ type: 'collage' }`, `PlaylistCollage` renders a 2×2 grid
+- Collage: when the playlist has no dedicated `coverArt`, `pickCollageIds()` picks up to 4 distinct-album cover art ids locally from `playlistData.entry` (same dedup heuristic as `SubsonicAPI.generatePlaylistCollage`, done without its redundant second `getPlaylist` fetch) and `PlaylistCollage` renders them as a 2×2 grid, each cell going through `CachedImage`/`ArtworkCache` like any other album art. The chosen id list is cached (`CacheService` key `playlist_<id>_collageIds`) and only recomputed on an explicit pull-to-refresh, not on every open — the underlying album art itself never needs invalidating (it's immutable), only the *selection* can go stale as the playlist's songs change.
 - Calls `recordPlaylistPlayed(playlist)` (RecentPlaylists) on both single-song play and play-all, feeding the "Recently Listened" ordering on Home and in Library
-- Cached-first via CacheService key `playlist_<id>`. Unlike album/artist art, playlist art can change server-side while the coverArt id stays the same — every network refresh (mount + pull-to-refresh) calls `ArtworkCache.invalidate(data.coverArt)` and bumps an `artNonce` state to force the header image to redownload and redisplay the fresh file.
+- Cached-first via CacheService key `playlist_<id>`. Unlike album/artist art, a playlist's own dedicated art can change server-side while its coverArt id stays the same — but `ArtworkCache.invalidate(data.coverArt)` (and the `artNonce` bump that forces the header image to pick it up) only fires on an explicit pull-to-refresh (`loadPlaylistData({ refreshArt: true })`), not on every mount. Invalidating on every open both redownloaded the art needlessly and caused the `Image.getSize` aspect-ratio effect to refire (since it depends on `backgroundArt`, which depends on `artNonce`), which was flashing the full-screen loading state a second time.
 
 ### PlayerScreen
 - Rendered inside `PlayerOverlay`, receives `onClose`, `onShowQueue`, `onNavigateToArtist`, `onNavigateToAlbum`, `safeAreaInsets` as props
@@ -329,7 +347,7 @@ SubsonicAPI.getSomeData()
 
 **Image flash prevention:** for thumbnail images in list rows, use `resizeMode="contain"` inside a fixed-size container. Do not use `Image.getSize` or `onLoad` resize state for small thumbnails — it causes a visible resize flash.
 
-**Cover art sizing for detail screens:** use `onLoad` → read `e.nativeEvent.source.{width,height}` → compute aspect ratio → update display size state. This is safe because the image is already decoded at that point.
+**Cover art sizing for detail screens:** use `onLoad` → read `e.nativeEvent.source.{width,height}` → compute aspect ratio → update display size state. This is safe because the image is already decoded at that point. Always pair it with `resizeMode="contain"`, never `"cover"`: once the container has caught up to the real aspect ratio the two render identically, but `"cover"` crops during the window before that — both the non-square art itself in a still-square box, and (more visibly) the square `defaultSource` placeholder being zoomed to fill an already-resized non-square box while the real image decodes. Applies to the hero art in Album/Playlist/Player screens.
 
 ## Running
 

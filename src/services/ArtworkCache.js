@@ -5,9 +5,12 @@ import CacheService from './CacheService';
 
 // Disk cache for cover art files. Shares the metadata cache budget with
 // CacheService: (artwork bytes + JSON metadata bytes) <= CacheService max size.
-// Files live in cacheDirectory/artwork/, index in AsyncStorage.
+// Files live in documentDirectory/artwork/ (not cacheDirectory — the OS, and
+// Expo Go in particular, is free to purge cacheDirectory at any time, which
+// would silently break every previously-cached image while the AsyncStorage
+// index still claims they exist), index in AsyncStorage.
 
-const ART_DIR = `${FileSystem.cacheDirectory}artwork/`;
+const ART_DIR = `${FileSystem.documentDirectory}artwork/`;
 const INDEX_KEY = '@sona_artwork_index';
 
 class ArtworkCache {
@@ -36,8 +39,28 @@ class ArtworkCache {
         const raw = await AsyncStorage.getItem(INDEX_KEY);
         this.index = raw ? JSON.parse(raw) : { entries: {}, totalSizeBytes: 0, missing: {} };
         if (!this.index.missing) this.index.missing = {};
-        for (const key of Object.keys(this.index.entries)) {
-          this.memoryUris.set(key, this.fileUri(key));
+
+        // Self-heal: drop any index entry whose file no longer exists (e.g.
+        // migrating from a previous version that used the OS-purgeable
+        // cacheDirectory, or any other out-of-band deletion) instead of
+        // trusting the index blindly and serving dead local paths forever.
+        const keys = Object.keys(this.index.entries);
+        const checks = await Promise.all(
+          keys.map(async key => {
+            const info = await FileSystem.getInfoAsync(this.fileUri(key)).catch(() => null);
+            return [key, Boolean(info?.exists)];
+          })
+        );
+        for (const [key, exists] of checks) {
+          if (exists) {
+            this.memoryUris.set(key, this.fileUri(key));
+          } else {
+            this.index.totalSizeBytes -= this.index.entries[key].size;
+            delete this.index.entries[key];
+          }
+        }
+        if (checks.some(([, exists]) => !exists)) {
+          await this.saveIndex();
         }
       } catch (error) {
         console.error('Error initializing artwork cache:', error);

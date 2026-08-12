@@ -16,7 +16,7 @@ import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
 import ArtworkCache from '../services/ArtworkCache';
-import { usePlayer } from '../contexts/PlayerContext';
+import { usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/PlayerScreen.styles';
 import TextTicker from 'react-native-text-ticker';
@@ -28,7 +28,7 @@ const PLAYER_ART_SIZE = SCREEN_WIDTH - 80;
 export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist, onNavigateToAlbum, safeAreaInsets }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
+  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
@@ -91,8 +91,6 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
     }
   };
 
-  const getArtSource = (track) => ArtworkCache.getArtworkSource(track?.coverArt, 400, null);
-
   const formatTime = (ms) => AudioPlayer.formatTime(ms);
 
   const { currentTrack, isPlaying, position, duration, isLoading } = playerState;
@@ -140,6 +138,11 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
     ].filter(Boolean);
   }, [currentTrack, onNavigateToAlbum, onNavigateToArtist, insertIntoPriorityQueue, appendToContextQueue]);
 
+  const artSource = useMemo(
+    () => ArtworkCache.getArtworkSource(currentTrack?.coverArt, 400, DEFAULT_ART),
+    [currentTrack?.coverArt]
+  );
+
   const [artDisplaySize, setArtDisplaySize] = useState({ width: PLAYER_ART_SIZE, height: PLAYER_ART_SIZE });
   useEffect(() => {
     setArtDisplaySize({ width: PLAYER_ART_SIZE, height: PLAYER_ART_SIZE });
@@ -165,7 +168,6 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
     );
   }
 
-  const artSource = getArtSource(currentTrack) || DEFAULT_ART;
   const shouldShowDuration = !isLoading && Number.isFinite(duration) && duration > 0;
   const endTimeDisplay = shouldShowDuration ? formatTime(duration) : 'Loading…';
 
@@ -194,6 +196,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
               <Image
                 source={artSource}
                 style={[styles.albumArt, artDisplaySize]}
+                resizeMode="contain"
                 defaultSource={DEFAULT_ART}
                 onLoad={handleArtLoad}
               />

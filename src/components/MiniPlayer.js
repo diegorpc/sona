@@ -17,7 +17,7 @@ const MiniPlayer = ({
   duration,
   onPlayPause,
   onExpand,
-  coverArtUrl,
+  coverArtSource,
 }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme);
@@ -39,7 +39,7 @@ const MiniPlayer = ({
       <BlurView intensity={45} tint="light" style={styles.blurContainer}>
         <View style={styles.content}>
           <Image
-            source={coverArtUrl ? { uri: coverArtUrl } : DEFAULT_ART}
+            source={coverArtSource || DEFAULT_ART}
             defaultSource={DEFAULT_ART}
             style={styles.coverArt}
           />

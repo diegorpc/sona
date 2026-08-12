@@ -19,7 +19,7 @@ import AudioPlayer from '../services/AudioPlayer';
 import ArtworkCache from '../services/ArtworkCache';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
-import { usePlayer } from '../contexts/PlayerContext';
+import { useCurrentTrack, usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/AlbumScreen.styles';
 import { createStyles as createMenuStyles } from '../styles/SongMenu.styles';
@@ -119,7 +119,8 @@ export default function AlbumScreen({ route, navigation }) {
   const { album } = route.params;
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { playerState: { currentTrack }, insertIntoPriorityQueue, appendToContextQueue } = usePlayer();
+  const currentTrack = useCurrentTrack();
+  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
   const [albumData, setAlbumData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -128,7 +129,6 @@ export default function AlbumScreen({ route, navigation }) {
   const loadAlbumData = async () => {
     try {
       setIsLoading(true);
-      // Cached-first: paint immediately, then refresh from the network
       if (!albumData) {
         const cached = await CacheService.getAsync(`album_${album.id}`).catch(() => null);
         if (cached) {
@@ -329,7 +329,7 @@ export default function AlbumScreen({ route, navigation }) {
           <Image
             source={backgroundArt}
             style={[styles.artImage, artDisplaySize]}
-            resizeMode="cover"
+            resizeMode="contain"
             defaultSource={DEFAULT_ART}
             onLoad={handleArtLoad}
           />

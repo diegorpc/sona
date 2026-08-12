@@ -26,7 +26,7 @@ import AlbumScreen from './src/screens/AlbumScreen';
 import SubsonicAPI from './src/services/SubsonicAPI';
 import { syncLibrary } from './src/services/LibrarySync';
 import PlaylistScreen from './src/screens/PlaylistScreen';
-import { navigationRef } from './src/services/NavigationService';
+import { navigationRef, setAuthChangeHandler } from './src/services/NavigationService';
 
 import PlayerOverlay from './src/components/PlayerOverlay';
 import { PlayerProvider } from './src/contexts/PlayerContext';
@@ -122,6 +122,7 @@ function AppContent() {
 
   useEffect(() => {
     checkLoginStatus();
+    setAuthChangeHandler(checkLoginStatus);
   }, []);
 
   const checkLoginStatus = async () => {
