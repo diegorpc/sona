@@ -1,5 +1,6 @@
 import React from 'react';
-import { Platform, View, ImageBackground } from 'react-native';
+import { Platform, View } from 'react-native';
+import { ImageBackground } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -17,7 +18,7 @@ export default function ScreenBackground({ source, backgroundStyle, blurStyle, i
   }
 
   return (
-    <ImageBackground source={source} style={backgroundStyle} resizeMode="cover">
+    <ImageBackground source={source} style={backgroundStyle} contentFit="cover">
       <BlurView intensity={intensity} tint={tint} style={blurStyle}>
         {children}
       </BlurView>

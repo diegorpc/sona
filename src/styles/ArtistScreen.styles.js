@@ -136,6 +136,53 @@ export const createStyles = (theme) => StyleSheet.create({
     fontFamily: 'Lexend_500Medium',
     lineHeight: 18,
   },
+  // Play / shuffle / queue row (mirrors AlbumScreen's playAreaRow, minus the heart)
+  playAreaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  playPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 26,
+    paddingVertical: 9,
+    borderRadius: 99,
+    backgroundColor: theme.colors.primary,
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  playPillText: {
+    fontSize: 14,
+    fontFamily: 'Lexend_700Bold',
+    color: '#000',
+    letterSpacing: 0.2,
+  },
+  // Fixed-size slot so swapping the play icon for a spinner never changes
+  // the pill's width.
+  playPillIconSlot: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.13)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Album grid (2x2 with large media art)
   albumGridContainer: {
     paddingHorizontal: GRID_HORIZONTAL_PADDING,
@@ -196,6 +243,16 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   songItemPlaying: {
     backgroundColor: theme.colors.playingBackground,
+  },
+  heartWrapper: {
+    width: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  heartIcon: {
+    color: theme.colors.primary,
   },
   trackNumberWrapper: {
     width: 0,

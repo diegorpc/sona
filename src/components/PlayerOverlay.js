@@ -14,7 +14,6 @@ import PlayerScreen from '../screens/PlayerScreen';
 import QueueScreen from '../screens/QueueScreen';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
-import ArtworkCache from '../services/ArtworkCache';
 import { createStyles } from '../styles/PlayerOverlay.styles';
 import {
   registerPlayerOverlay,
@@ -38,7 +37,7 @@ const PlayerOverlay = () => {
     reorderContextQueue,
     moveContextTrackToPriority,
   } = usePlayer();
-  const { currentTrack, isPlaying, isLoading, position, duration } = playerState;
+  const { currentTrack, isPlaying, isLoading, isBuffering, position, duration } = playerState;
   const [isExpanded, setIsExpanded] = useState(false);
   const [isQueueVisible, setIsQueueVisible] = useState(false);
   const insets = useSafeAreaInsets();
@@ -69,14 +68,6 @@ const PlayerOverlay = () => {
       setIsExpanded(false);
     }
   }, [currentTrack]);
-
-  // playerState (and this component) updates up to 10x/sec from AudioPlayer's
-  // position-tracking timer — memoize on the coverArt id so ArtworkCache only
-  // resolves/downloads art once per track change, not on every tick.
-  const coverArtSource = useMemo(
-    () => ArtworkCache.getArtworkSource(currentTrack?.coverArt, 240),
-    [currentTrack?.coverArt]
-  );
 
   const backdropOpacity = animation.interpolate({
     inputRange: [0, 1],
@@ -332,9 +323,10 @@ const PlayerOverlay = () => {
           track={currentTrack}
           isPlaying={isPlaying}
           isLoading={isLoading}
+          isBuffering={isBuffering}
           position={position}
           duration={duration}
-          coverArtSource={coverArtSource}
+          coverArtId={currentTrack?.coverArt}
           onPlayPause={togglePlayPause}
           onExpand={handleExpand}
         />

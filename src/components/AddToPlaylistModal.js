@@ -5,7 +5,6 @@ import {
   Dimensions,
   Easing,
   FlatList,
-  Image,
   Keyboard,
   Modal,
   Platform,
@@ -20,7 +19,7 @@ import { Text } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SubsonicAPI from '../services/SubsonicAPI';
-import ArtworkCache from '../services/ArtworkCache';
+import CachedImage from './CachedImage';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/AddToPlaylistModal.styles';
 
@@ -166,7 +165,6 @@ export default function AddToPlaylistModal({ song, visible, onClose }) {
   }, [searchQuery, song, isCreating, closeWithAnimation]);
 
   const renderPlaylistItem = useCallback(({ item }) => {
-    const coverSource = ArtworkCache.getArtworkSource(item.coverArt, 200, DEFAULT_ART);
     const songCount = item.songCount ?? 0;
     const isAdded = item.id === addedPlaylistId;
     return (
@@ -178,10 +176,10 @@ export default function AddToPlaylistModal({ song, visible, onClose }) {
         ]}
         onPress={() => !addedPlaylistId && handleAddToPlaylist(item)}
       >
-        <Image
-          source={coverSource}
+        <CachedImage
+          coverArtId={item.coverArt}
+          fallbackSource={DEFAULT_ART}
           style={styles.playlistThumb}
-          defaultSource={DEFAULT_ART}
         />
         <View style={styles.playlistInfo}>
           <Text

@@ -106,6 +106,9 @@ export const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.primary,
     marginTop: 4,
   },
+  albumArtistTouchable: {
+    alignSelf: 'flex-start',
+  },
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -125,6 +128,9 @@ export const createStyles = (theme) => StyleSheet.create({
     fontFamily: 'Lexend_500Medium',
     color: theme.colors.onSurface,
     opacity: 0.6,
+  },
+  badgeGenre: {
+    borderColor: theme.colors.primary,
   },
   playAreaRow: {
     flexDirection: 'row',

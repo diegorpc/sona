@@ -4,24 +4,28 @@ import {
   FlatList,
   ScrollView,
   TouchableOpacity,
-  Image,
   RefreshControl,
   Animated,
   Easing,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import ScreenBackground from '../components/ScreenBackground';
 import CachedImage from '../components/CachedImage';
+import SongMenu from '../components/SongMenu';
+import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
-import ArtworkCache from '../services/ArtworkCache';
+import { useArtworkSource } from '../hooks/useArtwork';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
-import { useCurrentTrack } from '../contexts/PlayerContext';
+import { useCurrentTrack, usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/ArtistScreen.styles';
+import { createStyles as createMenuStyles } from '../styles/SongMenu.styles';
 
 const DEFAULT_ART = require('../../assets/default-album.png');
 
@@ -34,6 +38,10 @@ const TABS = [
 const CHIP_REORDER_DURATION = 620;
 const CHIP_FADE_OUT_DURATION = 200;
 const CHIP_FADE_IN_DURATION = 240;
+// Leftmost strip reserved for the navigator's swipe-back gesture (matches
+// gestureResponseDistance in App.js). The negative hitSlop below keeps row
+// pans from activating on touches that start inside it.
+const SWIPE_BACK_EDGE_WIDTH = 50;
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedText = Animated.createAnimatedComponent(Text);
@@ -42,6 +50,26 @@ const buildChipOrder = (selectedKey) => {
   const selected = TABS.find(t => t.key === selectedKey);
   if (!selected) return TABS;
   return [selected, ...TABS.filter(t => t.key !== selectedKey)];
+};
+
+// Subsonic's `starred` field (when present) is the date-favorited timestamp.
+const getStarredTimestamp = (song) => {
+  const value = song?.starred;
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const sortByRecentlyFavorited = (songs) =>
+  [...songs].sort((a, b) => getStarredTimestamp(b) - getStarredTimestamp(a));
+
+const shuffleArray = (array) => {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
 };
 
 // ─── Album grid card (2x2 grid with large media art) ──────────────
@@ -56,10 +84,8 @@ const AlbumCard = memo(({ item, onPress }) => {
     <TouchableOpacity style={styles.albumCard} onPress={onPress} activeOpacity={0.7}>
       <CachedImage
         coverArtId={item.coverArt || item.id}
-        size={400}
         fallbackSource={DEFAULT_ART}
         style={styles.albumCardArt}
-        defaultSource={DEFAULT_ART}
       />
       <Text style={styles.albumCardTitle} numberOfLines={1}>{item.name}</Text>
       {subtitle ? <Text style={styles.albumCardSubtitle} numberOfLines={1}>{subtitle}</Text> : null}
@@ -67,10 +93,48 @@ const AlbumCard = memo(({ item, onPress }) => {
   );
 }, (prev, next) => prev.item.id === next.item.id);
 
+// ─── Swipe-left "Add last" action ─────────────────────────────────
+const SwipeAddLast = memo(({ progress, theme }) => {
+  const menuStyles = createMenuStyles(theme);
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [80, 0],
+    extrapolate: 'clamp',
+  });
+  return (
+    <View style={menuStyles.swipeAction}>
+      <Animated.View style={[menuStyles.swipeActionContent, { transform: [{ translateX }] }]}>
+        <MaterialIcons name="queue-music" size={22} color={theme.colors.onPrimary} />
+        <Text style={menuStyles.swipeActionLabel}>Add last</Text>
+      </Animated.View>
+    </View>
+  );
+});
+
+// ─── Swipe-right "Favorite" action ────────────────────────────────
+const SwipeFavorite = memo(({ progress, theme, starred }) => {
+  const menuStyles = createMenuStyles(theme);
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-80, 0],
+    extrapolate: 'clamp',
+  });
+  return (
+    <View style={menuStyles.swipeAction}>
+      <Animated.View style={[menuStyles.swipeActionContent, { backgroundColor: theme.colors.error, transform: [{ translateX }] }]}>
+        <MaterialIcons name={starred ? 'favorite' : 'favorite-border'} size={22} color="#fff" />
+        <Text style={[menuStyles.swipeActionLabel, { color: '#fff' }]}>{starred ? 'Unfavorite' : 'Favorite'}</Text>
+      </Animated.View>
+    </View>
+  );
+});
+
 // ─── Top songs / Favorite songs row (with art) ────────────────────
-const SongRow = memo(({ item, index, isPlaying, onPress, onMenuPress }) => {
+const SongRow = memo(({ item, index, isPlaying, onPress, onMenuPress, onLongPress, onAddLast, onToggleFavorite }) => {
   const { theme } = useTheme();
   const styles = createStyles(theme);
+  const swipeRef = useRef(null);
+  const starred = Boolean(item.starred);
 
   const duration = useMemo(() => {
     if (!item.duration) return '';
@@ -79,45 +143,82 @@ const SongRow = memo(({ item, index, isPlaying, onPress, onMenuPress }) => {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }, [item.duration]);
 
+  const renderRightActions = useCallback((progress) => (
+    <SwipeAddLast progress={progress} theme={theme} />
+  ), [theme]);
+
+  const renderLeftActions = useCallback((progress) => (
+    <SwipeFavorite progress={progress} theme={theme} starred={starred} />
+  ), [theme, starred]);
+
+  const handleSwipeOpen = useCallback((direction) => {
+    if (direction === 'right') {
+      onAddLast(item);
+    } else {
+      onToggleFavorite(item);
+    }
+    swipeRef.current?.close();
+  }, [item, onAddLast, onToggleFavorite]);
+
   return (
-    <TouchableOpacity
-      style={[styles.songItem, isPlaying && styles.songItemPlaying]}
-      onPress={onPress}
-      activeOpacity={0.7}
+    <Swipeable
+      ref={swipeRef}
+      renderRightActions={renderRightActions}
+      renderLeftActions={renderLeftActions}
+      onSwipeableOpen={handleSwipeOpen}
+      rightThreshold={60}
+      leftThreshold={60}
+      overshootRight={false}
+      overshootLeft={false}
+      friction={2}
+      hitSlop={{ left: -SWIPE_BACK_EDGE_WIDTH }}
     >
-      <View style={styles.trackNumberWrapper}>
-        {isPlaying
-          ? <MaterialIcons name="play-arrow" size={14} color={theme.colors.primary} style={styles.nowPlayingIcon} />
-          : <Text style={styles.trackNumber}>{index + 1}</Text>
-        }
-      </View>
-      <CachedImage
-        coverArtId={item.coverArt}
-        size={200}
-        fallbackSource={DEFAULT_ART}
-        style={styles.songImage}
-        defaultSource={DEFAULT_ART}
-      />
-      <View style={styles.songInfo}>
-        <Text style={[styles.songTitle, isPlaying && styles.songTitlePlaying]} numberOfLines={1}>
-          {item.title}
-        </Text>
-        {item.album && (
-          <Text style={[styles.songArtist, isPlaying && styles.songArtistPlaying]} numberOfLines={1}>
-            {item.album}
+      <TouchableOpacity
+        style={[styles.songItem, isPlaying && styles.songItemPlaying]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        activeOpacity={0.7}
+      >
+        <View style={styles.heartWrapper}>
+          <MaterialIcons
+            name={starred ? 'favorite' : null}
+            style={starred ? styles.heartIcon : null}
+          />
+        </View>
+        <View style={styles.trackNumberWrapper}>
+          {isPlaying
+            ? <MaterialIcons name="play-arrow" size={14} color={theme.colors.primary} style={styles.nowPlayingIcon} />
+            : <Text style={styles.trackNumber}>{index + 1}</Text>
+          }
+        </View>
+        <CachedImage
+          coverArtId={item.coverArt}
+          fallbackSource={DEFAULT_ART}
+          style={styles.songImage}
+        />
+        <View style={styles.songInfo}>
+          <Text style={[styles.songTitle, isPlaying && styles.songTitlePlaying]} numberOfLines={1}>
+            {item.title}
           </Text>
-        )}
-      </View>
-      {duration ? <Text style={styles.songDuration}>{duration}</Text> : null}
-      <TouchableOpacity style={styles.menuButton} onPress={onMenuPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <MaterialIcons name="more-vert" size={18} color={theme.colors.onSurface} style={{ opacity: 0.4 }} />
+          {item.artist && (
+            <Text style={[styles.songArtist, isPlaying && styles.songArtistPlaying]} numberOfLines={1}>
+              {item.artist}
+            </Text>
+          )}
+        </View>
+        {duration ? <Text style={styles.songDuration}>{duration}</Text> : null}
+        <TouchableOpacity style={styles.menuButton} onPress={onMenuPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <MaterialIcons name="more-vert" size={18} color={theme.colors.onSurface} style={{ opacity: 0.4 }} />
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
+    </Swipeable>
   );
 }, (prev, next) =>
   prev.item.id === next.item.id &&
   prev.index === next.index &&
-  prev.isPlaying === next.isPlaying
+  prev.isPlaying === next.isPlaying &&
+  Boolean(prev.item.starred) === Boolean(next.item.starred)
 );
 
 export default function ArtistScreen({ route, navigation }) {
@@ -125,6 +226,7 @@ export default function ArtistScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const currentTrack = useCurrentTrack();
+  const { insertIntoPriorityQueue, appendToContextQueue, queueTracksNext, queueTracksLast } = usePlayerActions();
   const [artistData, setArtistData] = useState(null);
   const [topSongs, setTopSongs] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
@@ -134,6 +236,13 @@ export default function ArtistScreen({ route, navigation }) {
   const [isLoadingTopSongs, setIsLoadingTopSongs] = useState(true);
   const [isLoadingFavorites, setIsLoadingFavorites] = useState(true);
   const [activeTab, setActiveTab] = useState('albums');
+  const [menuSong, setMenuSong] = useState(null);
+  const [addToPlaylistSong, setAddToPlaylistSong] = useState(null);
+  // Which of Play/Shuffle/Queue is currently fetching its track list — kept
+  // separate per button so, e.g., opening the queue menu doesn't flip the
+  // Play pill into its spinner state.
+  const [preparingAction, setPreparingAction] = useState(null);
+  const [queueSongs, setQueueSongs] = useState(null);
 
   // ─── Chip animation state ─────────────────────────────────────
   const chipHighlightAnimations = useRef(
@@ -186,7 +295,7 @@ export default function ArtistScreen({ route, navigation }) {
         const artistLiked = (starred?.song || []).filter(
           s => s.artistId === artist.id || s.artist === artist.name
         );
-        setLikedSongs(artistLiked);
+        setLikedSongs(sortByRecentlyFavorited(artistLiked));
       })
       .catch(() => { /* non-critical */ })
       .finally(() => setIsLoadingFavorites(false));
@@ -224,11 +333,10 @@ export default function ArtistScreen({ route, navigation }) {
     }
   }, [artist]);
 
-  const backgroundArt = useMemo(() => {
-    if (artist.id) return ArtworkCache.getArtworkSource(artist.id, 600, DEFAULT_ART);
-    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
-    return DEFAULT_ART;
-  }, [artist, currentTrack?.coverArt]);
+  const backgroundArt = useArtworkSource(
+    artist.id || currentTrack?.coverArt,
+    DEFAULT_ART
+  );
 
   const handleChipLayout = useCallback((key) => (event) => {
     const { x } = event.nativeEvent.layout;
@@ -280,6 +388,184 @@ export default function ArtistScreen({ route, navigation }) {
     setChipDisplayOrder(buildChipOrder(key));
   }, [activeTab, chipHighlightAnimations, chipAnimations]);
 
+  const handleMenuPress = useCallback((item) => {
+    setMenuSong(item);
+  }, []);
+
+  const handleLongPressSong = useCallback((item) => {
+    setMenuSong(item);
+  }, []);
+
+  const handleAddLast = useCallback((item) => {
+    appendToContextQueue(item);
+  }, [appendToContextQueue]);
+
+  // Optimistic: flip the heart immediately, then reconcile with the server;
+  // roll back on failure. A song can show up in both Top Songs and Favorite
+  // Songs, so both lists are updated to stay consistent.
+  const handleToggleFavorite = useCallback((song) => {
+    const wasStarred = Boolean(song.starred);
+    const setStarred = (value) => {
+      const applyTo = (list) => list.map(s => s.id === song.id ? { ...s, starred: value } : s);
+      setTopSongs(applyTo);
+      setLikedSongs(applyTo);
+    };
+
+    setStarred(wasStarred ? undefined : new Date().toISOString());
+
+    const request = wasStarred ? SubsonicAPI.unstar(song.id) : SubsonicAPI.star(song.id);
+    request.catch(e => {
+      console.error('Error toggling favorite:', e);
+      setStarred(wasStarred ? song.starred : undefined);
+    });
+  }, []);
+
+  // Fetches full track listings for every owned album, then every "Appears
+  // In" album, so Play/Shuffle/Queue on the Albums tab plays through the
+  // artist's own discography before spilling into guest-appearance tracks.
+  const getAlbumsTrackList = useCallback(async () => {
+    const albums = [...(artistData?.album || []), ...appearsInAlbums];
+    const results = await Promise.all(
+      albums.map(a => SubsonicAPI.getAlbum(a.id).catch(() => null))
+    );
+    return results.flatMap(data => data?.song || []);
+  }, [artistData, appearsInAlbums]);
+
+  const getActiveTabSongs = useCallback(() => {
+    if (activeTab === 'topSongs') return Promise.resolve(topSongs);
+    if (activeTab === 'favoriteSongs') return Promise.resolve(likedSongs);
+    return getAlbumsTrackList();
+  }, [activeTab, topSongs, likedSongs, getAlbumsTrackList]);
+
+  const handlePlayAll = useCallback(async () => {
+    if (preparingAction) return;
+    setPreparingAction('play');
+    try {
+      const songs = await getActiveTabSongs();
+      if (!songs.length) return;
+      await AudioPlayer.playTrack(songs[0], songs, 0, {
+        contextName: artist.name,
+        contextType: 'artist',
+        contextId: artist.id,
+      });
+      expandPlayerOverlay();
+    } catch (e) {
+      console.error('Error playing all songs:', e);
+    } finally {
+      setPreparingAction(null);
+    }
+  }, [preparingAction, getActiveTabSongs, artist]);
+
+  const handleShuffleAll = useCallback(async () => {
+    if (preparingAction) return;
+    setPreparingAction('shuffle');
+    try {
+      const songs = await getActiveTabSongs();
+      if (!songs.length) return;
+      const shuffled = shuffleArray(songs);
+      await AudioPlayer.playTrack(shuffled[0], shuffled, 0, {
+        contextName: artist.name,
+        contextType: 'artist',
+        contextId: artist.id,
+      });
+      expandPlayerOverlay();
+    } catch (e) {
+      console.error('Error shuffling songs:', e);
+    } finally {
+      setPreparingAction(null);
+    }
+  }, [preparingAction, getActiveTabSongs, artist]);
+
+  const handleOpenQueueMenu = useCallback(async () => {
+    if (preparingAction) return;
+    setPreparingAction('queue');
+    try {
+      const songs = await getActiveTabSongs();
+      if (songs.length) setQueueSongs(songs);
+    } finally {
+      setPreparingAction(null);
+    }
+  }, [preparingAction, getActiveTabSongs]);
+
+  const queueMenuLabel = activeTab === 'topSongs'
+    ? 'Top Songs'
+    : activeTab === 'favoriteSongs'
+      ? 'Favorite Songs'
+      : 'All Albums';
+
+  const queueMenuSong = useMemo(() => ({
+    title: queueMenuLabel,
+    artist: artist.name,
+    coverArt: artist.id,
+  }), [queueMenuLabel, artist]);
+
+  const queueMenuOptions = useMemo(() => {
+    if (!queueSongs?.length) return [];
+    return [
+      {
+        key: 'queueFirst',
+        label: 'Queue first',
+        icon: 'queue-play-next',
+        onPress: () => queueTracksNext(queueSongs),
+      },
+      {
+        key: 'queueLast',
+        label: 'Queue last',
+        icon: 'add-to-queue',
+        onPress: () => queueTracksLast(queueSongs),
+      },
+    ];
+  }, [queueSongs, queueTracksNext, queueTracksLast]);
+
+  const menuOptions = useMemo(() => {
+    if (!menuSong) return [];
+    return [
+      {
+        key: 'goToAlbum',
+        label: 'Go to album',
+        icon: 'album',
+        onPress: () => {
+          if (menuSong.albumId) navigation.push('Album', {
+            album: { id: menuSong.albumId, name: menuSong.album, artist: menuSong.artist, coverArt: menuSong.coverArt },
+          });
+        },
+      },
+      {
+        key: 'goToArtist',
+        label: 'Go to artist',
+        icon: 'person',
+        onPress: () => {
+          if (menuSong.artistId) navigation.push('Artist', { artist: { id: menuSong.artistId, name: menuSong.artist } });
+        },
+      },
+      {
+        key: 'addToPlaylist',
+        label: 'Add to playlist',
+        icon: 'playlist-add',
+        onPress: () => setAddToPlaylistSong(menuSong),
+      },
+      {
+        key: 'addNext',
+        label: 'Add next in queue',
+        icon: 'queue-play-next',
+        onPress: () => insertIntoPriorityQueue(menuSong, 0),
+      },
+      {
+        key: 'addLast',
+        label: 'Add last in queue',
+        icon: 'add-to-queue',
+        onPress: () => appendToContextQueue(menuSong),
+      },
+      {
+        key: 'download',
+        label: 'Download',
+        icon: 'download',
+        disabled: true,
+        onPress: () => {},
+      },
+    ];
+  }, [menuSong, navigation, insertIntoPriorityQueue, appendToContextQueue]);
+
   const renderSong = useCallback((songs) => ({ item, index }) => {
     const isPlaying = currentTrack?.id === item.id;
     return (
@@ -288,10 +574,13 @@ export default function ArtistScreen({ route, navigation }) {
         index={index}
         isPlaying={isPlaying}
         onPress={() => handleSongPress(item, songs, index)}
-        onMenuPress={() => {/* TODO */}}
+        onMenuPress={() => handleMenuPress(item)}
+        onLongPress={() => handleLongPressSong(item)}
+        onAddLast={handleAddLast}
+        onToggleFavorite={handleToggleFavorite}
       />
     );
-  }, [currentTrack?.id, handleSongPress]);
+  }, [currentTrack?.id, handleSongPress, handleMenuPress, handleLongPressSong, handleAddLast, handleToggleFavorite]);
 
   const songKeyExtractor = useCallback((item, index) => item.id || `song-${index}`, []);
 
@@ -308,9 +597,9 @@ export default function ArtistScreen({ route, navigation }) {
       <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
         <MaterialIcons name="arrow-back" size={26} style={styles.stickyNavIcon} />
       </TouchableOpacity>
-      <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+      {/* <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
         <MaterialIcons name="more-horiz" size={24} style={styles.stickyNavIcon} />
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </View>
   );
 
@@ -351,8 +640,9 @@ export default function ArtistScreen({ route, navigation }) {
             <Image
               source={backgroundArt}
               style={styles.artImage}
-              resizeMode="cover"
-              defaultSource={DEFAULT_ART}
+              contentFit="cover"
+              placeholder={DEFAULT_ART}
+              placeholderContentFit="cover"
             />
           </View>
         </View>
@@ -404,6 +694,46 @@ export default function ArtistScreen({ route, navigation }) {
             );
           })}
         </ScrollView>
+
+        {/* Play / shuffle / queue row */}
+        <View style={styles.playAreaRow}>
+          <TouchableOpacity
+            style={styles.playPill}
+            onPress={handlePlayAll}
+            disabled={preparingAction !== null}
+            activeOpacity={0.8}
+          >
+            <View style={styles.playPillIconSlot}>
+              {preparingAction === 'play'
+                ? <ActivityIndicator size="small" color={theme.colors.onPrimary} />
+                : <MaterialIcons name="play-arrow" size={18} color={theme.colors.onPrimary} />
+              }
+            </View>
+            <Text style={styles.playPillText}>Play</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconCircle}
+            onPress={handleShuffleAll}
+            disabled={preparingAction !== null}
+            activeOpacity={0.7}
+          >
+            {preparingAction === 'shuffle'
+              ? <ActivityIndicator size="small" color={theme.colors.onSurface} />
+              : <MaterialIcons name="shuffle" size={20} color={theme.colors.onSurface} style={{ opacity: 0.6 }} />
+            }
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconCircle}
+            onPress={handleOpenQueueMenu}
+            disabled={preparingAction !== null}
+            activeOpacity={0.7}
+          >
+            {preparingAction === 'queue'
+              ? <ActivityIndicator size="small" color={theme.colors.onSurface} />
+              : <MaterialIcons name="add" size={20} color={theme.colors.onSurface} style={{ opacity: 0.6 }} />
+            }
+          </TouchableOpacity>
+        </View>
 
         {/* Content */}
         {activeTab === 'albums' ? (
@@ -459,7 +789,7 @@ export default function ArtistScreen({ route, navigation }) {
                 <MaterialIcons name="music-note" size={64} color={theme.colors.outline} />
                 <Text style={styles.emptyText}>No songs found</Text>
                 <Text style={styles.emptySubtext}>
-                  {activeTab === 'favoriteSongs' ? 'Like songs from this artist to see them here' : 'No top songs available'}
+                  {activeTab === 'favoriteSongs' ? 'Favorite songs from this artist to see them here' : 'No top songs available'}
                 </Text>
               </View>
             }
@@ -467,6 +797,23 @@ export default function ArtistScreen({ route, navigation }) {
         )}
         {StickyHeader}
       </View>
+      <SongMenu
+        song={menuSong}
+        visible={menuSong !== null}
+        onClose={() => setMenuSong(null)}
+        options={menuOptions}
+      />
+      <AddToPlaylistModal
+        song={addToPlaylistSong}
+        visible={addToPlaylistSong !== null}
+        onClose={() => setAddToPlaylistSong(null)}
+      />
+      <SongMenu
+        song={queueMenuSong}
+        visible={queueSongs !== null}
+        onClose={() => setQueueSongs(null)}
+        options={queueMenuOptions}
+      />
     </ScreenBackground>
   );
 }

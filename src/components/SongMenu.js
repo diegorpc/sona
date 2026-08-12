@@ -6,12 +6,11 @@ import {
   TouchableWithoutFeedback,
   Animated,
   Easing,
-  Image,
   PanResponder,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
-import ArtworkCache from '../services/ArtworkCache';
+import CachedImage from './CachedImage';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/SongMenu.styles';
 
@@ -100,8 +99,6 @@ export default function SongMenu({ song, visible, onClose, options }) {
 
   if (!song && !visible) return null;
 
-  const coverArtSource = ArtworkCache.getArtworkSource(song?.coverArt, 200, DEFAULT_ART);
-
   const activeOptions = (options || []).filter(Boolean);
 
   return (
@@ -135,10 +132,10 @@ export default function SongMenu({ song, visible, onClose, options }) {
           {/* Song header */}
           {song && (
             <View style={styles.songHeader}>
-              <Image
-                source={coverArtSource}
+              <CachedImage
+                coverArtId={song?.coverArt}
+                fallbackSource={DEFAULT_ART}
                 style={styles.songHeaderArt}
-                defaultSource={DEFAULT_ART}
               />
               <View style={styles.songHeaderInfo}>
                 <Text style={styles.songHeaderTitle} numberOfLines={1}>
@@ -169,7 +166,6 @@ export default function SongMenu({ song, visible, onClose, options }) {
             >
               <MaterialIcons
                 name={option.icon}
-                size={22}
                 style={[styles.menuItemIcon, option.disabled && styles.menuItemIconDisabled]}
               />
               <Text

@@ -13,7 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import ScreenBackground from '../components/ScreenBackground';
 import CachedImage from '../components/CachedImage';
 import SubsonicAPI from '../services/SubsonicAPI';
-import ArtworkCache from '../services/ArtworkCache';
+import { useArtworkSource } from '../hooks/useArtwork';
 import CacheService from '../services/CacheService';
 import { getPlaylistPlayTimes } from '../services/RecentPlaylists';
 import { getPinnedPlaylistIds, buildHomePlaylists } from '../services/PinnedPlaylists';
@@ -40,11 +40,9 @@ const AlbumCard = memo(function AlbumCard({ album, styles, onPress }) {
     <TouchableOpacity style={styles.albumCard} activeOpacity={0.7} onPress={() => onPress(album)}>
       <CachedImage
         coverArtId={album.coverArt || album.id}
-        size={300}
         fallbackSource={DEFAULT_ART}
         style={styles.albumCardImage}
         resizeMode="cover"
-        defaultSource={DEFAULT_ART}
       />
       <Text style={styles.albumCardTitle} numberOfLines={1}>{album.name}</Text>
       {album.artist ? <Text style={styles.albumCardArtist} numberOfLines={1}>{album.artist}</Text> : null}
@@ -58,11 +56,9 @@ const PlaylistChip = memo(function PlaylistChip({ playlist, styles, onPress }) {
     <TouchableOpacity style={styles.playlistChip} activeOpacity={0.7} onPress={() => onPress(playlist)}>
       <CachedImage
         coverArtId={playlist.coverArt}
-        size={150}
         fallbackSource={DEFAULT_ART}
         style={styles.playlistChipImage}
         resizeMode="cover"
-        defaultSource={DEFAULT_ART}
       />
       <Text style={styles.playlistChipText} numberOfLines={2}>{playlist.name}</Text>
     </TouchableOpacity>
@@ -168,11 +164,10 @@ export default function HomeScreen({ navigation }) {
     [styles, goToAlbum]
   );
 
-  const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
-    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
-    return DEFAULT_ART;
-  }, [currentTrack?.coverArt, currentTrack?.albumId]);
+  const backgroundArt = useArtworkSource(
+    currentTrack?.coverArt || currentTrack?.albumId,
+    DEFAULT_ART
+  );
 
   const renderWithBackdrop = useCallback(
     content => (

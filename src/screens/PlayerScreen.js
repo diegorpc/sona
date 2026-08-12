@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
-  Image,
   TouchableOpacity,
   Easing,
   Dimensions,
 } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import Slider from '@react-native-assets/slider';
 import { MaterialIcons } from '@expo/vector-icons';
 import ScreenBackground from '../components/ScreenBackground';
@@ -15,7 +14,8 @@ import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
 import AudioPlayer from '../services/AudioPlayer';
 import SubsonicAPI from '../services/SubsonicAPI';
-import ArtworkCache from '../services/ArtworkCache';
+import CachedImage from '../components/CachedImage';
+import { useArtworkSource } from '../hooks/useArtwork';
 import { usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createStyles } from '../styles/PlayerScreen.styles';
@@ -93,7 +93,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
 
   const formatTime = (ms) => AudioPlayer.formatTime(ms);
 
-  const { currentTrack, isPlaying, position, duration, isLoading } = playerState;
+  const { currentTrack, isPlaying, isBuffering, position, duration, isLoading } = playerState;
 
   const menuOptions = useMemo(() => {
     if (!currentTrack) return [];
@@ -138,17 +138,15 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
     ].filter(Boolean);
   }, [currentTrack, onNavigateToAlbum, onNavigateToArtist, insertIntoPriorityQueue, appendToContextQueue]);
 
-  const artSource = useMemo(
-    () => ArtworkCache.getArtworkSource(currentTrack?.coverArt, 400, DEFAULT_ART),
-    [currentTrack?.coverArt]
-  );
+
+  const artSource = useArtworkSource(currentTrack?.coverArt, DEFAULT_ART);
 
   const [artDisplaySize, setArtDisplaySize] = useState({ width: PLAYER_ART_SIZE, height: PLAYER_ART_SIZE });
   useEffect(() => {
     setArtDisplaySize({ width: PLAYER_ART_SIZE, height: PLAYER_ART_SIZE });
   }, [currentTrack?.id]);
   const handleArtLoad = useCallback((e) => {
-    const { width: w, height: h } = e.nativeEvent.source;
+    const { width: w, height: h } = e.source || {};
     if (!w || !h) return;
     const ratio = w / h;
     if (ratio >= 1) {
@@ -193,11 +191,12 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
           {/* Album art */}
           <View style={styles.albumArtContainer}>
             <View style={[styles.albumArtShadow, artDisplaySize]}>
-              <Image
-                source={artSource}
+              <CachedImage
+                coverArtId={currentTrack?.coverArt}
+                fallbackSource={DEFAULT_ART}
                 style={[styles.albumArt, artDisplaySize]}
                 resizeMode="contain"
-                defaultSource={DEFAULT_ART}
+                indicatorSize="large"
                 onLoad={handleArtLoad}
               />
             </View>
@@ -293,12 +292,17 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
                 <MaterialIcons name="skip-previous" size={34} color={theme.colors.onBackground} />
               </TouchableOpacity>
 
+              {/* Stays tappable while buffering so a stalled stream can be paused */}
               <TouchableOpacity onPress={handlePlayPause} style={styles.playButton} disabled={isLoading}>
-                <MaterialIcons
-                  name={isLoading ? 'hourglass-empty' : isPlaying ? 'pause' : 'play-arrow'}
-                  size={32}
-                  color="#fff"
-                />
+                {isLoading || isBuffering ? (
+                  <ActivityIndicator animating size={28} color="#fff" />
+                ) : (
+                  <MaterialIcons
+                    name={isPlaying ? 'pause' : 'play-arrow'}
+                    color="#fff"
+                    size={34}
+                  />
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity onPress={handleNext} style={styles.skipButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -315,9 +319,9 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
               >
                 <MaterialIcons
                   name={isStarred ? 'favorite' : 'favorite-border'}
-                  size={22}
                   color={isStarred ? theme.colors.primary : theme.colors.onSurface}
                   style={{ opacity: isStarred ? 1 : 0.55 }}
+                  size={22}
                 />
               </TouchableOpacity>
 

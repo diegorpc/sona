@@ -3,7 +3,6 @@ import {
   View,
   FlatList,
   TouchableOpacity,
-  Image,
   RefreshControl,
   ScrollView,
   Animated,
@@ -23,7 +22,8 @@ import SongMenu from '../components/SongMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
-import ArtworkCache from '../services/ArtworkCache';
+import { useArtworkSource } from '../hooks/useArtwork';
+import CachedImage from '../components/CachedImage';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import PlaylistCollage from '../components/PlaylistCollage';
@@ -252,23 +252,18 @@ const ListItem = memo(function ListItem({
     }
   }, [viewMode, item.albumCount, item.artist, item.songCount]);
 
-  // Resolve image: prefer direct coverArt art (disk-cached via ArtworkCache);
+  // Resolve image: prefer direct coverArt art (cached by expo-image);
   // for playlists fall back to a 2x2 collage when there's no coverArt id.
-  const imageData = useMemo(() => {
-    if (viewMode === 'artists') {
-      return item?.id ? ArtworkCache.getArtworkSource(item.id, 200) : null;
-    }
-    if (viewMode === 'albums' || viewMode === 'liked') {
-      return item.coverArt ? ArtworkCache.getArtworkSource(item.coverArt, 200) : null;
-    }
-    if (viewMode === 'playlists') {
-      // Newer Subsonic servers expose a real playlist cover art id; prefer it over the
-      // generated collage and only fall back to the collage when none exists.
-      if (item.coverArt) return ArtworkCache.getArtworkSource(item.coverArt, 200);
-      return collageData || null;
+  // Artists have no coverArt id of their own — the artist id doubles as one.
+  const thumbCoverArtId = useMemo(() => {
+    if (viewMode === 'artists') return item?.id || null;
+    if (viewMode === 'albums' || viewMode === 'liked' || viewMode === 'playlists') {
+      return item.coverArt || null;
     }
     return null;
-  }, [viewMode, item.id, item.coverArt, collageData]);
+  }, [viewMode, item.id, item.coverArt]);
+
+  const showCollage = viewMode === 'playlists' && !item.coverArt && collageData?.type === 'collage';
 
   const duration = useMemo(
     () => (item.duration ? formatItemDuration(item.duration) : ''),
@@ -281,31 +276,27 @@ const ListItem = memo(function ListItem({
   const isRoundImage = viewMode === 'artists';
 
   const imageComponent = useMemo(() => {
-    if (imageData && typeof imageData === 'object' && imageData.type === 'collage') {
+    if (showCollage) {
       return (
         <View style={styles.itemImageContainer}>
-          <PlaylistCollage collageData={imageData} size={LIBRARY_THUMB_SIZE} />
+          <PlaylistCollage collageData={collageData} size={LIBRARY_THUMB_SIZE} />
         </View>
       );
     }
-    const source = typeof imageData === 'string'
-      ? { uri: imageData, cache: 'force-cache' }
-      : (imageData?.uri ? imageData : null);
     return (
       <View style={styles.itemImageContainer}>
-        <Image
-          source={source || DEFAULT_LIST_IMAGE}
+        <CachedImage
+          coverArtId={thumbCoverArtId}
+          fallbackSource={DEFAULT_LIST_IMAGE}
           style={isRoundImage
             ? { width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE, borderRadius: LIBRARY_THUMB_SIZE / 2 }
             : { width: LIBRARY_THUMB_SIZE, height: LIBRARY_THUMB_SIZE, borderRadius: 5 }
           }
           resizeMode="contain"
-          defaultSource={DEFAULT_LIST_IMAGE}
-          fadeDuration={200}
         />
       </View>
     );
-  }, [imageData, styles.itemImageContainer, isRoundImage]);
+  }, [showCollage, collageData, thumbCoverArtId, styles.itemImageContainer, isRoundImage]);
 
   const row = (
     <TouchableOpacity
@@ -318,7 +309,6 @@ const ListItem = memo(function ListItem({
       {viewMode === 'liked' && (
         <MaterialIcons
           name="favorite"
-          size={14}
           color={primaryColor}
           style={styles.itemLeadingIcon}
         />
@@ -697,12 +687,7 @@ export default function LibraryScreen({ navigation, route }) {
         await CacheService.set('artists', allArtists);
       }
       setArtists(allArtists);
-      // Artist images are resolved per-row via ArtworkCache (see imageData
-      // below) — same disk-backed cache as every other cover art in the app,
-      // instead of a separate AsyncStorage map of resolved URL strings.
 
-      // Load albums using proper API with sort type.
-      // Random is fetched fresh (single batch, never cached) so it reshuffles each load.
       let allAlbums;
       if (sortOption === 'random') {
         // Shared, persisted random ordering (same as Home); reset only via refresh.
@@ -974,9 +959,6 @@ export default function LibraryScreen({ navigation, route }) {
   // Reset pagination when view mode or search changes
   useEffect(() => {
     setCurrentPage(0);
-    // Don't clear displayedData immediately during view mode transitions
-    // Let the fade animation handle the visual transition
-    // Also don't clear when search is active to prevent empty state flash
     if (!isAnimatingList.current && !isSearchActive) {
       setDisplayedData([]);
     }
@@ -1181,9 +1163,6 @@ export default function LibraryScreen({ navigation, route }) {
     runViewModeTransition(mode, targetSort);
   }, [activeChip, sortOption, runViewModeTransition, isSortMenuVisible, closeSortMenu]);
 
-  // Consume deep-link params on focus. A fresh mount already initializes from
-  // route.params via useState, so only apply here when the screen was already
-  // mounted (i.e. returning to the Library tab via "See All").
   useFocusEffect(
     useCallback(() => {
       const tab = route?.params?.initialTab;
@@ -1593,11 +1572,6 @@ export default function LibraryScreen({ navigation, route }) {
     index,
   }), []);
 
-  // No index in the key: fullFilteredData already dedupes on this exact
-  // id/name/title fallback, so the base key is unique within a view. Including
-  // the index made every key change whenever the list order did (sort change,
-  // direction flip), forcing React to unmount and remount every row instead of
-  // just reordering them.
   const keyExtractor = useCallback((item, index) => {
     const baseKey = item?.id ?? item?.name ?? item?.title;
     return baseKey ? `${viewMode}-${baseKey}` : `${viewMode}-item-${index}`;
@@ -1724,7 +1698,6 @@ export default function LibraryScreen({ navigation, route }) {
       >
         <MaterialIcons
           name="sort"
-          size={18}
           color={theme.colors.onSurfaceVariant}
           style={styles.sortTriggerIcon}
         />
@@ -1741,7 +1714,6 @@ export default function LibraryScreen({ navigation, route }) {
         >
           <MaterialIcons
             name="refresh"
-            size={17}
             color={theme.colors.onSurfaceVariant}
           />
         </TouchableOpacity>
@@ -1755,7 +1727,6 @@ export default function LibraryScreen({ navigation, route }) {
         >
           <MaterialIcons
             name={sortDirection === 'desc' ? 'arrow-downward' : 'arrow-upward'}
-            size={16}
             color={theme.colors.onSurfaceVariant}
           />
         </TouchableOpacity>
@@ -1763,15 +1734,10 @@ export default function LibraryScreen({ navigation, route }) {
     </View>
   ), [viewMode, sortOption, sortDirection, showSortOptions, isSortMenuVisible, handleSortDirectionToggle, refreshRandomAlbums, theme]);
 
-  const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) {
-      return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
-    }
-    if (currentTrack?.albumId) {
-      return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
-    }
-    return DEFAULT_ART;
-  }, [currentTrack?.albumId, currentTrack?.coverArt]);
+  const backgroundArt = useArtworkSource(
+    currentTrack?.coverArt || currentTrack?.albumId,
+    DEFAULT_ART
+  );
 
   const renderWithBackdrop = useCallback(
     content => (
@@ -1945,8 +1911,12 @@ export default function LibraryScreen({ navigation, route }) {
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         style={[styles.libraryList, { opacity: listOpacity }]}
-        // Performance optimizations
-        removeClippedSubviews={true}
+        // Performance optimizations. removeClippedSubviews is deliberately
+        // left off: combined with the Swipeable rows in the Liked Songs tab,
+        // it was the cause of a bug where rows past roughly the first
+        // screenful stopped responding to the swipe-to-queue gesture — RNGH's
+        // pan handler on a clipped-then-recycled native view doesn't reliably
+        // reattach. The list is still virtualized via windowSize below.
         maxToRenderPerBatch={10}
         updateCellsBatchingPeriod={200}
         initialNumToRender={20}
@@ -2013,7 +1983,6 @@ export default function LibraryScreen({ navigation, route }) {
                 >
                   <MaterialIcons
                     name={option.icon}
-                    size={18}
                     color={isSelected ? theme.colors.primary : theme.colors.onSurfaceVariant}
                     style={styles.sortMenuItemIcon}
                   />
@@ -2028,7 +1997,6 @@ export default function LibraryScreen({ navigation, route }) {
                   {isSelected && (
                     <MaterialIcons
                       name="check"
-                      size={18}
                       color={theme.colors.primary}
                       style={styles.sortMenuItemCheck}
                     />

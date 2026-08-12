@@ -4,10 +4,10 @@ import {
   Animated,
   SectionList,
   TouchableOpacity,
-  Image,
   RefreshControl,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -16,7 +16,7 @@ import SongMenu from '../components/SongMenu';
 
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
-import ArtworkCache from '../services/ArtworkCache';
+import { useArtworkSource, useArtworkImage } from '../hooks/useArtwork';
 import CacheService from '../services/CacheService';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { useCurrentTrack, usePlayerActions } from '../contexts/PlayerContext';
@@ -28,6 +28,7 @@ const DEFAULT_ART = require('../../assets/default-album.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ART_SIZE = Math.min(220, SCREEN_WIDTH - 140);
 const SWIPE_ACTION_WIDTH = 80;
+const SWIPE_BACK_EDGE_WIDTH = 50;
 
 // ─── Swipe-left "Add last" action ─────────────────────────────────
 const SwipeAddLast = memo(({ progress, theme }) => {
@@ -47,9 +48,28 @@ const SwipeAddLast = memo(({ progress, theme }) => {
   );
 });
 
+// ─── Swipe-right "Favorite" action ────────────────────────────────
+const SwipeFavorite = memo(({ progress, theme, starred }) => {
+  const menuStyles = createMenuStyles(theme);
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-SWIPE_ACTION_WIDTH, 0],
+    extrapolate: 'clamp',
+  });
+  return (
+    <View style={menuStyles.swipeAction}>
+      <Animated.View style={[menuStyles.swipeActionContent, { backgroundColor: theme.colors.error, transform: [{ translateX }] }]}>
+        <MaterialIcons name={starred ? 'favorite' : 'favorite-border'} size={22} color="#fff" />
+        <Text style={[menuStyles.swipeActionLabel, { color: '#fff' }]}>{starred ? 'Unfavorite' : 'Favorite'}</Text>
+      </Animated.View>
+    </View>
+  );
+});
+
 // ─── Album track row — no art thumbnail ───────────────────────────
-const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLast, isPlaying, theme }) => {
+const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLast, onToggleFavorite, isPlaying, theme }) => {
   const styles = createStyles(theme);
+  const starred = Boolean(item.starred);
 
   const duration = useMemo(() => {
     if (!item.duration) return '';
@@ -64,19 +84,31 @@ const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLa
     <SwipeAddLast progress={progress} theme={theme} />
   ), [theme]);
 
-  const handleSwipeOpen = useCallback(() => {
-    onAddLast(item);
+  const renderLeftActions = useCallback((progress) => (
+    <SwipeFavorite progress={progress} theme={theme} starred={starred} />
+  ), [theme, starred]);
+
+  const handleSwipeOpen = useCallback((direction) => {
+    if (direction === 'right') {
+      onAddLast(item);
+    } else {
+      onToggleFavorite(item);
+    }
     swipeRef.current?.close();
-  }, [item, onAddLast]);
+  }, [item, onAddLast, onToggleFavorite]);
 
   return (
     <Swipeable
       ref={swipeRef}
       renderRightActions={renderRightActions}
+      renderLeftActions={renderLeftActions}
       onSwipeableOpen={handleSwipeOpen}
       rightThreshold={60}
+      leftThreshold={60}
       overshootRight={false}
+      overshootLeft={false}
       friction={2}
+      hitSlop={{ left: -SWIPE_BACK_EDGE_WIDTH }}
     >
       <TouchableOpacity
         style={[styles.songItem, isPlaying && styles.songItemPlaying]}
@@ -85,6 +117,12 @@ const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLa
         delayLongPress={350}
         activeOpacity={0.7}
       >
+        <View style={styles.heartWrapper}>
+          <MaterialIcons
+            name={starred ? 'favorite' : null}
+            style={starred ? styles.heartIcon : null}
+          />
+        </View>
         <View style={styles.trackNumberWrapper}>
           {isPlaying
             ? <MaterialIcons name="play-arrow" size={14} color={theme.colors.primary} style={styles.nowPlayingIcon} />
@@ -112,7 +150,8 @@ const SongItem = memo(({ item, index, onPress, onLongPress, onMenuPress, onAddLa
   prev.item.id === next.item.id &&
   prev.index === next.index &&
   prev.isPlaying === next.isPlaying &&
-  prev.theme === next.theme
+  prev.theme === next.theme &&
+  Boolean(prev.item.starred) === Boolean(next.item.starred)
 );
 
 export default function AlbumScreen({ route, navigation }) {
@@ -120,11 +159,12 @@ export default function AlbumScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const currentTrack = useCurrentTrack();
-  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
+  const { insertIntoPriorityQueue, appendToContextQueue, queueTracksNext, queueTracksLast } = usePlayerActions();
   const [albumData, setAlbumData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [menuSong, setMenuSong] = useState(null);
+  const [isQueueMenuVisible, setIsQueueMenuVisible] = useState(false);
 
   const loadAlbumData = async () => {
     try {
@@ -211,27 +251,45 @@ export default function AlbumScreen({ route, navigation }) {
     return new Set(albumData.song.map(s => s.discNumber || 1)).size;
   }, [albumData]);
 
-  const backgroundArt = useMemo(() => {
-    const art = album.coverArt || albumData?.coverArt;
-    if (art) return ArtworkCache.getArtworkSource(art, 600, DEFAULT_ART);
-    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
-    return DEFAULT_ART;
-  }, [album.coverArt, albumData?.coverArt, currentTrack?.coverArt]);
+  const heroArtId = album.coverArt || albumData?.coverArt || currentTrack?.coverArt;
+  const backgroundArt = useArtworkSource(heroArtId, DEFAULT_ART);
 
-  const [artDisplaySize, setArtDisplaySize] = useState({ width: ART_SIZE, height: ART_SIZE });
-  const handleArtLoad = useCallback((e) => {
-    const { width: w, height: h } = e.nativeEvent.source;
-    if (!w || !h) return;
+  const heroImage = useArtworkImage(heroArtId);
+  const artDisplaySize = useMemo(() => {
+    const { width: w, height: h } = heroImage || {};
+    if (!w || !h) return { width: ART_SIZE, height: ART_SIZE };
     const ratio = w / h;
-    setArtDisplaySize(ratio >= 1
+    return ratio >= 1
       ? { width: ART_SIZE, height: Math.round(ART_SIZE / ratio) }
-      : { width: Math.round(ART_SIZE * ratio), height: ART_SIZE }
-    );
-  }, []);
+      : { width: Math.round(ART_SIZE * ratio), height: ART_SIZE };
+  }, [heroImage]);
 
   const handleAddLast = useCallback((song) => {
     appendToContextQueue(song);
   }, [appendToContextQueue]);
+
+  // Optimistic: flip the heart immediately, then reconcile with the server;
+  // roll back on failure so the UI never shows a favorite that didn't stick.
+  const handleToggleFavorite = useCallback((song) => {
+    const wasStarred = Boolean(song.starred);
+    const setStarred = (value) => {
+      setAlbumData(prev => {
+        if (!prev?.song) return prev;
+        return {
+          ...prev,
+          song: prev.song.map(s => s.id === song.id ? { ...s, starred: value } : s),
+        };
+      });
+    };
+
+    setStarred(wasStarred ? undefined : new Date().toISOString());
+
+    const request = wasStarred ? SubsonicAPI.unstar(song.id) : SubsonicAPI.star(song.id);
+    request.catch(e => {
+      console.error('Error toggling favorite:', e);
+      setStarred(wasStarred ? song.starred : undefined);
+    });
+  }, []);
 
   const menuOptions = useMemo(() => {
     if (!menuSong) return [];
@@ -283,6 +341,30 @@ export default function AlbumScreen({ route, navigation }) {
     ];
   }, [menuSong, albumData, handleSongPress, navigation, insertIntoPriorityQueue, appendToContextQueue]);
 
+  const queueMenuSong = useMemo(() => ({
+    title: album.name,
+    artist: album.artist,
+    coverArt: album.coverArt || albumData?.coverArt,
+  }), [album, albumData]);
+
+  const queueMenuOptions = useMemo(() => {
+    if (!albumData?.song?.length) return [];
+    return [
+      {
+        key: 'queueFirst',
+        label: 'Queue first',
+        icon: 'queue-play-next',
+        onPress: () => queueTracksNext(albumData.song),
+      },
+      {
+        key: 'queueLast',
+        label: 'Queue last',
+        icon: 'add-to-queue',
+        onPress: () => queueTracksLast(albumData.song),
+      },
+    ];
+  }, [albumData, queueTracksNext, queueTracksLast]);
+
   const renderSectionHeader = useCallback(({ section: { title } }) => {
     if (!title) return null;
     return (
@@ -305,9 +387,10 @@ export default function AlbumScreen({ route, navigation }) {
         onLongPress={() => setMenuSong(item)}
         onMenuPress={setMenuSong}
         onAddLast={handleAddLast}
+        onToggleFavorite={handleToggleFavorite}
       />
     );
-  }, [currentTrack?.id, handleSongPress, albumData, theme, handleAddLast]);
+  }, [currentTrack?.id, handleSongPress, albumData, theme, handleAddLast, handleToggleFavorite]);
 
   const keyExtractor = useCallback((item, index) => item.id || `song-${index}`, []);
 
@@ -316,9 +399,9 @@ export default function AlbumScreen({ route, navigation }) {
       <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
         <MaterialIcons name="arrow-back" size={26} style={styles.stickyNavIcon} />
       </TouchableOpacity>
-      <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+      {/* <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
         <MaterialIcons name="more-horiz" size={24} style={styles.stickyNavIcon} />
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </View>
   );
 
@@ -327,19 +410,18 @@ export default function AlbumScreen({ route, navigation }) {
       <View style={styles.artContainer}>
         <View style={[styles.artShadow, artDisplaySize]}>
           <Image
-            source={backgroundArt}
+            source={heroImage ?? DEFAULT_ART}
             style={[styles.artImage, artDisplaySize]}
-            resizeMode="contain"
-            defaultSource={DEFAULT_ART}
-            onLoad={handleArtLoad}
+            contentFit="contain"
           />
         </View>
       </View>
 
       <View style={styles.titleBlock}>
-        <Text style={styles.albumName} numberOfLines={2}>{album.name}</Text>
+        <Text style={styles.albumName}>{album.name}</Text>
         {album.artist && (
           <TouchableOpacity
+            style={styles.albumArtistTouchable}
             onPress={() => {
               const artistId = album.artistId || albumData?.artistId;
               if (artistId) navigation.push('Artist', { artist: { id: artistId, name: album.artist } });
@@ -368,7 +450,7 @@ export default function AlbumScreen({ route, navigation }) {
             return list.map((g, i) => {
               const name = typeof g === 'string' ? g : g?.name;
               return name ? (
-                <View key={`genre-${i}`} style={styles.badge}>
+                <View key={`genre-${i}`} style={[styles.badge, styles.badgeGenre]}>
                   <Text style={styles.badgeText}>{name}</Text>
                 </View>
               ) : null;
@@ -387,7 +469,7 @@ export default function AlbumScreen({ route, navigation }) {
           <TouchableOpacity style={styles.iconCircle} activeOpacity={0.7}>
             <MaterialIcons name="favorite-border" size={19} color={theme.colors.onSurface} style={{ opacity: 0.6 }} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconCircle} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.iconCircle} onPress={() => setIsQueueMenuVisible(true)} activeOpacity={0.7}>
             <MaterialIcons name="add" size={20} color={theme.colors.onSurface} style={{ opacity: 0.6 }} />
           </TouchableOpacity>
         </View>
@@ -395,7 +477,7 @@ export default function AlbumScreen({ route, navigation }) {
 
       <View style={styles.divider} />
     </View>
-  ), [album, albumData, backgroundArt, navigation, theme, playAlbum, getTotalDuration, discCount, artDisplaySize, handleArtLoad]);
+  ), [album, albumData, heroImage, navigation, theme, playAlbum, getTotalDuration, discCount, artDisplaySize]);
 
   if (isLoading) {
     return (
@@ -443,7 +525,6 @@ export default function AlbumScreen({ route, navigation }) {
           }
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}
-          removeClippedSubviews
           maxToRenderPerBatch={10}
           initialNumToRender={20}
           windowSize={10}
@@ -456,6 +537,12 @@ export default function AlbumScreen({ route, navigation }) {
         visible={menuSong !== null}
         onClose={() => setMenuSong(null)}
         options={menuOptions}
+      />
+      <SongMenu
+        song={queueMenuSong}
+        visible={isQueueMenuVisible}
+        onClose={() => setIsQueueMenuVisible(false)}
+        options={queueMenuOptions}
       />
     </ScreenBackground>
   );

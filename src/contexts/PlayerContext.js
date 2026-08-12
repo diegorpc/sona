@@ -23,6 +23,8 @@ const playerActions = Object.freeze({
   removePriorityTrack: AudioPlayer.removePriorityTrack.bind(AudioPlayer),
   insertIntoPriorityQueue: AudioPlayer.insertIntoPriorityQueue.bind(AudioPlayer),
   appendToContextQueue: AudioPlayer.appendToContextQueue.bind(AudioPlayer),
+  queueTracksNext: AudioPlayer.queueTracksNext.bind(AudioPlayer),
+  queueTracksLast: AudioPlayer.queueTracksLast.bind(AudioPlayer),
   reorderContextQueue: AudioPlayer.reorderContextQueue.bind(AudioPlayer),
   moveContextTrackToPriority: AudioPlayer.moveContextTrackToPriority.bind(AudioPlayer),
   toggleShuffle: AudioPlayer.toggleShuffle.bind(AudioPlayer),

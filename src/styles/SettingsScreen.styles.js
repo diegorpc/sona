@@ -123,28 +123,31 @@ export const createStyles = (theme) => StyleSheet.create({
   },
   // ─── Dialogs ──────────────────────────────────────────────────
   dialogInput: {
-    marginBottom: 16,
+    marginBottom: 14,
+    // Explicit surface so the fields still read as inputs against the
+    // translucent (blurred) dialog background on iOS.
+    backgroundColor: theme.colors.surfaceVariant,
   },
   dialogDescription: {
     fontSize: 14,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurfaceVariant,
-    marginBottom: 20,
+    marginBottom: 16,
     lineHeight: 20,
   },
   sliderContainer: {
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   sliderLabel: {
     fontSize: 18,
     fontFamily: 'Lexend_600SemiBold',
     color: theme.colors.primary,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   slider: {
     width: '100%',
-    height: 40,
+    height: 36,
   },
   sliderLabels: {
     flexDirection: 'row',
@@ -189,6 +192,12 @@ export const createStyles = (theme) => StyleSheet.create({
     marginVertical: 8,
   },
   // ─── Home playlist pinning ─────────────────────────────────────
+  playlistItem: {
+    fontSize: 13.5,
+    fontFamily: 'Lexend_600SemiBold',
+    color: theme.colors.onSurface,
+    marginBottom: 2,
+  },
   playlistThumb: {
     width: 40,
     height: 40,

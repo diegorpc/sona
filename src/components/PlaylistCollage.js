@@ -38,10 +38,8 @@ const PlaylistCollage = memo(({ collageData, size = 200, style }) => {
           {coverArtId ? (
             <CachedImage
               coverArtId={coverArtId}
-              size={Math.round(imageSize * 2)}
               fallbackSource={DEFAULT_ART}
               style={[styles.collageImage, { width: imageSize, height: imageSize }]}
-              defaultSource={DEFAULT_ART}
             />
           ) : (
             <View style={[styles.emptySlot, { width: imageSize, height: imageSize }]} />

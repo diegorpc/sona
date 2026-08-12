@@ -37,6 +37,8 @@ class AudioPlayerService {
     this.playlist = [];
     this.currentIndex = 0;
     this.isPlaying = false;
+    this.intendedPlaying = false;
+    this.isBuffering = false;
     this.position = 0;
     this.duration = 0;
     this.isLoading = false;
@@ -84,6 +86,7 @@ class AudioPlayerService {
     const state = {
       currentTrack: this.currentTrack,
       isPlaying: this.isPlaying,
+      isBuffering: this.isBuffering,
       position: this.position,
       duration: this.duration,
       isLoading: this.isLoading,
@@ -171,6 +174,7 @@ class AudioPlayerService {
       this.duration = knownDurationMs(track);
       this.isLoading = true;
       this.isPlaying = false;
+      this.isBuffering = false;
 
       this.notifyListeners();
 
@@ -198,6 +202,7 @@ class AudioPlayerService {
 
       this.sound.play();
       this.isPlaying = true;
+      this.intendedPlaying = true;
       this.isLoading = false;
 
       await AsyncStorage.setItem('isPlaying', 'true');
@@ -239,14 +244,11 @@ class AudioPlayerService {
       const duration = this.sound.duration;
 
       this.position = currentTime * 1000;
-      // The native player can report NaN/0 for a while before it has
-      // buffered enough to know the real duration — only take its value once
-      // it's actually known, so we never regress a good number (metadata
-      // fallback or a previously-known live value) back to "Loading…"/NaN.
       if (Number.isFinite(duration) && duration > 0) {
         this.duration = duration * 1000;
       }
       this.isPlaying = this.sound.playing;
+      this.isBuffering = this.intendedPlaying && this.sound.isBuffering === true;
 
       // Track-end detection with threshold to prevent false positives
       // Only trigger if we're within 0.5 seconds of the end AND haven't already triggered
@@ -351,8 +353,10 @@ class AudioPlayerService {
       if (shouldPlay) {
         this.sound.play();
         this.isPlaying = true;
+        this.intendedPlaying = true;
       } else {
         this.isPlaying = false;
+        this.intendedPlaying = false;
       }
 
       this.isLoading = false;
@@ -378,15 +382,18 @@ class AudioPlayerService {
     }
 
     try {
-      if (this.isPlaying) {
+      if (this.intendedPlaying) {
         console.log('[AudioPlayer] Pausing playback');
         this.sound.pause();
         this.isPlaying = false;
+        this.intendedPlaying = false;
+        this.isBuffering = false;
         await AsyncStorage.setItem('isPlaying', 'false');
       } else {
         console.log('[AudioPlayer] Resuming playback');
         this.sound.play();
         this.isPlaying = true;
+        this.intendedPlaying = true;
         await AsyncStorage.setItem('isPlaying', 'true');
       }
 
@@ -394,7 +401,7 @@ class AudioPlayerService {
     } catch (error) {
       console.error('[AudioPlayer] Error toggling play/pause:', error);
       if (this.currentTrack) {
-        await this.initializeTrackForPlayback(this.currentTrack, this.position, !this.isPlaying);
+        await this.initializeTrackForPlayback(this.currentTrack, this.position, !this.intendedPlaying);
       }
     }
   }
@@ -550,11 +557,15 @@ class AudioPlayerService {
       this.sound.remove();
       this.sound = null;
       this.isPlaying = false;
+      this.intendedPlaying = false;
+      this.isBuffering = false;
       this.trackEndedFlag = false;
     } catch (error) {
       console.error('[AudioPlayer] Error stopping current track:', error);
       this.sound = null;
       this.isPlaying = false;
+      this.intendedPlaying = false;
+      this.isBuffering = false;
       this.clearStatusTimer();
     }
   }
@@ -724,6 +735,26 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  queueTracksNext(tracks) {
+    if (!Array.isArray(tracks) || tracks.length === 0) {
+      return;
+    }
+
+    this.priorityQueue = [...tracks, ...this.priorityQueue];
+    this.persistQueueState();
+    this.notifyListeners();
+  }
+
+  queueTracksLast(tracks) {
+    if (!Array.isArray(tracks) || tracks.length === 0) {
+      return;
+    }
+
+    this.playlist = [...this.playlist, ...tracks];
+    this.persistQueueState();
+    this.notifyListeners();
+  }
+
   reorderContextQueue(fromIndex, toIndex) {
     const upcoming = this.getUpcomingContextTracks();
     const updatedUpcoming = moveItem(upcoming, fromIndex, toIndex);
@@ -825,6 +856,7 @@ class AudioPlayerService {
     return {
       currentTrack: this.currentTrack,
       isPlaying: this.isPlaying,
+      isBuffering: this.isBuffering,
       position: this.position,
       duration: this.duration,
       isLoading: this.isLoading,

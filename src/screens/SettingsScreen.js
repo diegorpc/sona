@@ -4,7 +4,6 @@ import {
   ScrollView,
   Alert,
   TouchableOpacity,
-  Image,
   Animated,
   Easing,
 } from 'react-native';
@@ -15,23 +14,25 @@ import {
   Button,
   Card,
   Divider,
-  Dialog,
-  Portal,
   TextInput,
   ProgressBar,
   IconButton,
 } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Slider from '@react-native-community/slider';
+// Same slider as the player's seek bar, so the two look consistent.
+import Slider from '@react-native-assets/slider';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
 import CacheService from '../services/CacheService';
-import ArtworkCache from '../services/ArtworkCache';
+import { Image as ExpoImage } from 'expo-image';
+import CachedImage from '../components/CachedImage';
+import { useArtworkSource } from '../hooks/useArtwork';
 import SongCache from '../services/SongCache';
 import { DEFAULT_SETTINGS, getAppSettings, saveAppSettings } from '../services/AppSettings';
 import { getPinnedPlaylistIds, setPinnedPlaylistIds, MAX_PINNED } from '../services/PinnedPlaylists';
 import { notifyAuthChange } from '../services/NavigationService';
 import ScreenBackground from '../components/ScreenBackground';
+import ThemedDialog from '../components/ThemedDialog';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCurrentTrack } from '../contexts/PlayerContext';
 import { accentPalettes } from '../theme/theme';
@@ -153,19 +154,13 @@ export default function SettingsScreen() {
   const loadCacheStats = async () => {
     try {
       await CacheService.initialize();
-      const [jsonStats, artStats, musicStats] = await Promise.all([
+      const [jsonStats, musicStats] = await Promise.all([
         CacheService.getStats(),
-        ArtworkCache.getStats(),
         SongCache.getStats(),
       ]);
-      // Metadata + artwork share one budget; combine them for display
-      const combinedBytes = jsonStats.totalSizeBytes + artStats.totalSizeBytes;
-      setMetaCacheStats({
-        totalSizeMB: (combinedBytes / (1024 * 1024)).toFixed(2),
-        totalSizeBytes: combinedBytes,
-        maxSizeMB: jsonStats.maxSizeMB,
-        entryCount: jsonStats.entryCount + artStats.entryCount,
-      });
+      // Artwork lives in expo-image's own cache now, which exposes no size
+      // stats and manages its own eviction — this card covers metadata only.
+      setMetaCacheStats(jsonStats);
       setMaxMetaCacheSize(jsonStats.maxSizeMB);
       setMusicCacheStats(musicStats);
       setMaxMusicCacheSize(musicStats.maxSizeMB);
@@ -253,7 +248,7 @@ export default function SettingsScreen() {
   const clearMetadataCache = async () => {
     Alert.alert(
       'Clear Metadata Cache',
-      `This will clear ${metaCacheStats?.totalSizeMB || 0} MB of cached metadata and artwork. Continue?`,
+      `This will clear ${metaCacheStats?.totalSizeMB || 0} MB of cached metadata, plus all cached artwork. Continue?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -261,7 +256,11 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await Promise.all([CacheService.clearAll(), ArtworkCache.clearAll()]);
+              await Promise.all([
+                CacheService.clearAll(),
+                ExpoImage.clearDiskCache(),
+                ExpoImage.clearMemoryCache(),
+              ]);
               await loadCacheStats();
               Alert.alert('Success', 'Metadata cache cleared');
             } catch (error) {
@@ -304,8 +303,6 @@ export default function SettingsScreen() {
         await SongCache.setMaxSize(newSize);
       } else {
         await CacheService.setMaxSize(newSize);
-        // Shrinking the shared budget may require evicting artwork too
-        await ArtworkCache.pruneToBudget();
       }
       await loadCacheStats();
       setCacheDialog(null);
@@ -366,11 +363,10 @@ export default function SettingsScreen() {
     setChipDisplayOrder(buildChipOrder(key));
   }, [activeTab, chipHighlightAnimations, chipAnimations]);
 
-  const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
-    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
-    return DEFAULT_ART;
-  }, [currentTrack?.coverArt, currentTrack?.albumId]);
+  const backgroundArt = useArtworkSource(
+    currentTrack?.coverArt || currentTrack?.albumId,
+    DEFAULT_ART
+  );
 
   const renderAppearanceTab = () => (
     <Card style={styles.card}>
@@ -413,8 +409,8 @@ export default function SettingsScreen() {
           />
           <Divider />
           <List.Item
-            title="Original quality streaming"
-            description="Stream untouched files. Off: transcode to MP3 320 kbps to save data"
+            title="High quality streaming"
+            description="Stream lossless instead of transcoding to MP3"
             left={props => <List.Icon {...props} icon="high-definition" />}
             right={() => (
               <Switch
@@ -425,8 +421,8 @@ export default function SettingsScreen() {
           />
           <Divider />
           <List.Item
-            title="Original quality caching"
-            description="Cache untouched files. Off: cached songs are transcoded to MP3 320 kbps"
+            title="High quality caching"
+            description="Cache lossless instead of transcoding to MP3"
             left={props => <List.Icon {...props} icon="download" />}
             right={() => (
               <Switch
@@ -454,7 +450,7 @@ export default function SettingsScreen() {
         <Card.Content>
           <Text style={styles.sectionTitle}>Home Playlists</Text>
           <Text style={styles.sectionDescription}>
-            Pin playlists to keep them in the Home grid. Pinned playlists always show first; the remaining slots fill automatically with recently-listened ones.
+            Pin up to 6 playlists to keep them in the Home grid before recently-listened ones.
           </Text>
           <Text style={styles.pinCountHint}>{pinnedIds.length} / {MAX_PINNED} pinned</Text>
           {sortedPlaylists.length === 0 ? (
@@ -462,24 +458,23 @@ export default function SettingsScreen() {
           ) : (
             sortedPlaylists.map((pl, idx) => {
               const isPinned = pinnedIds.includes(String(pl.id));
-              const coverSource = pl.coverArt ? ArtworkCache.getArtworkSource(pl.coverArt, 150) : null;
               return (
                 <React.Fragment key={pl.id}>
                   {idx > 0 && <Divider />}
                   <List.Item
                     title={pl.name}
+                    titleStyle={styles.playlistItem}
                     titleNumberOfLines={1}
                     description={pl.songCount != null ? `${pl.songCount} songs` : undefined}
                     onPress={() => togglePin(pl.id)}
                     left={() =>
-                      coverSource
-                        ? <Image source={coverSource} style={styles.playlistThumb} resizeMode="cover" />
+                      pl.coverArt
+                        ? <CachedImage coverArtId={pl.coverArt} style={styles.playlistThumb} resizeMode="cover" />
                         : <List.Icon icon="playlist-music" />
                     }
                     right={() => (
                       <IconButton
                         icon={isPinned ? 'pin' : 'pin-outline'}
-                        size={22}
                         iconColor={isPinned ? theme.colors.primary : theme.colors.onSurfaceVariant}
                         onPress={() => togglePin(pl.id)}
                         accessibilityLabel={isPinned ? `Unpin ${pl.name}` : `Pin ${pl.name}`}
@@ -594,8 +589,8 @@ export default function SettingsScreen() {
   const renderStorageTab = () => (
     <>
       {renderCacheCard(
-        'Metadata & Artwork Cache',
-        'Library data and cover art kept for instant page loads.',
+        'Metadata Cache',
+        'Library data kept for instant page loads. Clearing also clears cover art, which is cached and evicted automatically by the system.',
         metaCacheStats,
         maxMetaCacheSize,
         () => setCacheDialog('metadata'),
@@ -690,91 +685,93 @@ export default function SettingsScreen() {
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
           {renderActiveTab()}
 
-          <Portal>
-            <Dialog visible={showServerDialog} onDismiss={() => setShowServerDialog(false)}>
-              <Dialog.Title>Update Server Settings</Dialog.Title>
-              <Dialog.Content>
-                <TextInput
-                  label="Server URL"
-                  value={newServerUrl}
-                  onChangeText={setNewServerUrl}
-                  mode="outlined"
-                  style={styles.dialogInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TextInput
-                  label="Username"
-                  value={newUsername}
-                  onChangeText={setNewUsername}
-                  mode="outlined"
-                  style={styles.dialogInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TextInput
-                  label="Password"
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  mode="outlined"
-                  style={styles.dialogInput}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </Dialog.Content>
-              <Dialog.Actions>
-                <Button onPress={() => setShowServerDialog(false)}>Cancel</Button>
-                <Button onPress={handleServerUpdate}>Update</Button>
-              </Dialog.Actions>
-            </Dialog>
+          <ThemedDialog
+            visible={showServerDialog}
+            onDismiss={() => setShowServerDialog(false)}
+            title="Update Server Settings"
+            confirmLabel="Update"
+            onConfirm={handleServerUpdate}
+          >
+            <TextInput
+              label="Server URL"
+              value={newServerUrl}
+              onChangeText={setNewServerUrl}
+              mode="outlined"
+              style={styles.dialogInput}
+              outlineColor={theme.colors.outline}
+              activeOutlineColor={theme.colors.primary}
+              textColor={theme.colors.onSurface}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              label="Username"
+              value={newUsername}
+              onChangeText={setNewUsername}
+              mode="outlined"
+              style={styles.dialogInput}
+              outlineColor={theme.colors.outline}
+              activeOutlineColor={theme.colors.primary}
+              textColor={theme.colors.onSurface}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              label="Password"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              mode="outlined"
+              style={styles.dialogInput}
+              outlineColor={theme.colors.outline}
+              activeOutlineColor={theme.colors.primary}
+              textColor={theme.colors.onSurface}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </ThemedDialog>
 
-            <Dialog visible={cacheDialog !== null} onDismiss={() => setCacheDialog(null)}>
-              <Dialog.Title>
-                {cacheDialog === 'music' ? 'Maximum Music Cache Size' : 'Maximum Metadata Cache Size'}
-              </Dialog.Title>
-              <Dialog.Content>
-                <Text style={styles.dialogDescription}>
-                  {cacheDialog === 'music'
-                    ? 'Set the maximum storage used for cached songs.'
-                    : 'Set the maximum storage used for cached library data and cover art.'}
-                </Text>
-                <View style={styles.sliderContainer}>
-                  <Text style={styles.sliderLabel}>
-                    {cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize} MB
-                  </Text>
-                  <Slider
-                    style={styles.slider}
-                    minimumValue={cacheDialog === 'music' ? 100 : 10}
-                    maximumValue={cacheDialog === 'music' ? 20000 : 500}
-                    step={cacheDialog === 'music' ? 100 : 10}
-                    value={cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize}
-                    onValueChange={cacheDialog === 'music' ? setMaxMusicCacheSize : setMaxMetaCacheSize}
-                    minimumTrackTintColor={theme.colors.primary}
-                    maximumTrackTintColor={theme.colors.outline}
-                    thumbTintColor={theme.colors.primary}
-                  />
-                  <View style={styles.sliderLabels}>
-                    <Text style={styles.sliderLabelSmall}>{cacheDialog === 'music' ? '100 MB' : '10 MB'}</Text>
-                    <Text style={styles.sliderLabelSmall}>{cacheDialog === 'music' ? '20 GB' : '500 MB'}</Text>
-                  </View>
-                </View>
-              </Dialog.Content>
-              <Dialog.Actions>
-                <Button onPress={() => setCacheDialog(null)}>Cancel</Button>
-                <Button
-                  onPress={() =>
-                    handleMaxCacheSizeChange(
-                      cacheDialog,
-                      cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize
-                    )
-                  }
-                >
-                  Apply
-                </Button>
-              </Dialog.Actions>
-            </Dialog>
-          </Portal>
+          <ThemedDialog
+            visible={cacheDialog !== null}
+            onDismiss={() => setCacheDialog(null)}
+            title={cacheDialog === 'music' ? 'Maximum Music Cache Size' : 'Maximum Metadata Cache Size'}
+            confirmLabel="Apply"
+            onConfirm={() =>
+              handleMaxCacheSizeChange(
+                cacheDialog,
+                cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize
+              )
+            }
+          >
+            <Text style={styles.dialogDescription}>
+              {cacheDialog === 'music'
+                ? 'Set the maximum storage used for cached songs.'
+                : 'Set the maximum storage used for cached library data and cover art.'}
+            </Text>
+            <View style={styles.sliderContainer}>
+              <Text style={styles.sliderLabel}>
+                {cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize} MB
+              </Text>
+              <Slider
+                style={styles.slider}
+                minimumValue={cacheDialog === 'music' ? 100 : 10}
+                maximumValue={cacheDialog === 'music' ? 20000 : 500}
+                step={cacheDialog === 'music' ? 100 : 10}
+                value={cacheDialog === 'music' ? maxMusicCacheSize : maxMetaCacheSize}
+                onValueChange={cacheDialog === 'music' ? setMaxMusicCacheSize : setMaxMetaCacheSize}
+                minimumTrackTintColor={theme.colors.primary}
+                maximumTrackTintColor="rgba(255,255,255,0.12)"
+                thumbTintColor="#fff"
+                thumbSize={13}
+                trackHeight={3.5}
+                slideOnTap
+              />
+              <View style={styles.sliderLabels}>
+                <Text style={styles.sliderLabelSmall}>{cacheDialog === 'music' ? '100 MB' : '10 MB'}</Text>
+                <Text style={styles.sliderLabelSmall}>{cacheDialog === 'music' ? '20 GB' : '500 MB'}</Text>
+              </View>
+            </View>
+          </ThemedDialog>
 
           <View style={styles.scrollFooter} />
         </ScrollView>

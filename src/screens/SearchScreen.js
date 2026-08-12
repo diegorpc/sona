@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   TouchableOpacity,
-  Image,
   SectionList,
 } from 'react-native';
 import {
@@ -17,7 +16,7 @@ import CachedImage from '../components/CachedImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from '../services/SubsonicAPI';
 import AudioPlayer from '../services/AudioPlayer';
-import ArtworkCache from '../services/ArtworkCache';
+import { useArtworkSource } from '../hooks/useArtwork';
 import { expandPlayerOverlay } from '../services/PlayerOverlayController';
 import { useCurrentTrack, usePlayerActions } from '../contexts/PlayerContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -201,10 +200,8 @@ export default function SearchScreen({ navigation }) {
     <TouchableOpacity style={styles.flatListItem} onPress={() => handleArtistPress(item)} activeOpacity={0.7}>
       <CachedImage
         coverArtId={item.id}
-        size={200}
         fallbackSource={DEFAULT_ART}
         style={styles.itemImageRound}
-        defaultSource={DEFAULT_ART}
       />
       <View style={styles.itemInfo}>
         <Text style={styles.itemTitle}>{item.name}</Text>
@@ -219,10 +216,8 @@ export default function SearchScreen({ navigation }) {
     <TouchableOpacity style={styles.flatListItem} onPress={() => handleAlbumPress(item)} activeOpacity={0.7}>
       <CachedImage
         coverArtId={item.coverArt}
-        size={200}
         fallbackSource={DEFAULT_ART}
         style={styles.itemImage}
-        defaultSource={DEFAULT_ART}
       />
       <View style={styles.itemInfo}>
         <Text style={styles.itemTitle}>{item.name}</Text>
@@ -231,41 +226,40 @@ export default function SearchScreen({ navigation }) {
     </TouchableOpacity>
   ), [handleAlbumPress, styles]);
 
-  const renderSong = useCallback(({ item, index, section }) => (
-    <TouchableOpacity
-      style={styles.flatListItem}
-      onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
-      onLongPress={() => setMenuSong(item)}
-      delayLongPress={350}
-      activeOpacity={0.7}
-    >
-      <CachedImage
-        coverArtId={item.coverArt}
-        size={200}
-        fallbackSource={DEFAULT_ART}
-        style={styles.itemImage}
-        defaultSource={DEFAULT_ART}
-      />
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemTitle}>{item.title}</Text>
-        <Text style={styles.itemSubtitle}>{item.artist}</Text>
-      </View>
-      {item.duration && (
-        <View style={styles.itemRightContent}>
-          <Text style={styles.itemDuration}>{formatDuration(item.duration)}</Text>
+  const renderSong = useCallback(({ item, index, section }) => {
+    const isPlaying = currentTrack?.id === item.id;
+    return (
+      <TouchableOpacity
+        style={[styles.flatListItem, isPlaying && styles.flatListItemPlaying]}
+        onPress={() => handleSongPress(item, section?.data ?? [item], index ?? 0)}
+        onLongPress={() => setMenuSong(item)}
+        delayLongPress={350}
+        activeOpacity={0.7}
+      >
+        <CachedImage
+          coverArtId={item.coverArt}
+          fallbackSource={DEFAULT_ART}
+          style={styles.itemImage}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={[styles.itemTitle, isPlaying && styles.itemTitlePlaying]}>{item.title}</Text>
+          <Text style={[styles.itemSubtitle, isPlaying && styles.itemSubtitlePlaying]}>{item.artist}</Text>
         </View>
-      )}
-    </TouchableOpacity>
-  ), [handleSongPress, formatDuration, styles]);
+        {item.duration && (
+          <View style={styles.itemRightContent}>
+            <Text style={styles.itemDuration}>{formatDuration(item.duration)}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  }, [handleSongPress, formatDuration, styles, currentTrack]);
 
   const renderPlaylist = useCallback(({ item }) => (
     <TouchableOpacity style={styles.flatListItem} onPress={() => handlePlaylistPress(item)} activeOpacity={0.7}>
       <CachedImage
         coverArtId={item.coverArt}
-        size={200}
         fallbackSource={DEFAULT_ART}
         style={styles.itemImage}
-        defaultSource={DEFAULT_ART}
       />
       <View style={styles.itemInfo}>
         <Text style={styles.itemTitle}>{item.name}</Text>
@@ -318,11 +312,10 @@ export default function SearchScreen({ navigation }) {
     return `${index}`;
   }, []);
 
-  const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
-    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
-    return DEFAULT_ART;
-  }, [currentTrack?.albumId, currentTrack?.coverArt]);
+  const backgroundArt = useArtworkSource(
+    currentTrack?.coverArt || currentTrack?.albumId,
+    DEFAULT_ART
+  );
 
   const hasSearchQuery = searchQuery.trim().length > 0;
   const hasSections = sections.length > 0;

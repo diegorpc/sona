@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { Image, View, TouchableOpacity, Animated, PanResponder } from 'react-native';
+import { View, TouchableOpacity, Animated, PanResponder } from 'react-native';
 import Reanimated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import DraggableFlatList from 'react-native-draggable-flatlist';
@@ -9,7 +9,8 @@ import ScreenBackground from '../components/ScreenBackground';
 import SongMenu from '../components/SongMenu';
 import AddToPlaylistModal from '../components/AddToPlaylistModal';
 
-import ArtworkCache from '../services/ArtworkCache';
+import { useArtworkSource } from '../hooks/useArtwork';
+import CachedImage from '../components/CachedImage';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { createStyles } from '../styles/QueueScreen.styles';
@@ -70,11 +71,7 @@ SwipeDelete.displayName = 'SwipeDelete';
 // Static context-queue row (LibraryScreen-style: starred icon, long-press menu, swipe to add)
 const ContextQueueRow = memo(({ item, index, theme, styles, onPress, onLongPress, onSwipeAddNext }) => {
   const swipeRef = useRef(null);
-  const coverArtSource = useMemo(() => {
-    if (item?.coverArt) return ArtworkCache.getArtworkSource(item.coverArt, 200, DEFAULT_ART);
-    if (item?.albumId) return ArtworkCache.getArtworkSource(item.albumId, 200, DEFAULT_ART);
-    return DEFAULT_ART;
-  }, [item?.coverArt, item?.albumId]);
+  const coverArtId = item?.coverArt || item?.albumId;
   const isStarred = Boolean(item?.starred);
 
   const handlePress = useCallback(() => {
@@ -118,7 +115,6 @@ const ContextQueueRow = memo(({ item, index, theme, styles, onPress, onLongPress
           {isStarred ? (
             <MaterialIcons
               name="favorite"
-              size={14}
               color={theme.colors.primary}
               style={styles.favoriteIcon}
             />
@@ -126,7 +122,12 @@ const ContextQueueRow = memo(({ item, index, theme, styles, onPress, onLongPress
             <View style={styles.itemLeadingIcon} />
           )}
           <View style={styles.contextCoverArtContainer}>
-            <Image source={coverArtSource} style={styles.contextCoverArt} resizeMode="contain" defaultSource={DEFAULT_ART} />
+            <CachedImage
+              coverArtId={coverArtId}
+              fallbackSource={DEFAULT_ART}
+              style={styles.contextCoverArt}
+              resizeMode="contain"
+            />
           </View>
           <View style={styles.infoContainer}>
             <Text numberOfLines={1} style={styles.contextTitle}>{item?.title ?? 'Unknown Title'}</Text>
@@ -144,12 +145,6 @@ const ContextQueueRow = memo(({ item, index, theme, styles, onPress, onLongPress
 });
 ContextQueueRow.displayName = 'ContextQueueRow';
 
-const getCoverArt = (track, size = 80) => {
-  if (track?.coverArt) return ArtworkCache.getArtworkSource(track.coverArt, size, DEFAULT_ART);
-  if (track?.albumId) return ArtworkCache.getArtworkSource(track.albumId, size, DEFAULT_ART);
-  return DEFAULT_ART;
-};
-
 const formatDuration = (durationSeconds) => {
   if (!Number.isFinite(durationSeconds)) return '';
   const totalSeconds = Math.max(0, Math.floor(durationSeconds));
@@ -164,7 +159,7 @@ const QueueItem = memo(({ item, drag, isActive, isNowPlaying, onActionPress }) =
   const styles = createStyles(theme);
   const duration = useMemo(() => formatDuration(item?.duration), [item?.duration]);
 
-  const coverArtSource = useMemo(() => getCoverArt(item, 200), [item?.coverArt, item?.albumId]);
+  const coverArtId = item?.coverArt || item?.albumId;
 
   return (
     <View style={[styles.itemContainer, isActive && styles.itemActive, isNowPlaying && styles.itemActive]}>
@@ -185,11 +180,11 @@ const QueueItem = memo(({ item, drag, isActive, isNowPlaying, onActionPress }) =
       )}
 
       <View style={styles.coverArtContainer}>
-        <Image
-          source={coverArtSource}
+        <CachedImage
+          coverArtId={coverArtId}
+          fallbackSource={DEFAULT_ART}
           style={styles.coverArt}
           resizeMode="contain"
-          defaultSource={DEFAULT_ART}
         />
       </View>
 
@@ -277,7 +272,6 @@ const ContextHeader = ({ contextLabel, shuffleOn, repeatMode, onToggleShuffle, o
         >
           <MaterialIcons
             name="shuffle"
-            size={15}
             color={shuffleOn ? theme.colors.primary : theme.colors.onSurface}
             style={{ opacity: shuffleOn ? 1 : 0.4 }}
           />
@@ -290,7 +284,6 @@ const ContextHeader = ({ contextLabel, shuffleOn, repeatMode, onToggleShuffle, o
         >
           <MaterialIcons
             name={REPEAT_ICON[repeatMode] ?? 'repeat'}
-            size={15}
             color={repeatActive ? theme.colors.primary : theme.colors.onSurface}
             style={{ opacity: repeatActive ? 1 : 0.4 }}
           />
@@ -340,11 +333,10 @@ const QueueScreen = ({
   const scrollYRef = useRef(0);
   const isAtTopRef = useRef(true);
 
-  const backgroundArt = useMemo(() => {
-    if (currentTrack?.coverArt) return ArtworkCache.getArtworkSource(currentTrack.coverArt, 600, DEFAULT_ART);
-    if (currentTrack?.albumId) return ArtworkCache.getArtworkSource(currentTrack.albumId, 600, DEFAULT_ART);
-    return DEFAULT_ART;
-  }, [currentTrack?.coverArt, currentTrack?.albumId]);
+  const backgroundArt = useArtworkSource(
+    currentTrack?.coverArt || currentTrack?.albumId,
+    DEFAULT_ART
+  );
 
   const handleRemovePriority = useCallback((index) => {
     if (typeof onRemovePriority === 'function') onRemovePriority(index);

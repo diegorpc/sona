@@ -38,7 +38,11 @@ const HomeStack = createStackNavigator();
 const LibraryStack = createStackNavigator();
 const SearchStack = createStackNavigator();
 
-const detailScreenOptions = { headerShown: false };
+const detailScreenOptions = {
+  headerShown: false,
+  gestureEnabled: true,
+  gestureResponseDistance: 50,
+};
 
 function HomeStackNavigator() {
   return (
@@ -132,9 +136,6 @@ function AppContent() {
         const configLoaded = await SubsonicAPI.loadConfiguration();
         if (configLoaded) {
           setIsLoggedIn(true);
-          // Fire-and-forget: warms Library's cache in the background so it's
-          // instant and up to date next time it's opened. Internally
-          // throttled, since this runs on every nav-state change too.
           syncLibrary();
         } else {
           await AsyncStorage.removeItem('serverConfig');

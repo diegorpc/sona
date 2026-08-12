@@ -75,6 +75,9 @@ export const createStyles = (theme) => StyleSheet.create({
     borderBottomColor: theme.colors.borderLowOpacity,
     backgroundColor: 'transparent',
   },
+  flatListItemPlaying: {
+    backgroundColor: theme.colors.playingBackground,
+  },
   itemImage: {
     width: 52,
     height: 52,
@@ -97,11 +100,18 @@ export const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.onSurface,
     marginBottom: 2,
   },
+  itemTitlePlaying: {
+    color: theme.colors.primary,
+  },
   itemSubtitle: {
     fontSize: 11.5,
     fontFamily: 'Lexend_400Regular',
     color: theme.colors.onSurface,
     opacity: 0.55,
+  },
+  itemSubtitlePlaying: {
+    color: theme.colors.primary,
+    opacity: 0.7,
   },
   itemRightContent: {
     flexDirection: 'row',
