@@ -159,7 +159,7 @@ export default function AlbumScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const currentTrack = useCurrentTrack();
-  const { insertIntoPriorityQueue, appendToContextQueue, queueTracksNext, queueTracksLast } = usePlayerActions();
+  const { insertIntoPriorityQueue, queueTracksNext, queueTracksLast } = usePlayerActions();
   const [albumData, setAlbumData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -265,8 +265,8 @@ export default function AlbumScreen({ route, navigation }) {
   }, [heroImage]);
 
   const handleAddLast = useCallback((song) => {
-    appendToContextQueue(song);
-  }, [appendToContextQueue]);
+    insertIntoPriorityQueue(song);
+  }, [insertIntoPriorityQueue]);
 
   // Optimistic: flip the heart immediately, then reconcile with the server;
   // roll back on failure so the UI never shows a favorite that didn't stick.
@@ -329,7 +329,7 @@ export default function AlbumScreen({ route, navigation }) {
         key: 'addLast',
         label: 'Add last in queue',
         icon: 'add-to-queue',
-        onPress: () => appendToContextQueue(menuSong),
+        onPress: () => insertIntoPriorityQueue(menuSong),
       },
       {
         key: 'download',
@@ -339,7 +339,7 @@ export default function AlbumScreen({ route, navigation }) {
         onPress: () => {},
       },
     ];
-  }, [menuSong, albumData, handleSongPress, navigation, insertIntoPriorityQueue, appendToContextQueue]);
+  }, [menuSong, albumData, handleSongPress, navigation, insertIntoPriorityQueue]);
 
   const queueMenuSong = useMemo(() => ({
     title: album.name,

@@ -28,7 +28,7 @@ const PLAYER_ART_SIZE = SCREEN_WIDTH - 80;
 export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist, onNavigateToAlbum, safeAreaInsets }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
+  const { insertIntoPriorityQueue } = usePlayerActions();
   const [playerState, setPlayerState] = useState(AudioPlayer.getCurrentState());
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState(0);
@@ -40,7 +40,8 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
   const bottomInset = safeAreaInsets?.bottom ?? 0;
 
   useEffect(() => {
-    AudioPlayer.loadSavedState();
+    // Session restore (AudioPlayer.loadSavedState) is owned by PlayerProvider;
+    // calling it here too raced two concurrent restores at launch.
     const listener = (state) => {
       setPlayerState(state);
       if (!isSlidingRef.current) {
@@ -126,7 +127,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
         key: 'addLast',
         label: 'Add last in queue',
         icon: 'add-to-queue',
-        onPress: () => appendToContextQueue(currentTrack),
+        onPress: () => insertIntoPriorityQueue(currentTrack),
       },
       {
         key: 'download',
@@ -136,7 +137,7 @@ export default function PlayerScreen({ onClose, onShowQueue, onNavigateToArtist,
         onPress: () => {},
       },
     ].filter(Boolean);
-  }, [currentTrack, onNavigateToAlbum, onNavigateToArtist, insertIntoPriorityQueue, appendToContextQueue]);
+  }, [currentTrack, onNavigateToAlbum, onNavigateToArtist, insertIntoPriorityQueue]);
 
 
   const artSource = useArtworkSource(currentTrack?.coverArt, DEFAULT_ART);

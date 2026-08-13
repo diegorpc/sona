@@ -22,6 +22,7 @@ function knownDurationMs(track) {
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
 }
 
+/** In-place Fisher–Yates shuffle. Returns the same array for chaining. */
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -30,6 +31,50 @@ function shuffleArray(array) {
   return array;
 }
 
+/**
+ * Global playback engine, exported as a singleton. Wraps expo-audio's
+ * `createAudioPlayer` (one instance per track, recreated on every track
+ * change) and owns all playback state, the two-queue model, and its
+ * persistence to AsyncStorage.
+ *
+ * ## Queue model
+ * - `playlist` — the *context queue*: the album/artist/playlist the current
+ *   track was started from. `currentIndex` points at the current track
+ *   within it; `contextQueue` (`{ name, type, id }`) labels it for the UI.
+ * - `priorityQueue` — the user's queue ("Add next" inserts at the front,
+ *   "Add last"/"Queue last" append at the back), consumed FIFO before the
+ *   context queue advances.
+ * - `currentTrackSource` (`'context' | 'priority'`) records which queue the
+ *   current track came from, so QueueScreen can render it correctly.
+ *
+ * ## Status polling
+ * expo-audio exposes no status event stream, so a 100 ms `setInterval`
+ * (see {@link AudioPlayerService#setupAudioPlayerListeners}) polls the
+ * native player for position/duration/playing/buffering, detects track end,
+ * and calls {@link AudioPlayerService#notifyListeners}. **Player state
+ * therefore changes ~10x/sec during playback** — this dominates the perf
+ * characteristics of every consumer, and is why PlayerContext splits its
+ * contexts by update frequency.
+ *
+ * ## Buffering vs paused vs loading
+ * AVPlayer reports `playing = false` while stalled waiting for data, which
+ * used to make the UI flip to "paused" mid-track on a bad connection.
+ * `intendedPlaying` tracks what the user asked for (set at every play/pause/
+ * stop transition) alongside the live `isPlaying`, and the status timer
+ * derives `isBuffering = intendedPlaying && sound.isBuffering` — the intent
+ * gate matters because expo-audio also reports `isBuffering` for a
+ * deliberate pause on an empty buffer. `togglePlayPause` branches on
+ * `intendedPlaying`, not `isPlaying`, so tapping pause during a stall
+ * actually pauses instead of re-issuing `play()`. There is no buffered-range
+ * bar on the seek slider because expo-audio never bridges AVPlayer's
+ * `loadedTimeRanges` — no buffered-amount data exists JS-side.
+ *
+ * ## Listener pattern
+ * `addListener(fn)` / `removeListener(fn)`; each listener receives the full
+ * state snapshot (see {@link AudioPlayerService#getCurrentState}) on every
+ * change. PlayerContext subscribes once and re-publishes through React
+ * context.
+ */
 class AudioPlayerService {
   constructor() {
     this.sound = null;
@@ -60,6 +105,11 @@ class AudioPlayerService {
     this.initializeAudio();
   }
 
+  /**
+   * Configure the OS audio session (background playback, silent-mode
+   * playback, interruption behavior). Called once from the constructor.
+   * @returns {Promise<void>}
+   */
   async initializeAudio() {
     try {
       await setAudioModeAsync({
@@ -74,34 +124,54 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Subscribe to playback state changes.
+   * @param {function(Object): void} listener Receives the state snapshot
+   *   from {@link AudioPlayerService#getCurrentState} on every change.
+   */
   addListener(listener) {
     this.listeners.push(listener);
   }
 
+  /** @param {function(Object): void} listener The listener to remove. */
   removeListener(listener) {
     this.listeners = this.listeners.filter(l => l !== listener);
   }
 
+  /** Push the current state snapshot to every registered listener. */
   notifyListeners() {
-    const state = {
-      currentTrack: this.currentTrack,
-      isPlaying: this.isPlaying,
-      isBuffering: this.isBuffering,
-      position: this.position,
-      duration: this.duration,
-      isLoading: this.isLoading,
-      playlist: this.playlist,
-      currentIndex: this.currentIndex,
-      priorityQueue: this.priorityQueue,
-      contextQueue: this.contextQueue,
-      currentTrackSource: this.currentTrackSource,
-      shuffle: this.shuffle,
-      repeatMode: this.repeatMode,
-    };
-
+    const state = this.getCurrentState();
     this.listeners.forEach(listener => listener(state));
   }
 
+  /**
+   * Stop whatever is playing and start a new track.
+   *
+   * Persists the new state, tears down the previous expo-audio instance,
+   * creates a fresh one for this track, and fires a "now playing" scrobble.
+   * Listeners are notified immediately (before the audio is ready) so the
+   * UI updates without waiting on the network.
+   *
+   * @param {Object} track The track to play (Subsonic song object).
+   * @param {?Object[]} [playlist] Context queue to install. When omitted and
+   *   no context queue exists, a single-track queue is synthesized; when
+   *   omitted but a queue exists, the current queue is kept and only the
+   *   index moves.
+   * @param {number} [index] Position of `track` within `playlist`.
+   * @param {Object} [options]
+   * @param {?string} [options.contextName] Display label for the queue
+   *   (album/playlist name).
+   * @param {?string} [options.contextType] Queue origin type, e.g. `'album'`,
+   *   `'playlist'`, `'artist'`.
+   * @param {?string} [options.contextId] Id of the originating entity.
+   * @param {string} [options.contextSource] `currentTrackSource` to set for
+   *   context playback (defaults to `'context'`).
+   * @param {boolean} [options.fromPriority] True when the track was pulled
+   *   off the priority queue: the context queue is left untouched and the
+   *   source is marked `'priority'`.
+   * @param {string} [options.source] Explicit `currentTrackSource` override.
+   * @returns {Promise<void>}
+   */
   async playTrack(track, playlist = null, index = 0, options = {}) {
     if (!track) {
       return;
@@ -221,6 +291,16 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Start the 100 ms status poll for the current `this.sound` instance.
+   *
+   * Each tick syncs position/duration/playing/buffering from the native
+   * player, detects track end (within 0.5 s of the known duration, latched
+   * by `trackEndedFlag` so it fires once), persists state every ~5 s, and
+   * notifies listeners. `duration` is only overwritten once the native
+   * player reports a finite positive value, so the metadata-seeded duration
+   * never regresses to NaN (see {@link knownDurationMs}).
+   */
   setupAudioPlayerListeners() {
     if (!this.sound) {
       console.warn('[AudioPlayer] setupAudioPlayerListeners: no sound object');
@@ -288,6 +368,7 @@ class AudioPlayerService {
     }, 100);
   }
 
+  /** Stop the status poll and reset the track-end latch. */
   clearStatusTimer() {
     if (this.statusTimer) {
       console.log('[AudioPlayer] Clearing status timer');
@@ -297,6 +378,11 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Track-end handler: submit the completed-listen scrobble, then advance
+   * via {@link AudioPlayerService#playNext}.
+   * @returns {Promise<void>}
+   */
   async onTrackFinished() {
     console.log('[AudioPlayer] onTrackFinished called for track:', this.currentTrack?.title);
     try {
@@ -311,8 +397,14 @@ class AudioPlayerService {
     }
   }
 
-  // Prefer a cached local file; otherwise stream (transcoded to MP3 320 kbps
-  // unless original-quality streaming is enabled in settings).
+  /**
+   * Resolve the playback URI for a track: a SongCache local file when one
+   * exists, otherwise a stream URL (transcoded to MP3 320 kbps unless the
+   * `originalQualityStreaming` setting is enabled).
+   *
+   * @param {string} trackId
+   * @returns {Promise<string>} Local `file://` URI or remote stream URL.
+   */
   async resolveSourceUri(trackId) {
     const cachedUri = await SongCache.getCachedUri(trackId).catch(() => null);
     if (cachedUri) return cachedUri;
@@ -323,6 +415,16 @@ class AudioPlayerService {
     );
   }
 
+  /**
+   * Set up a track without touching queue state — used for session restore
+   * ({@link AudioPlayerService#loadSavedState}) and for re-arming playback
+   * after the sound object was lost.
+   *
+   * @param {Object} track
+   * @param {number} [position] Start position in milliseconds.
+   * @param {boolean} [shouldPlay] Whether to start playing immediately.
+   * @returns {Promise<void>}
+   */
   async initializeTrackForPlayback(track, position = 0, shouldPlay = false) {
     if (!track) {
       return;
@@ -368,6 +470,13 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Toggle between playing and paused, branching on `intendedPlaying` (not
+   * the live `isPlaying`) so a tap during a buffering stall pauses instead
+   * of re-issuing `play()`. Re-arms the track from scratch if the sound
+   * object has been lost.
+   * @returns {Promise<void>}
+   */
   async togglePlayPause() {
     console.log('[AudioPlayer] togglePlayPause called, current isPlaying:', this.isPlaying);
 
@@ -406,6 +515,15 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Advance playback. Order of precedence:
+   * 1. repeat-one — replay the current track (unless priority tracks wait);
+   * 2. the priority queue (FIFO);
+   * 3. the next context-queue track;
+   * 4. at the end of the context queue: wrap to the start under repeat-all,
+   *    otherwise stop.
+   * @returns {Promise<void>}
+   */
   async playNext() {
     console.log('[AudioPlayer] playNext called:', {
       priorityQueueLength: this.priorityQueue.length,
@@ -479,6 +597,11 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Play the previous context-queue track. No-op at the first track (no
+   * wrap-around, and the priority queue is never re-entered).
+   * @returns {Promise<void>}
+   */
   async playPrevious() {
     console.log('[AudioPlayer] playPrevious called');
 
@@ -508,6 +631,12 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Seek within the current track. Also resets the track-end latch so
+   * seeking backwards can re-trigger end detection later.
+   * @param {number} positionMillis Target position in milliseconds.
+   * @returns {Promise<void>}
+   */
   async seekTo(positionMillis) {
     if (!this.sound) {
       console.warn('[AudioPlayer] seekTo: no sound object');
@@ -526,18 +655,12 @@ class AudioPlayerService {
     }
   }
 
-  async setVolume(volume) {
-    if (!this.sound) {
-      return;
-    }
-
-    try {
-      this.sound.volume = volume;
-    } catch (error) {
-      console.error('Error setting volume:', error);
-    }
-  }
-
+  /**
+   * Tear down the current expo-audio instance (pause, stop the status poll,
+   * release the native player) without touching queue state. Used before
+   * every new track and by {@link AudioPlayerService#stop}.
+   * @returns {Promise<void>}
+   */
   async stopCurrentTrack() {
     if (!this.sound) {
       return;
@@ -570,6 +693,11 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Stop playback entirely and reset position/duration. The current track
+   * and queues are kept so the UI can still show what was playing.
+   * @returns {Promise<void>}
+   */
   async stop() {
     if (!this.sound) {
       return;
@@ -589,6 +717,11 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Persist position/isPlaying and queue state. Called every ~5 s by the
+   * status poll so a killed app restores close to where it left off.
+   * @returns {Promise<void>}
+   */
   async saveCurrentState() {
     if (!this.currentTrack) {
       return;
@@ -605,6 +738,13 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Restore the previous session: queues, shuffle/repeat flags, current
+   * track, and position, resuming playback if the app was playing when it
+   * closed. Called once at launch by PlayerProvider — nothing else should
+   * call this, since concurrent restores race each other.
+   * @returns {Promise<void>}
+   */
   async loadSavedState() {
     try {
       const entries = await AsyncStorage.multiGet([
@@ -682,16 +822,12 @@ class AudioPlayerService {
     }
   }
 
-  setPriorityQueue(newQueue = []) {
-    if (!Array.isArray(newQueue)) {
-      return;
-    }
-
-    this.priorityQueue = [...newQueue];
-    this.persistQueueState();
-    this.notifyListeners();
-  }
-
+  /**
+   * Move a priority-queue track from one position to another (drag reorder
+   * in QueueScreen). Out-of-range indices are a no-op.
+   * @param {number} fromIndex
+   * @param {number} toIndex
+   */
   reorderPriorityQueue(fromIndex, toIndex) {
     const updated = moveItem(this.priorityQueue, fromIndex, toIndex);
     if (!updated) {
@@ -703,6 +839,10 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * Remove one track from the priority queue by index.
+   * @param {number} index
+   */
   removePriorityTrack(index) {
     if (index < 0 || index >= this.priorityQueue.length) {
       return;
@@ -715,6 +855,16 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * Append a single track to the end of the context queue.
+   *
+   * No longer wired to any UI: the "Add last" surfaces used to call this,
+   * which put the track behind the rest of the current album/playlist
+   * instead of at the back of the user's queue — they now use
+   * {@link AudioPlayerService#insertIntoPriorityQueue}. Kept as a queue
+   * primitive.
+   * @param {Object} track
+   */
   appendToContextQueue(track) {
     if (!track) return;
     this.playlist = [...this.playlist, track];
@@ -722,6 +872,12 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * Insert a single track into the priority queue.
+   * @param {Object} track
+   * @param {number} [targetIndex] Insertion position; defaults to the end,
+   *   clamped into range. Pass 0 for "play next".
+   */
   insertIntoPriorityQueue(track, targetIndex = this.priorityQueue.length) {
     if (!track) {
       return;
@@ -735,6 +891,13 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * Prepend an ordered set of tracks to the priority queue ("Queue first"
+   * on a whole album or artist). Exists as a bulk operation because looping
+   * `insertIntoPriorityQueue(track, 0)` would reverse the order and notify
+   * listeners once per track.
+   * @param {Object[]} tracks
+   */
   queueTracksNext(tracks) {
     if (!Array.isArray(tracks) || tracks.length === 0) {
       return;
@@ -745,16 +908,30 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * Append an ordered set of tracks to the end of the priority queue
+   * ("Queue last" on a whole album or artist). Previously appended to the
+   * context queue, which buried the tracks behind the rest of the current
+   * album/playlist instead of placing them at the back of the user's queue.
+   * @param {Object[]} tracks
+   */
   queueTracksLast(tracks) {
     if (!Array.isArray(tracks) || tracks.length === 0) {
       return;
     }
 
-    this.playlist = [...this.playlist, ...tracks];
+    this.priorityQueue = [...this.priorityQueue, ...tracks];
     this.persistQueueState();
     this.notifyListeners();
   }
 
+  /**
+   * Reorder the *upcoming* portion of the context queue (drag reorder in
+   * QueueScreen). Indices are relative to the upcoming list — i.e. 0 is the
+   * track after the current one; already-played tracks are untouched.
+   * @param {number} fromIndex
+   * @param {number} toIndex
+   */
   reorderContextQueue(fromIndex, toIndex) {
     const upcoming = this.getUpcomingContextTracks();
     const updatedUpcoming = moveItem(upcoming, fromIndex, toIndex);
@@ -771,6 +948,14 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * Move an upcoming context-queue track into the priority queue (dragging
+   * a row across the queue boundary in QueueScreen).
+   * @param {number} relativeIndex Index within the upcoming context tracks
+   *   (0 = the track after the current one).
+   * @param {number} [priorityIndex] Insertion position in the priority
+   *   queue; defaults to the end, clamped into range.
+   */
   moveContextTrackToPriority(relativeIndex, priorityIndex = this.priorityQueue.length) {
     if (relativeIndex < 0) {
       return;
@@ -797,6 +982,12 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * Toggle shuffle for the *upcoming* context tracks. Turning shuffle on
+   * snapshots the current upcoming order (`originalUpcoming`) and shuffles
+   * in place; turning it off restores the snapshot, keeping only tracks
+   * still present in the queue. Already-played tracks are never reordered.
+   */
   toggleShuffle() {
     const upcoming = this.playlist.slice(this.currentIndex + 1);
 
@@ -824,19 +1015,7 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
-  toggleRepeatAll() {
-    this.repeatMode = this.repeatMode === 'all' ? 'none' : 'all';
-    this.persistQueueState();
-    this.notifyListeners();
-  }
-
-  toggleRepeatOne() {
-    this.repeatMode = this.repeatMode === 'one' ? 'none' : 'one';
-    this.persistQueueState();
-    this.notifyListeners();
-  }
-
-  // Cycles: none → all → one → none
+  /** Cycle the repeat mode: none → all → one → none. */
   cycleRepeatMode() {
     const next = { none: 'all', all: 'one', one: 'none' };
     this.repeatMode = next[this.repeatMode] ?? 'none';
@@ -844,6 +1023,10 @@ class AudioPlayerService {
     this.notifyListeners();
   }
 
+  /**
+   * @returns {Object[]} The context-queue tracks after the current one
+   *   (empty when at the end or when no queue is loaded).
+   */
   getUpcomingContextTracks() {
     if (!Array.isArray(this.playlist) || this.playlist.length === 0) {
       return [];
@@ -852,6 +1035,26 @@ class AudioPlayerService {
     return this.playlist.slice(Math.min(this.currentIndex + 1, this.playlist.length));
   }
 
+  /**
+   * Snapshot of the full playback state, as delivered to listeners.
+   *
+   * @returns {{
+   *   currentTrack: ?Object,
+   *   isPlaying: boolean,
+   *   isBuffering: boolean,
+   *   position: number,
+   *   duration: number,
+   *   isLoading: boolean,
+   *   playlist: Object[],
+   *   currentIndex: number,
+   *   priorityQueue: Object[],
+   *   contextQueue: { name: ?string, type: ?string, id: ?string },
+   *   currentTrackSource: string,
+   *   shuffle: boolean,
+   *   repeatMode: string,
+   * }} Positions/durations are in milliseconds; `currentTrackSource` is
+   *   `'context' | 'priority'`; `repeatMode` is `'none' | 'all' | 'one'`.
+   */
   getCurrentState() {
     return {
       currentTrack: this.currentTrack,
@@ -870,6 +1073,10 @@ class AudioPlayerService {
     };
   }
 
+  /**
+   * Persist queue/shuffle/repeat state to AsyncStorage (fire-and-forget;
+   * failures are logged, never thrown).
+   */
   persistQueueState() {
     try {
       const entries = [
@@ -888,6 +1095,11 @@ class AudioPlayerService {
     }
   }
 
+  /**
+   * Format a duration for display.
+   * @param {number} milliseconds
+   * @returns {string} `m:ss`, e.g. `3:07`.
+   */
   formatTime(milliseconds) {
     const totalSeconds = Math.floor(milliseconds / 1000);
     const minutes = Math.floor(totalSeconds / 60);
@@ -896,6 +1108,16 @@ class AudioPlayerService {
   }
 }
 
+/**
+ * Return a copy of `array` with the item at `fromIndex` moved to `toIndex`
+ * (clamped into range), or null when the inputs are invalid — callers treat
+ * null as "leave the queue unchanged".
+ *
+ * @param {Array} array
+ * @param {number} fromIndex
+ * @param {number} toIndex
+ * @returns {?Array}
+ */
 const moveItem = (array, fromIndex, toIndex) => {
   if (!Array.isArray(array) || array.length === 0) {
     return null;

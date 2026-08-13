@@ -312,7 +312,6 @@ const QueueScreen = ({
   const {
     playerState,
     insertIntoPriorityQueue,
-    appendToContextQueue,
     moveContextTrackToPriority,
     toggleShuffle,
     cycleRepeatMode,
@@ -448,7 +447,7 @@ const QueueScreen = ({
         key: 'addLast',
         label: 'Add last in queue',
         icon: 'add-to-queue',
-        onPress: () => appendToContextQueue(menuSong),
+        onPress: () => insertIntoPriorityQueue(menuSong),
       },
       {
         key: 'download',
@@ -458,7 +457,7 @@ const QueueScreen = ({
         onPress: () => {},
       },
     ];
-  }, [menuSong, insertIntoPriorityQueue, appendToContextQueue]);
+  }, [menuSong, insertIntoPriorityQueue]);
 
   const dragOffset = useRef(new Animated.Value(0)).current;
   const isDraggingRef = useRef(false);

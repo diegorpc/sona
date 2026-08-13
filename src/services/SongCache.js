@@ -3,18 +3,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import SubsonicAPI from './SubsonicAPI';
 import { getAppSettings } from './AppSettings';
 
-// Disk cache for full song files (the "music cache"). Files live in
-// documentDirectory/music/, index in AsyncStorage. Cached songs are never
-// evicted automatically — they persist until removed manually (removeSong,
-// clearAll, or lowering the budget via setMaxSize). There is no background
-// LRU sweep on download, since a song can't be "stale" the way list data can.
-//
-// Not yet wired to any menus/UI — exposed for later use:
-//   cacheSong(track) / cacheSongs(tracks) / cacheAlbum(albumId) / cachePlaylist(playlistId)
-//   getCachedUri(songId) — used by AudioPlayer to prefer local playback
-//
-// Quality is controlled by the `originalQualityCaching` app setting:
-// original server file, or transcoded to MP3 320 kbps.
+/**
+ * @fileoverview Disk cache for full song files (the "Music" cache in
+ * Settings → Storage), exported as a singleton.
+ *
+ * Files live in `documentDirectory/music/`; the index (per-song size,
+ * last-played timestamp, format, plus the user-set budget) is one
+ * AsyncStorage record under `@sona_music_cache_index`.
+ *
+ * Cached songs are **never evicted automatically** — a song persists until
+ * removed explicitly (`removeSong`, `clearAll`) or until the user lowers the
+ * budget via `setMaxSize`, which prunes least-recently-played-first to fit.
+ * There is deliberately no LRU sweep on download: a song file can't go
+ * "stale" the way list metadata can.
+ *
+ * Download quality follows the `originalQualityCaching` app setting: the
+ * original server file (`format=raw`) or an MP3 320 kbps transcode.
+ *
+ * The download entry points (`cacheSong` / `cacheSongs` / `cacheAlbum` /
+ * `cachePlaylist`) are not yet wired to any UI — they exist for future
+ * download menus. `getCachedUri` is live: AudioPlayer uses it to prefer
+ * local playback over streaming.
+ */
 
 const MUSIC_DIR = `${FileSystem.documentDirectory}music/`;
 const INDEX_KEY = '@sona_music_cache_index';
@@ -28,11 +38,22 @@ class SongCache {
     this.initPromise = null;
   }
 
+  /**
+   * Local file path for a song id, with unsafe characters sanitized.
+   * @param {string} songId
+   * @param {string} format `'mp3'` or `'raw'` (stored as `.audio`).
+   * @returns {string}
+   */
   fileUri(songId, format) {
     const safeId = String(songId).replace(/[^a-zA-Z0-9_-]/g, '_');
     return `${MUSIC_DIR}${safeId}.${format === 'mp3' ? 'mp3' : 'audio'}`;
   }
 
+  /**
+   * Create the music directory and load the index. Called lazily by every
+   * public method; concurrent calls share one in-flight promise.
+   * @returns {Promise<void>}
+   */
   async initialize() {
     if (this.index) return;
     if (this.initPromise) return this.initPromise;
@@ -53,6 +74,7 @@ class SongCache {
     return this.initPromise;
   }
 
+  /** Persist the index to AsyncStorage. @returns {Promise<void>} */
   async saveIndex() {
     try {
       await AsyncStorage.setItem(INDEX_KEY, JSON.stringify(this.index));
@@ -61,13 +83,24 @@ class SongCache {
     }
   }
 
+  /**
+   * Whether a song has an index entry (does not verify the file on disk;
+   * use {@link SongCache#getCachedUri} for that).
+   * @param {string} songId
+   * @returns {Promise<boolean>}
+   */
   async isCached(songId) {
     await this.initialize();
     return !!this.index.entries[songId];
   }
 
-  // Returns a playable local file URI, or null if not cached.
-  // Touches the LRU timestamp on hit.
+  /**
+   * Resolve a playable local URI for a cached song. Verifies the file still
+   * exists (dropping the index entry if the OS or user deleted it) and
+   * touches the LRU timestamp used by the `setMaxSize` prune path.
+   * @param {string} songId
+   * @returns {Promise<?string>} Local `file://` URI, or null when not cached.
+   */
   async getCachedUri(songId) {
     await this.initialize();
     const entry = this.index.entries[songId];
@@ -88,8 +121,12 @@ class SongCache {
     return uri;
   }
 
-  // Download one track into the cache. Resolves to the local URI (or null on
-  // failure). Deduplicates concurrent requests for the same song.
+  /**
+   * Download one track into the cache. Concurrent requests for the same
+   * song share a single download.
+   * @param {Object|string} track Track object or bare song id.
+   * @returns {Promise<?string>} Local URI, or null on failure.
+   */
   async cacheSong(track) {
     const songId = typeof track === 'object' ? track?.id : track;
     if (!songId) return null;
@@ -134,7 +171,12 @@ class SongCache {
     return promise;
   }
 
-  // Sequential download of multiple tracks; returns count of newly cached songs.
+  /**
+   * Download multiple tracks sequentially (one at a time, to keep server
+   * load and bandwidth bounded).
+   * @param {Object[]} tracks
+   * @returns {Promise<number>} Count of songs now present in the cache.
+   */
   async cacheSongs(tracks) {
     let cached = 0;
     for (const track of tracks || []) {
@@ -144,16 +186,31 @@ class SongCache {
     return cached;
   }
 
+  /**
+   * Download every track of an album.
+   * @param {string} albumId
+   * @returns {Promise<number>} Count of songs now present in the cache.
+   */
   async cacheAlbum(albumId) {
     const album = await SubsonicAPI.getAlbum(albumId);
     return this.cacheSongs(album?.song || []);
   }
 
+  /**
+   * Download every track of a playlist.
+   * @param {string} playlistId
+   * @returns {Promise<number>} Count of songs now present in the cache.
+   */
   async cachePlaylist(playlistId) {
     const playlist = await SubsonicAPI.getPlaylist(playlistId);
     return this.cacheSongs(playlist?.entry || []);
   }
 
+  /**
+   * Delete one cached song file and its index entry.
+   * @param {string} songId
+   * @returns {Promise<void>}
+   */
   async removeSong(songId) {
     await this.initialize();
     const entry = this.index.entries[songId];
@@ -164,9 +221,12 @@ class SongCache {
     await this.saveIndex();
   }
 
-  // Evict least-recently-used songs until under budget. Not called
-  // automatically on download — only when the user explicitly lowers the
-  // budget (setMaxSize) or triggers a manual eviction from the UI.
+  /**
+   * Evict least-recently-played songs until the cache fits its budget.
+   * Never runs automatically on download — only when the user explicitly
+   * lowers the budget via {@link SongCache#setMaxSize}.
+   * @returns {Promise<void>}
+   */
   async pruneToBudget() {
     const maxBytes = this.index.maxSizeMB * 1024 * 1024;
     if (this.index.totalSizeBytes <= maxBytes) return;
@@ -182,6 +242,11 @@ class SongCache {
     await this.saveIndex();
   }
 
+  /**
+   * Usage statistics for the Settings → Storage card.
+   * @returns {Promise<{totalSizeMB: string, totalSizeBytes: number,
+   *   maxSizeMB: number, entryCount: number}>}
+   */
   async getStats() {
     await this.initialize();
     return {
@@ -192,6 +257,12 @@ class SongCache {
     };
   }
 
+  /**
+   * Change the budget, pruning least-recently-played songs if the cache now
+   * exceeds it.
+   * @param {number} sizeMB
+   * @returns {Promise<void>}
+   */
   async setMaxSize(sizeMB) {
     await this.initialize();
     this.index.maxSizeMB = sizeMB;
@@ -199,6 +270,10 @@ class SongCache {
     await this.saveIndex();
   }
 
+  /**
+   * Delete every cached song file, preserving the configured budget.
+   * @returns {Promise<void>}
+   */
   async clearAll() {
     await this.initialize();
     try {

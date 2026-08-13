@@ -226,7 +226,7 @@ export default function ArtistScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const currentTrack = useCurrentTrack();
-  const { insertIntoPriorityQueue, appendToContextQueue, queueTracksNext, queueTracksLast } = usePlayerActions();
+  const { insertIntoPriorityQueue, queueTracksNext, queueTracksLast } = usePlayerActions();
   const [artistData, setArtistData] = useState(null);
   const [topSongs, setTopSongs] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
@@ -397,8 +397,8 @@ export default function ArtistScreen({ route, navigation }) {
   }, []);
 
   const handleAddLast = useCallback((item) => {
-    appendToContextQueue(item);
-  }, [appendToContextQueue]);
+    insertIntoPriorityQueue(item);
+  }, [insertIntoPriorityQueue]);
 
   // Optimistic: flip the heart immediately, then reconcile with the server;
   // roll back on failure. A song can show up in both Top Songs and Favorite
@@ -554,7 +554,7 @@ export default function ArtistScreen({ route, navigation }) {
         key: 'addLast',
         label: 'Add last in queue',
         icon: 'add-to-queue',
-        onPress: () => appendToContextQueue(menuSong),
+        onPress: () => insertIntoPriorityQueue(menuSong),
       },
       {
         key: 'download',
@@ -564,7 +564,7 @@ export default function ArtistScreen({ route, navigation }) {
         onPress: () => {},
       },
     ];
-  }, [menuSong, navigation, insertIntoPriorityQueue, appendToContextQueue]);
+  }, [menuSong, navigation, insertIntoPriorityQueue]);
 
   const renderSong = useCallback((songs) => ({ item, index }) => {
     const isPlaying = currentTrack?.id === item.id;

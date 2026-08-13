@@ -378,7 +378,7 @@ export default function LibraryScreen({ navigation, route }) {
   // Deep-link entry (e.g. "See All" from Home): land on a specific tab + sort.
   const initialTab = route?.params?.initialTab || 'liked';
   const initialSort = route?.params?.initialSort || DEFAULT_SORT_BY_VIEW[initialTab] || DEFAULT_SORT_OPTION;
-  const { playTrack, insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
+  const { playTrack, insertIntoPriorityQueue } = usePlayerActions();
   const currentTrack = useCurrentTrack();
   const [menuSong, setMenuSong] = useState(null);
   const [addToPlaylistSong, setAddToPlaylistSong] = useState(null);
@@ -1484,8 +1484,8 @@ export default function LibraryScreen({ navigation, route }) {
   }, [viewMode]);
 
   const handleAddLast = useCallback((item) => {
-    appendToContextQueue(item);
-  }, [appendToContextQueue]);
+    insertIntoPriorityQueue(item);
+  }, [insertIntoPriorityQueue]);
 
   const menuOptions = useMemo(() => {
     if (!menuSong) return [];
@@ -1524,7 +1524,7 @@ export default function LibraryScreen({ navigation, route }) {
         key: 'addLast',
         label: 'Add last in queue',
         icon: 'add-to-queue',
-        onPress: () => appendToContextQueue(menuSong),
+        onPress: () => insertIntoPriorityQueue(menuSong),
       },
       {
         key: 'download',
@@ -1534,7 +1534,7 @@ export default function LibraryScreen({ navigation, route }) {
         onPress: () => {},
       },
     ];
-  }, [menuSong, navigation, insertIntoPriorityQueue, appendToContextQueue]);
+  }, [menuSong, navigation, insertIntoPriorityQueue]);
 
   const currentTrackId = currentTrack?.id;
   const primaryColor = theme.colors.primary;

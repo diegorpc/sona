@@ -30,7 +30,7 @@ export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const currentTrack = useCurrentTrack();
-  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
+  const { insertIntoPriorityQueue } = usePlayerActions();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -167,7 +167,7 @@ export default function SearchScreen({ navigation }) {
         key: 'addLast',
         label: 'Add last in queue',
         icon: 'add-to-queue',
-        onPress: () => appendToContextQueue(menuSong),
+        onPress: () => insertIntoPriorityQueue(menuSong),
       },
       {
         key: 'download',
@@ -177,7 +177,7 @@ export default function SearchScreen({ navigation }) {
         onPress: () => {},
       },
     ];
-  }, [menuSong, navigation, insertIntoPriorityQueue, appendToContextQueue]);
+  }, [menuSong, navigation, insertIntoPriorityQueue]);
 
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();

@@ -4,8 +4,16 @@ import SubsonicAPI from './SubsonicAPI';
 const RANDOM_ALBUMS_KEY = 'randomAlbums';
 const RANDOM_FETCH_SIZE = 500;
 
-// The library's "random" album ordering. Persisted (until reset) so Home and
-// Library always show the same shuffle. Pass force=true to reshuffle (reset).
+/**
+ * The single random album ordering shared by Home's "Random" row and
+ * Library's "Random" sort. Persisted under raw AsyncStorage (not
+ * CacheService, so it can't be LRU-evicted) so both surfaces show the same
+ * shuffle, stable across navigation and launches, until explicitly reset.
+ *
+ * @param {boolean} [force] True reshuffles: fetch a fresh random set,
+ *   persist it, and return it (Library's refresh button — the only reset).
+ * @returns {Promise<Object[]>} Album array.
+ */
 export async function getRandomAlbums(force = false) {
   if (!force) {
     try {

@@ -1,14 +1,38 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+/**
+ * LRU cache for library metadata (JSON), exported as a singleton — the
+ * "Metadata" cache in Settings → Storage.
+ *
+ * Entries live in AsyncStorage under `@sona_cache_<key>`, mirrored into an
+ * in-memory Map after first read. A separate metadata record
+ * (`@sona_cache_metadata`) tracks per-entry sizes and last-write timestamps
+ * plus the user-set budget (`maxSizeMB`). When a write would exceed the
+ * budget, the oldest-written entries are evicted first; nothing ever
+ * expires by age alone.
+ *
+ * Used by the screens for the cached-first pattern: HomeScreen
+ * (`home_albums`, `home_playlists`), LibraryScreen (`artists`,
+ * `albums_<sort>`, `likedSongs`, `playlists`), and the detail screens
+ * (`album_<id>`, `artist_<id>`, `playlist_<id>`).
+ *
+ * Cover art is *not* stored here — expo-image owns artwork caching (see
+ * hooks/useArtwork.js). The song-file cache is SongCache.
+ */
 class CacheService {
   constructor() {
     this.memoryCache = new Map();
     this.CACHE_PREFIX = '@sona_cache_';
     this.METADATA_KEY = '@sona_cache_metadata';
-    this.DEFAULT_MAX_SIZE_MB = 50; // metadata + artwork budget (music has its own cache)
+    this.DEFAULT_MAX_SIZE_MB = 50;
     this.initialized = false;
   }
 
+  /**
+   * Ensure the metadata record exists and carries a budget. Called lazily
+   * by every public method; safe to call repeatedly.
+   * @returns {Promise<void>}
+   */
   async initialize() {
     if (this.initialized) return;
     
@@ -26,7 +50,11 @@ class CacheService {
     }
   }
 
-  // Get cache metadata (sizes, timestamps, etc.)
+  /**
+   * Read the cache's bookkeeping record.
+   * @returns {Promise<{entries: Object, totalSizeBytes: number, maxSizeMB: number}>}
+   *   `entries` maps cache key → `{ size, timestamp }`.
+   */
   async getMetadata() {
     try {
       const data = await AsyncStorage.getItem(this.METADATA_KEY);
@@ -41,6 +69,11 @@ class CacheService {
     }
   }
 
+  /**
+   * Persist the bookkeeping record.
+   * @param {Object} metadata As returned by {@link CacheService#getMetadata}.
+   * @returns {Promise<void>}
+   */
   async saveMetadata(metadata) {
     try {
       await AsyncStorage.setItem(this.METADATA_KEY, JSON.stringify(metadata));
@@ -49,7 +82,11 @@ class CacheService {
     }
   }
 
-  // Calculate approximate size of data in bytes
+  /**
+   * Approximate the serialized size of a value in bytes.
+   * @param {*} data Any JSON-serializable value.
+   * @returns {number}
+   */
   calculateSize(data) {
     try {
       const jsonString = JSON.stringify(data);
@@ -60,7 +97,13 @@ class CacheService {
     }
   }
 
-  // Set cache with persistence
+  /**
+   * Store a value, evicting oldest entries first if the write would exceed
+   * the budget. Also updates the in-memory mirror.
+   * @param {string} key Cache key (without the storage prefix).
+   * @param {*} data Any JSON-serializable value.
+   * @returns {Promise<void>}
+   */
   async set(key, data) {
     if (!this.initialized) await this.initialize();
     
@@ -99,19 +142,12 @@ class CacheService {
     }
   }
 
-  // Get cache (try memory first, then AsyncStorage)
-  get(key) {
-    // Check memory cache first
-    if (this.memoryCache.has(key)) {
-      return this.memoryCache.get(key);
-    }
-    
-    // Return null for synchronous access, load async in background
-    this.loadFromStorage(key);
-    return null;
-  }
-
-  // Async version of get
+  /**
+   * Read a value — from the in-memory mirror when warm, falling back to
+   * AsyncStorage.
+   * @param {string} key
+   * @returns {Promise<*>} The cached value, or null on miss.
+   */
   async getAsync(key) {
     if (!this.initialized) await this.initialize();
     
@@ -124,6 +160,11 @@ class CacheService {
     return await this.loadFromStorage(key);
   }
 
+  /**
+   * Read an entry from AsyncStorage into the in-memory mirror.
+   * @param {string} key
+   * @returns {Promise<*>} The parsed value, or null on miss/parse failure.
+   */
   async loadFromStorage(key) {
     try {
       const storageKey = this.CACHE_PREFIX + key;
@@ -141,7 +182,13 @@ class CacheService {
     }
   }
 
-  // Prune oldest cache entries to free up space
+  /**
+   * Evict entries oldest-written-first until at least `neededBytes` have
+   * been freed.
+   * @param {number} neededBytes
+   * @param {Object} metadata Current bookkeeping record.
+   * @returns {Promise<void>}
+   */
   async pruneCache(neededBytes, metadata) {
     const entries = Object.entries(metadata.entries)
       .sort((a, b) => a[1].timestamp - b[1].timestamp); // Sort by timestamp (oldest first)
@@ -155,21 +202,11 @@ class CacheService {
     }
   }
 
-  // Check if cache exists
-  has(key) {
-    return this.memoryCache.has(key);
-  }
-
-  async hasAsync(key) {
-    if (!this.initialized) await this.initialize();
-    
-    if (this.memoryCache.has(key)) return true;
-    
-    const metadata = await this.getMetadata();
-    return !!metadata.entries[key];
-  }
-
-  // Clear specific cache entry
+  /**
+   * Remove one entry from storage, bookkeeping, and the in-memory mirror.
+   * @param {string} key
+   * @returns {Promise<void>}
+   */
   async clear(key) {
     if (!this.initialized) await this.initialize();
     
@@ -190,7 +227,10 @@ class CacheService {
     }
   }
 
-  // Clear all cache
+  /**
+   * Remove every entry, preserving the configured budget.
+   * @returns {Promise<void>}
+   */
   async clearAll() {
     if (!this.initialized) await this.initialize();
     
@@ -218,7 +258,11 @@ class CacheService {
     }
   }
 
-  // Get cache statistics
+  /**
+   * Usage statistics for the Settings → Storage card.
+   * @returns {Promise<{totalSizeMB: string, totalSizeBytes: number,
+   *   maxSizeMB: number, entryCount: number, entries: Object}>}
+   */
   async getStats() {
     if (!this.initialized) await this.initialize();
     
@@ -232,7 +276,11 @@ class CacheService {
     };
   }
 
-  // Set maximum cache size
+  /**
+   * Change the budget, pruning oldest-first if the cache now exceeds it.
+   * @param {number} sizeMB
+   * @returns {Promise<void>}
+   */
   async setMaxSize(sizeMB) {
     if (!this.initialized) await this.initialize();
     
@@ -244,24 +292,6 @@ class CacheService {
     const maxSizeBytes = sizeMB * 1024 * 1024;
     if (metadata.totalSizeBytes > maxSizeBytes) {
       await this.pruneCache(metadata.totalSizeBytes - maxSizeBytes, metadata);
-    }
-  }
-
-  // Preload all cache into memory (call on app start)
-  async preloadCache() {
-    if (!this.initialized) await this.initialize();
-    
-    try {
-      const metadata = await this.getMetadata();
-      const keys = Object.keys(metadata.entries);
-      
-      for (const key of keys) {
-        if (!this.memoryCache.has(key)) {
-          await this.loadFromStorage(key);
-        }
-      }
-    } catch (error) {
-      console.error('Error preloading cache:', error);
     }
   }
 }

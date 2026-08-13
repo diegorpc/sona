@@ -18,7 +18,6 @@ const playerActions = Object.freeze({
   seekTo: AudioPlayer.seekTo.bind(AudioPlayer),
   stop: AudioPlayer.stop.bind(AudioPlayer),
   formatTime: AudioPlayer.formatTime.bind(AudioPlayer),
-  setPriorityQueue: AudioPlayer.setPriorityQueue.bind(AudioPlayer),
   reorderPriorityQueue: AudioPlayer.reorderPriorityQueue.bind(AudioPlayer),
   removePriorityTrack: AudioPlayer.removePriorityTrack.bind(AudioPlayer),
   insertIntoPriorityQueue: AudioPlayer.insertIntoPriorityQueue.bind(AudioPlayer),
@@ -28,8 +27,6 @@ const playerActions = Object.freeze({
   reorderContextQueue: AudioPlayer.reorderContextQueue.bind(AudioPlayer),
   moveContextTrackToPriority: AudioPlayer.moveContextTrackToPriority.bind(AudioPlayer),
   toggleShuffle: AudioPlayer.toggleShuffle.bind(AudioPlayer),
-  toggleRepeatAll: AudioPlayer.toggleRepeatAll.bind(AudioPlayer),
-  toggleRepeatOne: AudioPlayer.toggleRepeatOne.bind(AudioPlayer),
   cycleRepeatMode: AudioPlayer.cycleRepeatMode.bind(AudioPlayer),
 });
 

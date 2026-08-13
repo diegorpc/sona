@@ -186,7 +186,7 @@ export default function PlaylistScreen({ route, navigation }) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const currentTrack = useCurrentTrack();
-  const { insertIntoPriorityQueue, appendToContextQueue } = usePlayerActions();
+  const { insertIntoPriorityQueue } = usePlayerActions();
   const [playlistData, setPlaylistData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -286,8 +286,8 @@ export default function PlaylistScreen({ route, navigation }) {
   }, []);
 
   const handleAddLast = useCallback((song) => {
-    appendToContextQueue(song);
-  }, [appendToContextQueue]);
+    insertIntoPriorityQueue(song);
+  }, [insertIntoPriorityQueue]);
 
   // Optimistic
   const handleToggleFavorite = useCallback((song) => {
@@ -392,7 +392,7 @@ export default function PlaylistScreen({ route, navigation }) {
         key: 'addLast',
         label: 'Add last in queue',
         icon: 'add-to-queue',
-        onPress: () => appendToContextQueue(menuSong),
+        onPress: () => insertIntoPriorityQueue(menuSong),
       },
       {
         key: 'download',
@@ -408,7 +408,7 @@ export default function PlaylistScreen({ route, navigation }) {
         onPress: handleRemoveFromPlaylist,
       },
     ];
-  }, [menuSong, menuSongIndex, handleSongPress, navigation, insertIntoPriorityQueue, appendToContextQueue, handleRemoveFromPlaylist]);
+  }, [menuSong, menuSongIndex, handleSongPress, navigation, insertIntoPriorityQueue, handleRemoveFromPlaylist]);
 
   const renderItem = useCallback(({ item, index }) => {
     const isPlaying = currentTrack?.id === item.id;
